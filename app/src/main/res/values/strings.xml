@@ -16,6 +16,17 @@
     <string name="overlay_permission_missing">Разрешение на оверлей: нет</string>
     <string name="overlay_permission_button">Разрешить оверлей</string>
     <string name="overlay_enable_label">Показывать HUD</string>
+    <string name="nav_app_section_title">Привязка навигатора</string>
+    <string name="nav_app_hint">Нужно только для сброса статуса навигации при открытии или закрытии приложения.</string>
+    <string name="nav_app_bind_button">Привязать навигатор</string>
+    <string name="nav_app_not_selected">Не выбрано</string>
+    <string name="nav_app_picker_title">Выберите навигатор</string>
+    <string name="nav_app_clear">Сбросить привязку</string>
+    <string name="nav_app_icon_desc">Иконка приложения</string>
+    <string name="usage_access_title">Доступ к истории использования</string>
+    <string name="usage_access_message">Для отслеживания открытия навигации нужен доступ к истории использования. Откройте настройки и разрешите доступ.</string>
+    <string name="usage_access_open">Открыть доступ</string>
+    <string name="usage_access_continue">Выбрать приложение</string>
     <string name="overlay_display_label">Экран отображения</string>
     <string name="overlay_position_label">Позиции HUD</string>
     <string name="position_blocks_hint">Нажмите блок, чтобы открыть настройку положения.</string>

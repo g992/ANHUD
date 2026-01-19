@@ -66,6 +66,38 @@ object NavigationHudStore {
         }
     }
 
+    fun reset(lastAction: String, timestamp: Long = System.currentTimeMillis()) {
+        update { current ->
+            current.copy(
+                primaryText = "",
+                secondaryText = "",
+                speedLimit = "",
+                arrival = "",
+                distance = "",
+                time = "",
+                trafficLight = "",
+                trafficCountdown = "",
+                maneuverBitmap = null,
+                source = "",
+                routeActive = false,
+                lastUpdated = timestamp,
+                lastAction = lastAction,
+                rawNextText = "",
+                rawNextStreet = "",
+                rawSpeedLimit = "",
+                rawArrival = "",
+                rawDistance = "",
+                rawTime = "",
+                rawTrafficLight = "",
+                rawTrafficCountdown = "",
+                rawTitle = "",
+                rawText = "",
+                rawSubtext = "",
+                distanceUnit = ""
+            )
+        }
+    }
+
     fun registerListener(listener: Listener) {
         synchronized(lock) {
             listeners.add(listener)

@@ -9,6 +9,10 @@ import android.util.Log
 
 class NavigationReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
+        if (!NavigationAppGate.shouldAllow(context)) {
+            Log.d(TAG, "Ignoring nav update while app closed: ${intent.action}")
+            return
+        }
         when (intent.action) {
             ACTION_NAV_UPDATE, ACTION_NAV_UPDATE_DEBUG -> {
                 val update = NavigationUpdate(
@@ -50,23 +54,7 @@ class NavigationReceiver : BroadcastReceiver() {
             ACTION_NAV_ENDED, ACTION_NAV_ENDED_DEBUG -> {
                 Log.d(TAG, "Navigation ended")
                 UiLogStore.append(LogCategory.NAVIGATION, "завершено")
-                NavigationHudStore.update { state ->
-                    state.copy(
-                        primaryText = "",
-                        secondaryText = "",
-                        speedLimit = "",
-                        arrival = "",
-                        distance = "",
-                        time = "",
-                        trafficLight = "",
-                        trafficCountdown = "",
-                        maneuverBitmap = null,
-                        routeActive = false,
-                        lastUpdated = System.currentTimeMillis(),
-                        lastAction = intent.action.orEmpty(),
-                        distanceUnit = ""
-                    )
-                }
+                NavigationHudStore.reset(intent.action.orEmpty())
             }
             ACTION_YANDEX_MANEUVER -> {
                 val bitmap = getBitmapExtra(intent, EXTRA_MANEUVER_BITMAP)

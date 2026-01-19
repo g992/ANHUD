@@ -10,11 +10,17 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import androidx.core.app.NotificationCompat
 
 class HudBackgroundService : Service() {
     private val overlayController by lazy { HudOverlayController(applicationContext) }
+    private val navAppMonitor by lazy {
+        NavigationAppMonitor(applicationContext, ::onNavAppOpened, ::onNavAppClosed)
+    }
+    private val mainHandler = Handler(Looper.getMainLooper())
     private val settingsReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             if (intent.action == OverlayBroadcasts.ACTION_OVERLAY_SETTINGS_CHANGED) {
@@ -76,6 +82,7 @@ class HudBackgroundService : Service() {
         super.onCreate()
         UiLogStore.append(LogCategory.SYSTEM, "HudBackgroundService: создан")
         NavigationHudStore.registerListener(navListener)
+        navAppMonitor.start()
         val filter = android.content.IntentFilter(OverlayBroadcasts.ACTION_OVERLAY_SETTINGS_CHANGED)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             registerReceiver(settingsReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
@@ -131,15 +138,34 @@ class HudBackgroundService : Service() {
     companion object {
         private const val CHANNEL_ID = "hud_service_channel"
         private const val NOTIFICATION_ID = 1001
+        private const val ACTION_NAV_APP_OPENED = "nav_app_opened"
+        private const val ACTION_NAV_APP_CLOSED = "nav_app_closed"
     }
 
     override fun onDestroy() {
         NavigationHudStore.unregisterListener(navListener)
+        navAppMonitor.shutdown()
         try {
             unregisterReceiver(settingsReceiver)
         } catch (_: Exception) {
         }
         overlayController.destroy()
         super.onDestroy()
+    }
+
+    private fun onNavAppOpened(packageName: String) {
+        mainHandler.post {
+            val label = OverlayPrefs.navAppLabel(applicationContext).ifBlank { packageName }
+            UiLogStore.append(LogCategory.NAVIGATION, "навигатор открыт: $label")
+            NavigationHudStore.reset(ACTION_NAV_APP_OPENED)
+        }
+    }
+
+    private fun onNavAppClosed(packageName: String) {
+        mainHandler.post {
+            val label = OverlayPrefs.navAppLabel(applicationContext).ifBlank { packageName }
+            UiLogStore.append(LogCategory.NAVIGATION, "навигатор закрыт: $label")
+            NavigationHudStore.reset(ACTION_NAV_APP_CLOSED)
+        }
     }
 }

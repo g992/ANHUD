@@ -17,6 +17,8 @@ object OverlayPrefs {
     private const val KEY_SPEED_SCALE = "overlay_speed_scale"
     private const val KEY_NAV_ALPHA = "overlay_nav_alpha"
     private const val KEY_SPEED_ALPHA = "overlay_speed_alpha"
+    private const val KEY_NAV_APP_PACKAGE = "nav_app_package"
+    private const val KEY_NAV_APP_LABEL = "nav_app_label"
 
     const val DISPLAY_ID_AUTO = -1
 
@@ -101,6 +103,28 @@ object OverlayPrefs {
     fun setSpeedAlpha(context: Context, alpha: Float) {
         prefs(context).edit()
             .putFloat(KEY_SPEED_ALPHA, alpha)
+            .apply()
+    }
+
+    fun navAppPackage(context: Context): String {
+        return prefs(context).getString(KEY_NAV_APP_PACKAGE, "").orEmpty()
+    }
+
+    fun navAppLabel(context: Context): String {
+        return prefs(context).getString(KEY_NAV_APP_LABEL, "").orEmpty()
+    }
+
+    fun setNavApp(context: Context, packageName: String, label: String) {
+        prefs(context).edit()
+            .putString(KEY_NAV_APP_PACKAGE, packageName)
+            .putString(KEY_NAV_APP_LABEL, label)
+            .apply()
+    }
+
+    fun clearNavApp(context: Context) {
+        prefs(context).edit()
+            .remove(KEY_NAV_APP_PACKAGE)
+            .remove(KEY_NAV_APP_LABEL)
             .apply()
     }
 

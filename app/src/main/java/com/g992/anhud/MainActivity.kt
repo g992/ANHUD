@@ -1,20 +1,28 @@
 package com.g992.anhud
 
+import android.content.Context
 import android.content.Intent
 import android.graphics.Point
 import android.graphics.PointF
+import android.graphics.drawable.Drawable
 import android.net.Uri
 import android.os.Bundle
+import android.os.Process
 import android.provider.Settings
 import android.view.MotionEvent
 import android.view.View
+import android.view.ViewGroup
+import android.widget.AdapterView
 import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.CheckBox
 import android.widget.FrameLayout
+import android.widget.ImageView
 import android.widget.SeekBar
 import android.widget.Spinner
 import android.widget.TextView
+import android.app.AppOpsManager
+import android.view.LayoutInflater
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
@@ -33,6 +41,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var positionNavCard: View
     private lateinit var positionSpeedCard: View
     private lateinit var logsButton: Button
+    private lateinit var navAppButton: Button
+    private lateinit var navAppSelected: TextView
 
     private var displayOptions: List<DisplayOption> = emptyList()
     private var displaySize: Point = Point(1, 1)
@@ -55,6 +65,8 @@ class MainActivity : AppCompatActivity() {
         positionNavCard = findViewById(R.id.positionNavCard)
         positionSpeedCard = findViewById(R.id.positionSpeedCard)
         logsButton = findViewById(R.id.btnLogs)
+        navAppButton = findViewById(R.id.navAppButton)
+        navAppSelected = findViewById(R.id.navAppSelected)
 
         logsButton.setOnClickListener {
             startActivity(Intent(this, LogsActivity::class.java))
@@ -85,15 +97,20 @@ class MainActivity : AppCompatActivity() {
         positionSpeedCard.setOnClickListener {
             openPositionDialog(OverlayTarget.SPEED)
         }
+        navAppButton.setOnClickListener {
+            handleNavAppSelection()
+        }
 
         setupDisplaySpinner()
         updatePermissionStatus()
+        updateNavAppSelection()
         startCoreServices()
     }
 
     override fun onResume() {
         super.onResume()
         updatePermissionStatus()
+        updateNavAppSelection()
     }
 
     private fun updatePermissionStatus() {
@@ -135,8 +152,8 @@ class MainActivity : AppCompatActivity() {
             )
         }
         val labels = displayOptions.map { it.label }
-        val adapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, labels)
-        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+        val adapter = ArrayAdapter(this, R.layout.spinner_item, labels)
+        adapter.setDropDownViewResource(R.layout.spinner_dropdown_item)
         displaySpinner.adapter = adapter
 
         val savedDisplayId = OverlayPrefs.displayId(this)
@@ -146,7 +163,7 @@ class MainActivity : AppCompatActivity() {
             updateDisplayMetrics(displayOptions[selectedIndex].id)
         }
 
-        displaySpinner.onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
+        displaySpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
             override fun onItemSelected(
                 parent: android.widget.AdapterView<*>?,
                 view: View?,
@@ -162,6 +179,105 @@ class MainActivity : AppCompatActivity() {
             override fun onNothingSelected(parent: android.widget.AdapterView<*>?) {
             }
         }
+    }
+
+    private fun updateNavAppSelection() {
+        val packageName = OverlayPrefs.navAppPackage(this)
+        val storedLabel = OverlayPrefs.navAppLabel(this)
+        if (packageName.isBlank()) {
+            navAppSelected.text = getString(R.string.nav_app_not_selected)
+            return
+        }
+        val label = storedLabel.ifBlank {
+            resolveAppLabel(packageName)?.also { resolved ->
+                OverlayPrefs.setNavApp(this, packageName, resolved)
+            } ?: packageName
+        }
+        navAppSelected.text = label
+    }
+
+    private fun resolveAppLabel(packageName: String): String? {
+        val pm = packageManager
+        return try {
+            pm.getApplicationInfo(packageName, 0).loadLabel(pm).toString()
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private fun handleNavAppSelection() {
+        if (!hasUsageAccess()) {
+            AlertDialog.Builder(this, R.style.ThemeOverlay_ANHUD_Dialog)
+                .setTitle(getString(R.string.usage_access_title))
+                .setMessage(getString(R.string.usage_access_message))
+                .setPositiveButton(getString(R.string.usage_access_open)) { _, _ ->
+                    openUsageAccessSettings()
+                }
+                .setNegativeButton(getString(R.string.usage_access_continue)) { _, _ ->
+                    showNavAppPicker()
+                }
+                .show()
+            return
+        }
+        showNavAppPicker()
+    }
+
+    private fun openUsageAccessSettings() {
+        startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS))
+    }
+
+    private fun showNavAppPicker() {
+        val apps = loadLaunchableApps()
+        if (apps.isEmpty()) {
+            UiLogStore.append(LogCategory.SYSTEM, "Список приложений пуст")
+            return
+        }
+        val adapter = NavAppAdapter(this, apps)
+        val builder = AlertDialog.Builder(this, R.style.ThemeOverlay_ANHUD_Dialog)
+            .setTitle(getString(R.string.nav_app_picker_title))
+            .setAdapter(adapter) { _, which ->
+                val selected = apps[which]
+                OverlayPrefs.setNavApp(this, selected.packageName, selected.label)
+                updateNavAppSelection()
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+        if (OverlayPrefs.navAppPackage(this).isNotBlank()) {
+            builder.setNeutralButton(getString(R.string.nav_app_clear)) { _, _ ->
+                OverlayPrefs.clearNavApp(this)
+                updateNavAppSelection()
+            }
+        }
+        builder.show()
+    }
+
+    private fun loadLaunchableApps(): List<NavAppOption> {
+        val intent = Intent(Intent.ACTION_MAIN, null).apply {
+            addCategory(Intent.CATEGORY_LAUNCHER)
+        }
+        @Suppress("DEPRECATION")
+        val results = packageManager.queryIntentActivities(intent, 0)
+        val seen = HashSet<String>(results.size)
+        val apps = ArrayList<NavAppOption>(results.size)
+        for (resolveInfo in results) {
+            val packageName = resolveInfo.activityInfo?.packageName ?: continue
+            if (!seen.add(packageName)) {
+                continue
+            }
+            val label = resolveInfo.loadLabel(packageManager)?.toString()?.ifBlank { packageName } ?: packageName
+            val icon = resolveInfo.loadIcon(packageManager)
+            apps.add(NavAppOption(label, packageName, icon))
+        }
+        return apps.sortedBy { it.label.lowercase() }
+    }
+
+    private fun hasUsageAccess(): Boolean {
+        val appOps = getSystemService(AppOpsManager::class.java)
+        val mode = appOps.checkOpNoThrow(
+            AppOpsManager.OPSTR_GET_USAGE_STATS,
+            Process.myUid(),
+            packageName
+        )
+        return mode == AppOpsManager.MODE_ALLOWED
     }
 
     private fun updateDisplayMetrics(displayId: Int) {
@@ -225,6 +341,27 @@ class MainActivity : AppCompatActivity() {
     }
 
     private data class DisplayOption(val id: Int, val label: String)
+    private data class NavAppOption(
+        val label: String,
+        val packageName: String,
+        val icon: Drawable
+    )
+
+    private class NavAppAdapter(
+        context: Context,
+        private val items: List<NavAppOption>
+    ) : ArrayAdapter<NavAppOption>(context, R.layout.app_list_item, items) {
+        override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
+            val view = convertView ?: LayoutInflater.from(context)
+                .inflate(R.layout.app_list_item, parent, false)
+            val iconView = view.findViewById<ImageView>(R.id.appIcon)
+            val nameView = view.findViewById<TextView>(R.id.appName)
+            val item = items[position]
+            iconView.setImageDrawable(item.icon)
+            nameView.text = item.label
+            return view
+        }
+    }
 
     private enum class OverlayTarget(val previewKey: String) {
         NAVIGATION(OverlayBroadcasts.PREVIEW_TARGET_NAV),
