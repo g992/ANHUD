@@ -43,6 +43,9 @@ class MainActivity : AppCompatActivity() {
     private lateinit var logsButton: Button
     private lateinit var navAppButton: Button
     private lateinit var navAppSelected: TextView
+    private lateinit var virtualDisplaySwitch: SwitchCompat
+    private lateinit var hudDisplaySpinner: Spinner
+    private lateinit var virtualDisplaySection: View
 
     private var displayOptions: List<DisplayOption> = emptyList()
     private var displaySize: Point = Point(1, 1)
@@ -67,6 +70,9 @@ class MainActivity : AppCompatActivity() {
         logsButton = findViewById(R.id.btnLogs)
         navAppButton = findViewById(R.id.navAppButton)
         navAppSelected = findViewById(R.id.navAppSelected)
+        virtualDisplaySwitch = findViewById(R.id.virtualDisplaySwitch)
+        hudDisplaySpinner = findViewById(R.id.hudDisplaySpinner)
+        virtualDisplaySection = findViewById(R.id.virtualDisplaySection)
 
         logsButton.setOnClickListener {
             startActivity(Intent(this, LogsActivity::class.java))
@@ -91,6 +97,21 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        virtualDisplaySwitch.isChecked = OverlayPrefs.isVirtualDisplayEnabled(this)
+        virtualDisplaySwitch.setOnCheckedChangeListener { _, isChecked ->
+            if (isChecked && !Settings.canDrawOverlays(this)) {
+                virtualDisplaySwitch.isChecked = false
+                openOverlaySettings()
+                updatePermissionStatus()
+                return@setOnCheckedChangeListener
+            }
+            OverlayPrefs.setVirtualDisplayEnabled(this, isChecked)
+            notifyOverlaySettingsChanged()
+            if (isChecked) {
+                ContextCompat.startForegroundService(this, Intent(this, HudBackgroundService::class.java))
+            }
+        }
+
         positionNavCard.setOnClickListener {
             openPositionDialog(OverlayTarget.NAVIGATION)
         }
@@ -101,9 +122,10 @@ class MainActivity : AppCompatActivity() {
             handleNavAppSelection()
         }
 
-        setupDisplaySpinner()
+        setupDisplaySpinners()
         updatePermissionStatus()
         updateNavAppSelection()
+        updateVirtualDisplayVisibility()
         startCoreServices()
     }
 
@@ -111,6 +133,7 @@ class MainActivity : AppCompatActivity() {
         super.onResume()
         updatePermissionStatus()
         updateNavAppSelection()
+        updateVirtualDisplayVisibility()
     }
 
     private fun updatePermissionStatus() {
@@ -132,7 +155,7 @@ class MainActivity : AppCompatActivity() {
         startActivity(intent)
     }
 
-    private fun setupDisplaySpinner() {
+    private fun setupDisplaySpinners() {
         val autoOption = DisplayOption(
             OverlayPrefs.DISPLAY_ID_AUTO,
             getString(R.string.display_auto_option)
@@ -152,9 +175,13 @@ class MainActivity : AppCompatActivity() {
             )
         }
         val labels = displayOptions.map { it.label }
-        val adapter = ArrayAdapter(this, R.layout.spinner_item, labels)
-        adapter.setDropDownViewResource(R.layout.spinner_dropdown_item)
-        displaySpinner.adapter = adapter
+        fun buildAdapter(): ArrayAdapter<String> {
+            val adapter = ArrayAdapter(this, R.layout.spinner_item, labels)
+            adapter.setDropDownViewResource(R.layout.spinner_dropdown_item)
+            return adapter
+        }
+        displaySpinner.adapter = buildAdapter()
+        hudDisplaySpinner.adapter = buildAdapter()
 
         val savedDisplayId = OverlayPrefs.displayId(this)
         val selectedIndex = displayOptions.indexOfFirst { it.id == savedDisplayId }.takeIf { it >= 0 } ?: 0
@@ -179,6 +206,25 @@ class MainActivity : AppCompatActivity() {
             override fun onNothingSelected(parent: android.widget.AdapterView<*>?) {
             }
         }
+
+        val savedHudDisplayId = OverlayPrefs.hudDisplayId(this)
+        val hudSelectedIndex = displayOptions.indexOfFirst { it.id == savedHudDisplayId }.takeIf { it >= 0 } ?: 0
+        hudDisplaySpinner.setSelection(hudSelectedIndex)
+        hudDisplaySpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(
+                parent: android.widget.AdapterView<*>?,
+                view: View?,
+                position: Int,
+                id: Long
+            ) {
+                val option = displayOptions[position]
+                OverlayPrefs.setHudDisplayId(this@MainActivity, option.id)
+                notifyOverlaySettingsChanged()
+            }
+
+            override fun onNothingSelected(parent: android.widget.AdapterView<*>?) {
+            }
+        }
     }
 
     private fun updateNavAppSelection() {
@@ -194,6 +240,14 @@ class MainActivity : AppCompatActivity() {
             } ?: packageName
         }
         navAppSelected.text = label
+    }
+
+    private fun updateVirtualDisplayVisibility() {
+        val hasPermission = HudDisplayUtils.hasVirtualDisplayPermission(this)
+        virtualDisplaySection.visibility = if (hasPermission) View.VISIBLE else View.GONE
+        if (hasPermission) {
+            virtualDisplaySwitch.isChecked = OverlayPrefs.isVirtualDisplayEnabled(this)
+        }
     }
 
     private fun resolveAppLabel(packageName: String): String? {

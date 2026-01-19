@@ -19,6 +19,8 @@ object OverlayPrefs {
     private const val KEY_SPEED_ALPHA = "overlay_speed_alpha"
     private const val KEY_NAV_APP_PACKAGE = "nav_app_package"
     private const val KEY_NAV_APP_LABEL = "nav_app_label"
+    private const val KEY_VIRTUAL_DISPLAY_ENABLED = "virtual_display_enabled"
+    private const val KEY_HUD_DISPLAY_ID = "hud_display_id"
 
     const val DISPLAY_ID_AUTO = -1
 
@@ -126,6 +128,22 @@ object OverlayPrefs {
             .remove(KEY_NAV_APP_PACKAGE)
             .remove(KEY_NAV_APP_LABEL)
             .apply()
+    }
+
+    fun isVirtualDisplayEnabled(context: Context): Boolean {
+        return prefs(context).getBoolean(KEY_VIRTUAL_DISPLAY_ENABLED, false)
+    }
+
+    fun setVirtualDisplayEnabled(context: Context, enabled: Boolean) {
+        prefs(context).edit().putBoolean(KEY_VIRTUAL_DISPLAY_ENABLED, enabled).apply()
+    }
+
+    fun hudDisplayId(context: Context): Int {
+        return prefs(context).getInt(KEY_HUD_DISPLAY_ID, DISPLAY_ID_AUTO)
+    }
+
+    fun setHudDisplayId(context: Context, displayId: Int) {
+        prefs(context).edit().putInt(KEY_HUD_DISPLAY_ID, displayId).apply()
     }
 
     private fun prefs(context: Context) = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)

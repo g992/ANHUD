@@ -17,6 +17,7 @@ import androidx.core.app.NotificationCompat
 
 class HudBackgroundService : Service() {
     private val overlayController by lazy { HudOverlayController(applicationContext) }
+    private val virtualDisplayController by lazy { VirtualDisplayController(applicationContext) }
     private val navAppMonitor by lazy {
         NavigationAppMonitor(applicationContext, ::onNavAppOpened, ::onNavAppClosed)
     }
@@ -67,6 +68,7 @@ class HudBackgroundService : Service() {
                 )
                 overlayController.refresh()
                 overlayController.updateNavigation(NavigationHudStore.snapshot())
+                virtualDisplayController.refresh()
             }
         }
     }
@@ -109,6 +111,7 @@ class HudBackgroundService : Service() {
         startService(Intent(this, SensorDataService::class.java))
         overlayController.refresh()
         overlayController.updateNavigation(NavigationHudStore.snapshot())
+        virtualDisplayController.refresh()
         val activityIntent = Intent(this, MainActivity::class.java).apply {
             this.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
         }
@@ -150,6 +153,7 @@ class HudBackgroundService : Service() {
         } catch (_: Exception) {
         }
         overlayController.destroy()
+        virtualDisplayController.destroy()
         super.onDestroy()
     }
 
