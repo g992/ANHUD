@@ -1,0 +1,35 @@
+# Gradle
+.gradle/
+build/
+**/build/
+**/out/
+**/bin/
+**/gen/
+
+# Android Studio / IntelliJ
+*.iml
+.idea/
+!.idea/codeStyles/
+!.idea/inspectionProfiles/
+
+# Local config
+local.properties
+
+# Native build
+.externalNativeBuild/
+.cxx/
+
+# Captures
+captures/
+
+# Package files
+*.apk
+*.ap_
+*.aab
+
+# Java/Kotlin
+*.class
+*.dex
+
+# OS files
+.DS_Store
