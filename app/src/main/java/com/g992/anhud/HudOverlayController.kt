@@ -24,6 +24,7 @@ class HudOverlayController(private val context: Context) {
     private var windowManager: WindowManager? = null
     private var overlayView: FrameLayout? = null
     private var navContainer: LinearLayout? = null
+    private var maneuverContainer: FrameLayout? = null
     private var maneuverView: ImageView? = null
     private var maneuverLabel: TextView? = null
     private var primaryView: TextView? = null
@@ -142,7 +143,6 @@ class HudOverlayController(private val context: Context) {
 
         val navBlock = LinearLayout(displayContext).apply {
             orientation = LinearLayout.HORIZONTAL
-            setBackgroundColor(Color.argb(160, 0, 0, 0))
             setPadding(padding, padding, padding, padding)
             layoutParams = FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.WRAP_CONTENT,
@@ -150,7 +150,7 @@ class HudOverlayController(private val context: Context) {
             )
         }
 
-        val maneuverContainer = FrameLayout(displayContext).apply {
+        val maneuverBox = FrameLayout(displayContext).apply {
             layoutParams = LinearLayout.LayoutParams(iconSize, iconSize).apply {
                 marginEnd = iconMargin
             }
@@ -172,13 +172,13 @@ class HudOverlayController(private val context: Context) {
             )
             gravity = Gravity.CENTER
             text = displayContext.getString(R.string.preview_direction_label)
-            setTextColor(Color.parseColor("#cfcfcf"))
+            setTextColor(Color.WHITE)
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
             setTypeface(typeface, Typeface.BOLD)
         }
 
-        maneuverContainer.addView(maneuverImage)
-        maneuverContainer.addView(maneuverText)
+        maneuverBox.addView(maneuverImage)
+        maneuverBox.addView(maneuverText)
 
         val textColumn = LinearLayout(displayContext).apply {
             orientation = LinearLayout.VERTICAL
@@ -191,26 +191,26 @@ class HudOverlayController(private val context: Context) {
         }
 
         val secondaryText = TextView(displayContext).apply {
-            setTextColor(Color.parseColor("#f5f5f5"))
+            setTextColor(Color.WHITE)
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
         }
 
         val timeText = TextView(displayContext).apply {
-            setTextColor(Color.parseColor("#cfcfcf"))
+            setTextColor(Color.WHITE)
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
         }
 
         textColumn.addView(primaryText)
         textColumn.addView(secondaryText)
         textColumn.addView(timeText)
-        navBlock.addView(maneuverContainer)
+        navBlock.addView(maneuverBox)
         navBlock.addView(textColumn)
 
         val speedText = TextView(displayContext).apply {
             layoutParams = FrameLayout.LayoutParams(speedSize, speedSize)
             background = ContextCompat.getDrawable(displayContext, R.drawable.bg_speed_limit)
             gravity = Gravity.CENTER
-            setTextColor(Color.BLACK)
+            setTextColor(Color.WHITE)
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 16.8f)
             setTypeface(typeface, Typeface.BOLD)
         }
@@ -236,6 +236,7 @@ class HudOverlayController(private val context: Context) {
             windowManager = wm
             overlayView = root
             navContainer = navBlock
+            maneuverContainer = maneuverBox
             maneuverView = maneuverImage
             maneuverLabel = maneuverText
             primaryView = primaryText
@@ -249,6 +250,7 @@ class HudOverlayController(private val context: Context) {
             windowManager = null
             overlayView = null
             navContainer = null
+            maneuverContainer = null
             maneuverView = null
             maneuverLabel = null
             primaryView = null
@@ -272,6 +274,7 @@ class HudOverlayController(private val context: Context) {
         windowManager = null
         overlayView = null
         navContainer = null
+        maneuverContainer = null
         maneuverView = null
         maneuverLabel = null
         primaryView = null
@@ -349,6 +352,13 @@ class HudOverlayController(private val context: Context) {
     private fun updateManeuver(bitmap: android.graphics.Bitmap?, preview: Boolean) {
         val image = maneuverView ?: return
         val label = maneuverLabel ?: return
+        val container = maneuverContainer ?: return
+        val boxBackground = if (preview) {
+            ContextCompat.getDrawable(container.context, R.drawable.bg_direction_box)
+        } else {
+            null
+        }
+        container.background = boxBackground
         if (preview) {
             image.visibility = View.GONE
             label.visibility = View.VISIBLE

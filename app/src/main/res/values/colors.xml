@@ -2,7 +2,9 @@
 <resources>
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
+    <color name="hud_blue">#1A75D0</color>
+    <color name="hud_dark">#101010</color>
     <color name="dialog_background">#141414</color>
-    <color name="dialog_text_primary">#f5f5f5</color>
-    <color name="dialog_text_secondary">#b0b0b0</color>
+    <color name="dialog_text_primary">#FFFFFFFF</color>
+    <color name="dialog_text_secondary">#FFFFFFFF</color>
 </resources>
