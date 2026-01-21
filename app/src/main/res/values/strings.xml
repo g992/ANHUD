@@ -33,13 +33,22 @@
     <string name="position_container_label">Контейнер HUD</string>
     <string name="position_nav_block_label">Блок навигации</string>
     <string name="position_speed_block_label">Ограничитель скорости</string>
+    <string name="position_speedometer_block_label">Спидометр</string>
+    <string name="position_clock_block_label">Блок часов</string>
+    <string name="projection_toggle_label">Проекция</string>
     <string name="position_scale_label">Масштаб</string>
     <string name="position_brightness_label">Яркость</string>
+    <string name="position_container_width_label">Ширина</string>
+    <string name="position_container_height_label">Высота</string>
     <string name="position_show_others">Отображать другие элементы на проекции</string>
     <string name="position_dialog_hint">Перетаскивайте блок в окне, изменения сохраняются сразу.</string>
     <string name="overlay_preview_label">HUD</string>
     <string name="nav_scale_label">Масштаб блока навигации</string>
     <string name="speed_scale_label">Масштаб ограничителя скорости</string>
+    <string name="speed_limit_alert_enable">Индикация превышения скорости</string>
+    <string name="speed_limit_alert_threshold_label">Порог индикации превышения</string>
+    <string name="speed_limit_alert_threshold_value">+%1$d км/ч</string>
+    <string name="speed_limit_alert_threshold_default">+0 км/ч</string>
     <string name="scale_percent_default">100%</string>
     <string name="scale_percent_format">%1$d%%</string>
     <string name="preview_direction_label">Стрелка</string>
@@ -47,6 +56,8 @@
     <string name="preview_street_text">Пушкина</string>
     <string name="preview_time_text">1 ч 10 мин (12:00)</string>
     <string name="preview_speed_limit_text">100</string>
+    <string name="preview_speedometer_text">88</string>
+    <string name="preview_clock_text">12:34</string>
     <string name="display_auto_option">Авто (если доступна презентация)</string>
     <string name="display_option_label">Экран %1$d: %2$s %3$dx%4$d</string>
 </resources>

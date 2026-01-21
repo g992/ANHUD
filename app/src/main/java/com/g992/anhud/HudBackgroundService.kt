@@ -29,13 +29,53 @@ class HudBackgroundService : Service() {
                 val navY = intent.getFloatExtra(OverlayBroadcasts.EXTRA_NAV_Y_DP, Float.NaN)
                 val speedX = intent.getFloatExtra(OverlayBroadcasts.EXTRA_SPEED_X_DP, Float.NaN)
                 val speedY = intent.getFloatExtra(OverlayBroadcasts.EXTRA_SPEED_Y_DP, Float.NaN)
+                val speedometerX = intent.getFloatExtra(OverlayBroadcasts.EXTRA_SPEEDOMETER_X_DP, Float.NaN)
+                val speedometerY = intent.getFloatExtra(OverlayBroadcasts.EXTRA_SPEEDOMETER_Y_DP, Float.NaN)
+                val clockX = intent.getFloatExtra(OverlayBroadcasts.EXTRA_CLOCK_X_DP, Float.NaN)
+                val clockY = intent.getFloatExtra(OverlayBroadcasts.EXTRA_CLOCK_Y_DP, Float.NaN)
                 val containerX = intent.getFloatExtra(OverlayBroadcasts.EXTRA_CONTAINER_X_DP, Float.NaN)
                 val containerY = intent.getFloatExtra(OverlayBroadcasts.EXTRA_CONTAINER_Y_DP, Float.NaN)
+                val containerWidth = intent.getFloatExtra(OverlayBroadcasts.EXTRA_CONTAINER_WIDTH_DP, Float.NaN)
+                val containerHeight = intent.getFloatExtra(OverlayBroadcasts.EXTRA_CONTAINER_HEIGHT_DP, Float.NaN)
                 val navScale = intent.getFloatExtra(OverlayBroadcasts.EXTRA_NAV_SCALE, Float.NaN)
                 val speedScale = intent.getFloatExtra(OverlayBroadcasts.EXTRA_SPEED_SCALE, Float.NaN)
+                val speedometerScale = intent.getFloatExtra(OverlayBroadcasts.EXTRA_SPEEDOMETER_SCALE, Float.NaN)
+                val clockScale = intent.getFloatExtra(OverlayBroadcasts.EXTRA_CLOCK_SCALE, Float.NaN)
                 val navAlpha = intent.getFloatExtra(OverlayBroadcasts.EXTRA_NAV_ALPHA, Float.NaN)
                 val speedAlpha = intent.getFloatExtra(OverlayBroadcasts.EXTRA_SPEED_ALPHA, Float.NaN)
+                val speedometerAlpha = intent.getFloatExtra(OverlayBroadcasts.EXTRA_SPEEDOMETER_ALPHA, Float.NaN)
+                val clockAlpha = intent.getFloatExtra(OverlayBroadcasts.EXTRA_CLOCK_ALPHA, Float.NaN)
                 val containerAlpha = intent.getFloatExtra(OverlayBroadcasts.EXTRA_CONTAINER_ALPHA, Float.NaN)
+                val navEnabled = if (intent.hasExtra(OverlayBroadcasts.EXTRA_NAV_ENABLED)) {
+                    intent.getBooleanExtra(OverlayBroadcasts.EXTRA_NAV_ENABLED, true)
+                } else {
+                    null
+                }
+                val speedEnabled = if (intent.hasExtra(OverlayBroadcasts.EXTRA_SPEED_ENABLED)) {
+                    intent.getBooleanExtra(OverlayBroadcasts.EXTRA_SPEED_ENABLED, true)
+                } else {
+                    null
+                }
+                val speedLimitAlertEnabled = if (intent.hasExtra(OverlayBroadcasts.EXTRA_SPEED_LIMIT_ALERT_ENABLED)) {
+                    intent.getBooleanExtra(OverlayBroadcasts.EXTRA_SPEED_LIMIT_ALERT_ENABLED, false)
+                } else {
+                    null
+                }
+                val speedLimitAlertThreshold = if (intent.hasExtra(OverlayBroadcasts.EXTRA_SPEED_LIMIT_ALERT_THRESHOLD)) {
+                    intent.getIntExtra(OverlayBroadcasts.EXTRA_SPEED_LIMIT_ALERT_THRESHOLD, 0)
+                } else {
+                    null
+                }
+                val speedometerEnabled = if (intent.hasExtra(OverlayBroadcasts.EXTRA_SPEEDOMETER_ENABLED)) {
+                    intent.getBooleanExtra(OverlayBroadcasts.EXTRA_SPEEDOMETER_ENABLED, true)
+                } else {
+                    null
+                }
+                val clockEnabled = if (intent.hasExtra(OverlayBroadcasts.EXTRA_CLOCK_ENABLED)) {
+                    intent.getBooleanExtra(OverlayBroadcasts.EXTRA_CLOCK_ENABLED, true)
+                } else {
+                    null
+                }
                 val preview = intent.getBooleanExtra(OverlayBroadcasts.EXTRA_PREVIEW, false)
                 val previewTarget = intent.getStringExtra(OverlayBroadcasts.EXTRA_PREVIEW_TARGET)
                 val previewShowOthers = if (intent.hasExtra(OverlayBroadcasts.EXTRA_PREVIEW_SHOW_OTHERS)) {
@@ -54,25 +94,55 @@ class HudBackgroundService : Service() {
                 } else {
                     null
                 }
+                val speedometerPosition = if (!speedometerX.isNaN() && !speedometerY.isNaN()) {
+                    android.graphics.PointF(speedometerX, speedometerY)
+                } else {
+                    null
+                }
+                val clockPosition = if (!clockX.isNaN() && !clockY.isNaN()) {
+                    android.graphics.PointF(clockX, clockY)
+                } else {
+                    null
+                }
                 val containerPosition = if (!containerX.isNaN() && !containerY.isNaN()) {
                     android.graphics.PointF(containerX, containerY)
                 } else {
                     null
                 }
+                val containerWidthValue = containerWidth.takeIf { !it.isNaN() }
+                val containerHeightValue = containerHeight.takeIf { !it.isNaN() }
                 val navScaleValue = navScale.takeIf { !it.isNaN() }
                 val speedScaleValue = speedScale.takeIf { !it.isNaN() }
+                val speedometerScaleValue = speedometerScale.takeIf { !it.isNaN() }
+                val clockScaleValue = clockScale.takeIf { !it.isNaN() }
                 val navAlphaValue = navAlpha.takeIf { !it.isNaN() }
                 val speedAlphaValue = speedAlpha.takeIf { !it.isNaN() }
+                val speedometerAlphaValue = speedometerAlpha.takeIf { !it.isNaN() }
+                val clockAlphaValue = clockAlpha.takeIf { !it.isNaN() }
                 val containerAlphaValue = containerAlpha.takeIf { !it.isNaN() }
                 overlayController.updateLayout(
                     containerPosition,
+                    containerWidthValue,
+                    containerHeightValue,
                     navPosition,
                     speedPosition,
+                    speedometerPosition,
+                    clockPosition,
                     navScaleValue,
                     speedScaleValue,
+                    speedometerScaleValue,
+                    clockScaleValue,
                     navAlphaValue,
                     speedAlphaValue,
+                    speedometerAlphaValue,
+                    clockAlphaValue,
                     containerAlphaValue,
+                    navEnabled,
+                    speedEnabled,
+                    speedLimitAlertEnabled,
+                    speedLimitAlertThreshold,
+                    speedometerEnabled,
+                    clockEnabled,
                     preview,
                     previewTarget,
                     previewShowOthers

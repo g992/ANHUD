@@ -83,8 +83,72 @@
                 android:textColor="@color/white"
                 android:textSize="14sp"
                 android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/dialogPreviewSpeedometer"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/preview_speedometer_text"
+                android:textColor="@color/white"
+                android:textSize="20sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/dialogPreviewClock"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/preview_clock_text"
+                android:textColor="@color/white"
+                android:textSize="16sp"
+                android:textStyle="bold" />
         </FrameLayout>
     </FrameLayout>
+
+    <TextView
+        android:id="@+id/dialogContainerWidthLabel"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:text="@string/position_container_width_label"
+        android:textColor="@color/white"
+        android:textSize="13sp" />
+
+    <LinearLayout
+        android:id="@+id/dialogContainerWidthRow"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <SeekBar
+            android:id="@+id/dialogContainerWidthSeek"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content" />
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/dialogContainerHeightLabel"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:text="@string/position_container_height_label"
+        android:textColor="@color/white"
+        android:textSize="13sp" />
+
+    <LinearLayout
+        android:id="@+id/dialogContainerHeightRow"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <SeekBar
+            android:id="@+id/dialogContainerHeightSeek"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content" />
+    </LinearLayout>
 
     <TextView
         android:id="@+id/dialogScaleLabel"

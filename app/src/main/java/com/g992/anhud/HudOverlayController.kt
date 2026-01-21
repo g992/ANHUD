@@ -17,14 +17,19 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.core.content.ContextCompat
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import kotlin.math.max
 import kotlin.math.roundToInt
 
 class HudOverlayController(private val context: Context) {
     companion object {
         private const val CONTAINER_OUTLINE_PREVIEW_MIN_ALPHA = 0.35f
+        private const val CLOCK_TICK_MS = 5_000L
     }
     private val handler = Handler(Looper.getMainLooper())
+    private val clockFormatter = SimpleDateFormat("HH:mm", Locale.getDefault())
     private var windowManager: WindowManager? = null
     private var overlayView: FrameLayout? = null
     private var overlayLayoutParams: WindowManager.LayoutParams? = null
@@ -36,19 +41,42 @@ class HudOverlayController(private val context: Context) {
     private var secondaryView: TextView? = null
     private var timeView: TextView? = null
     private var speedLimitView: TextView? = null
+    private var speedometerView: TextView? = null
+    private var clockView: TextView? = null
     private var currentDisplayId: Int? = null
     private var lastState: NavigationHudState = NavigationHudState()
     private var containerPositionDp: PointF = OverlayPrefs.containerPositionDp(context)
+    private var containerWidthDp: Float = OverlayPrefs.containerSizeDp(context).x
+    private var containerHeightDp: Float = OverlayPrefs.containerSizeDp(context).y
     private var navPositionDp: PointF = OverlayPrefs.navPositionDp(context)
     private var speedPositionDp: PointF = OverlayPrefs.speedPositionDp(context)
+    private var speedometerPositionDp: PointF = OverlayPrefs.speedometerPositionDp(context)
+    private var clockPositionDp: PointF = OverlayPrefs.clockPositionDp(context)
     private var navScale: Float = OverlayPrefs.navScale(context)
     private var speedScale: Float = OverlayPrefs.speedScale(context)
+    private var speedometerScale: Float = OverlayPrefs.speedometerScale(context)
+    private var clockScale: Float = OverlayPrefs.clockScale(context)
     private var navAlpha: Float = OverlayPrefs.navAlpha(context)
     private var speedAlpha: Float = OverlayPrefs.speedAlpha(context)
+    private var speedometerAlpha: Float = OverlayPrefs.speedometerAlpha(context)
+    private var clockAlpha: Float = OverlayPrefs.clockAlpha(context)
     private var containerAlpha: Float = OverlayPrefs.containerAlpha(context)
+    private var navEnabled: Boolean = OverlayPrefs.navEnabled(context)
+    private var speedEnabled: Boolean = OverlayPrefs.speedEnabled(context)
+    private var speedLimitAlertEnabled: Boolean = OverlayPrefs.speedLimitAlertEnabled(context)
+    private var speedLimitAlertThreshold: Int = OverlayPrefs.speedLimitAlertThreshold(context)
+    private var speedometerEnabled: Boolean = OverlayPrefs.speedometerEnabled(context)
+    private var clockEnabled: Boolean = OverlayPrefs.clockEnabled(context)
     private var previewMode: Boolean = false
     private var previewTarget: String? = null
     private var previewShowOthers: Boolean = false
+    private val speedLimitNumberRegex = Regex("\\d+")
+    private val clockTicker = object : Runnable {
+        override fun run() {
+            updateClockText()
+            handler.postDelayed(this, CLOCK_TICK_MS)
+        }
+    }
 
     fun refresh() {
         handler.post {
@@ -83,13 +111,27 @@ class HudOverlayController(private val context: Context) {
 
     fun updateLayout(
         containerPosition: PointF?,
+        containerWidthDp: Float?,
+        containerHeightDp: Float?,
         navPosition: PointF?,
         speedPosition: PointF?,
+        speedometerPosition: PointF?,
+        clockPosition: PointF?,
         navScale: Float?,
         speedScale: Float?,
+        speedometerScale: Float?,
+        clockScale: Float?,
         navAlpha: Float?,
         speedAlpha: Float?,
+        speedometerAlpha: Float?,
+        clockAlpha: Float?,
         containerAlpha: Float?,
+        navEnabled: Boolean?,
+        speedEnabled: Boolean?,
+        speedLimitAlertEnabled: Boolean?,
+        speedLimitAlertThreshold: Int?,
+        speedometerEnabled: Boolean?,
+        clockEnabled: Boolean?,
         preview: Boolean? = null,
         previewTarget: String? = null,
         previewShowOthers: Boolean? = null
@@ -98,11 +140,23 @@ class HudOverlayController(private val context: Context) {
             if (containerPosition != null) {
                 containerPositionDp = containerPosition
             }
+            if (containerWidthDp != null) {
+                this.containerWidthDp = containerWidthDp.coerceAtLeast(0f)
+            }
+            if (containerHeightDp != null) {
+                this.containerHeightDp = containerHeightDp.coerceAtLeast(0f)
+            }
             if (navPosition != null) {
                 navPositionDp = navPosition
             }
             if (speedPosition != null) {
                 speedPositionDp = speedPosition
+            }
+            if (speedometerPosition != null) {
+                speedometerPositionDp = speedometerPosition
+            }
+            if (clockPosition != null) {
+                clockPositionDp = clockPosition
             }
             if (navScale != null) {
                 this.navScale = navScale.coerceAtLeast(0f)
@@ -110,14 +164,45 @@ class HudOverlayController(private val context: Context) {
             if (speedScale != null) {
                 this.speedScale = speedScale.coerceAtLeast(0f)
             }
+            if (speedometerScale != null) {
+                this.speedometerScale = speedometerScale.coerceAtLeast(0f)
+            }
+            if (clockScale != null) {
+                this.clockScale = clockScale.coerceAtLeast(0f)
+            }
             if (navAlpha != null) {
                 this.navAlpha = navAlpha.coerceIn(0f, 1f)
             }
             if (speedAlpha != null) {
                 this.speedAlpha = speedAlpha.coerceIn(0f, 1f)
             }
+            if (speedometerAlpha != null) {
+                this.speedometerAlpha = speedometerAlpha.coerceIn(0f, 1f)
+            }
+            if (clockAlpha != null) {
+                this.clockAlpha = clockAlpha.coerceIn(0f, 1f)
+            }
             if (containerAlpha != null) {
                 this.containerAlpha = containerAlpha.coerceIn(0f, 1f)
+            }
+            if (navEnabled != null) {
+                this.navEnabled = navEnabled
+            }
+            if (speedEnabled != null) {
+                this.speedEnabled = speedEnabled
+            }
+            if (speedLimitAlertEnabled != null) {
+                this.speedLimitAlertEnabled = speedLimitAlertEnabled
+            }
+            if (speedLimitAlertThreshold != null) {
+                this.speedLimitAlertThreshold = speedLimitAlertThreshold
+                    .coerceIn(0, OverlayPrefs.SPEED_LIMIT_ALERT_THRESHOLD_MAX)
+            }
+            if (speedometerEnabled != null) {
+                this.speedometerEnabled = speedometerEnabled
+            }
+            if (clockEnabled != null) {
+                this.clockEnabled = clockEnabled
             }
             if (preview != null) {
                 previewMode = preview
@@ -151,7 +236,7 @@ class HudOverlayController(private val context: Context) {
         val iconSize = (48 * metrics.density).roundToInt()
         val iconMargin = (8 * metrics.density).roundToInt()
         val speedSize = (40 * metrics.density).roundToInt()
-        val containerSizePx = resolveContainerSizePx(metrics)
+        val (containerWidthPx, containerHeightPx) = resolveContainerSizePx(metrics)
 
         val root = FrameLayout(displayContext).apply {
             setBackgroundColor(Color.TRANSPARENT)
@@ -238,12 +323,34 @@ class HudOverlayController(private val context: Context) {
             setTypeface(typeface, Typeface.BOLD)
         }
 
+        val speedometerText = TextView(displayContext).apply {
+            layoutParams = FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                FrameLayout.LayoutParams.WRAP_CONTENT
+            )
+            setTextColor(Color.WHITE)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 20f)
+            setTypeface(typeface, Typeface.BOLD)
+        }
+
+        val clockText = TextView(displayContext).apply {
+            layoutParams = FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                FrameLayout.LayoutParams.WRAP_CONTENT
+            )
+            setTextColor(Color.WHITE)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
+            setTypeface(typeface, Typeface.BOLD)
+        }
+
         root.addView(navBlock)
         root.addView(speedText)
+        root.addView(speedometerText)
+        root.addView(clockText)
 
         val layoutParams = WindowManager.LayoutParams(
-            containerSizePx,
-            containerSizePx,
+            containerWidthPx,
+            containerHeightPx,
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
                 WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE,
@@ -267,8 +374,11 @@ class HudOverlayController(private val context: Context) {
             secondaryView = secondaryText
             timeView = timeText
             speedLimitView = speedText
+            speedometerView = speedometerText
+            clockView = clockText
             currentDisplayId = display.displayId
             UiLogStore.append(LogCategory.SYSTEM, "Оверлей: показан на экране ${display.displayId}")
+            startClockTicker()
         } catch (e: Exception) {
             UiLogStore.append(LogCategory.SYSTEM, "Оверлей: ошибка addView: ${e.message}")
             windowManager = null
@@ -281,7 +391,10 @@ class HudOverlayController(private val context: Context) {
             secondaryView = null
             timeView = null
             speedLimitView = null
+            speedometerView = null
+            clockView = null
             currentDisplayId = null
+            stopClockTicker()
         }
     }
 
@@ -306,7 +419,10 @@ class HudOverlayController(private val context: Context) {
         secondaryView = null
         timeView = null
         speedLimitView = null
+        speedometerView = null
+        clockView = null
         currentDisplayId = null
+        stopClockTicker()
     }
 
     private fun applyState(state: NavigationHudState) {
@@ -314,6 +430,8 @@ class HudOverlayController(private val context: Context) {
         val secondary = secondaryView ?: return
         val time = timeView ?: return
         val container = overlayView
+        val clock = clockView
+        val speedometer = speedometerView
         val showPreview = previewMode
         val target = previewTarget
         val previewNav = showPreview && (
@@ -326,6 +444,20 @@ class HudOverlayController(private val context: Context) {
                 target == OverlayBroadcasts.PREVIEW_TARGET_SPEED ||
                 previewShowOthers
             )
+        val previewSpeedometer = showPreview && (
+            target == null ||
+                target == OverlayBroadcasts.PREVIEW_TARGET_SPEEDOMETER ||
+                previewShowOthers
+            )
+        val previewClock = showPreview && (
+            target == null ||
+                target == OverlayBroadcasts.PREVIEW_TARGET_CLOCK ||
+                previewShowOthers
+            )
+        val navAllowed = navEnabled || (showPreview && target == OverlayBroadcasts.PREVIEW_TARGET_NAV)
+        val speedAllowed = speedEnabled || (showPreview && target == OverlayBroadcasts.PREVIEW_TARGET_SPEED)
+        val speedometerAllowed = speedometerEnabled || (showPreview && target == OverlayBroadcasts.PREVIEW_TARGET_SPEEDOMETER)
+        val clockAllowed = clockEnabled || (showPreview && target == OverlayBroadcasts.PREVIEW_TARGET_CLOCK)
 
         container?.visibility = View.VISIBLE
 
@@ -352,11 +484,28 @@ class HudOverlayController(private val context: Context) {
             buildTimeLine(state)
         }
 
+        val speedValue = state.speedKmh?.coerceAtLeast(0)
+        val speedometerText = if (previewSpeedometer) {
+            context.getString(R.string.preview_speedometer_text)
+        } else {
+            speedValue?.toString().orEmpty()
+        }
+        val speedLimitValue = parseSpeedLimitValue(state.speedLimit)
+        val overspeed = !previewSpeed &&
+            speedLimitAlertEnabled &&
+            speedValue != null &&
+            speedLimitValue != null &&
+            speedValue > speedLimitValue + speedLimitAlertThreshold
+
         setTextOrHide(primary, primaryText)
         setTextOrHide(secondary, secondaryText)
         setTextOrHide(time, timeText)
-        updateSpeedLimit(state.speedLimit, previewSpeed)
+        updateSpeedLimit(state.speedLimit, previewSpeed, overspeed)
+        speedometer?.let { setTextOrHide(it, speedometerText) }
         updateManeuver(state.maneuverBitmap, previewNav)
+        if (clock != null) {
+            updateClockText()
+        }
 
         val navHasContent = primaryText.isNotBlank() ||
             secondaryText.isNotBlank() ||
@@ -364,8 +513,12 @@ class HudOverlayController(private val context: Context) {
             state.maneuverBitmap != null
         val navVisible = if (showPreview) previewNav else navHasContent
         val speedVisible = if (showPreview) previewSpeed else state.speedLimit.isNotBlank()
-        navContainer?.visibility = if (navVisible) View.VISIBLE else View.GONE
-        speedLimitView?.visibility = if (speedVisible) View.VISIBLE else View.GONE
+        val speedometerVisible = if (showPreview) previewSpeedometer else state.speedKmh != null
+        val clockVisible = if (showPreview) previewClock else true
+        navContainer?.visibility = if (navAllowed && navVisible) View.VISIBLE else View.GONE
+        speedLimitView?.visibility = if (speedAllowed && speedVisible) View.VISIBLE else View.GONE
+        speedometer?.visibility = if (speedometerAllowed && speedometerVisible) View.VISIBLE else View.GONE
+        clock?.visibility = if (clockAllowed && clockVisible) View.VISIBLE else View.GONE
         container?.visibility = View.VISIBLE
         applyLayout()
     }
@@ -419,7 +572,7 @@ class HudOverlayController(private val context: Context) {
         return ""
     }
 
-    private fun updateSpeedLimit(speedLimit: String, preview: Boolean) {
+    private fun updateSpeedLimit(speedLimit: String, preview: Boolean, overspeed: Boolean) {
         val view = speedLimitView ?: return
         val text = when {
             preview -> context.getString(R.string.preview_speed_limit_text)
@@ -431,7 +584,18 @@ class HudOverlayController(private val context: Context) {
             return
         }
         view.text = text
+        val background = if (overspeed) {
+            R.drawable.bg_speed_limit_alert
+        } else {
+            R.drawable.bg_speed_limit
+        }
+        view.setBackgroundResource(background)
         view.visibility = View.VISIBLE
+    }
+
+    private fun parseSpeedLimitValue(speedLimit: String): Int? {
+        val match = speedLimitNumberRegex.find(speedLimit)
+        return match?.value?.toIntOrNull()
     }
 
     private fun appendUnitIfMissing(text: String, unit: String): String {
@@ -453,28 +617,38 @@ class HudOverlayController(private val context: Context) {
         val displayId = currentDisplayId ?: return
         val display = HudDisplayUtils.resolveDisplay(context, displayId) ?: return
         val metrics = context.createDisplayContext(display).resources.displayMetrics
-        val containerSizePx = resolveContainerSizePx(metrics)
-        updateContainerLayout(metrics, containerSizePx)
-        val containerWidth = containerSizePx.toFloat()
-        val containerHeight = containerSizePx.toFloat()
+        val (containerWidthPx, containerHeightPx) = resolveContainerSizePx(metrics)
+        updateContainerLayout(metrics, containerWidthPx, containerHeightPx)
+        val containerWidth = containerWidthPx.toFloat()
+        val containerHeight = containerHeightPx.toFloat()
         navContainer?.let {
             positionView(it, navPositionDp, navScale, navAlpha, metrics.density, containerWidth, containerHeight)
         }
         speedLimitView?.let {
             positionView(it, speedPositionDp, speedScale, speedAlpha, metrics.density, containerWidth, containerHeight)
         }
+        speedometerView?.let {
+            positionView(it, speedometerPositionDp, speedometerScale, speedometerAlpha, metrics.density, containerWidth, containerHeight)
+        }
+        clockView?.let {
+            positionView(it, clockPositionDp, clockScale, clockAlpha, metrics.density, containerWidth, containerHeight)
+        }
     }
 
-    private fun updateContainerLayout(metrics: android.util.DisplayMetrics, containerSizePx: Int) {
+    private fun updateContainerLayout(
+        metrics: android.util.DisplayMetrics,
+        containerWidthPx: Int,
+        containerHeightPx: Int
+    ) {
         val wm = windowManager ?: return
         val view = overlayView ?: return
         val params = overlayLayoutParams ?: return
         val xPx = (containerPositionDp.x * metrics.density).roundToInt()
         val yPx = (containerPositionDp.y * metrics.density).roundToInt()
-        val maxX = (metrics.widthPixels - containerSizePx).coerceAtLeast(0)
-        val maxY = (metrics.heightPixels - containerSizePx).coerceAtLeast(0)
-        params.width = containerSizePx
-        params.height = containerSizePx
+        val maxX = (metrics.widthPixels - containerWidthPx).coerceAtLeast(0)
+        val maxY = (metrics.heightPixels - containerHeightPx).coerceAtLeast(0)
+        params.width = containerWidthPx
+        params.height = containerHeightPx
         params.x = xPx.coerceIn(0, maxX)
         params.y = yPx.coerceIn(0, maxY)
         updateContainerOutlineAlpha(view)
@@ -498,9 +672,16 @@ class HudOverlayController(private val context: Context) {
         }
     }
 
-    private fun resolveContainerSizePx(metrics: android.util.DisplayMetrics): Int {
-        val maxSize = OverlayPrefs.CONTAINER_MAX_SIZE_PX
-        return minOf(maxSize, metrics.widthPixels, metrics.heightPixels).coerceAtLeast(1)
+    private fun resolveContainerSizePx(metrics: android.util.DisplayMetrics): Pair<Int, Int> {
+        val density = metrics.density
+        val minPx = OverlayPrefs.CONTAINER_MIN_SIZE_PX.roundToInt().coerceAtLeast(1)
+        val maxWidthPx = metrics.widthPixels.coerceAtLeast(minPx)
+        val maxHeightPx = metrics.heightPixels.coerceAtLeast(minPx)
+        val widthPx = (containerWidthDp * density).roundToInt()
+        val heightPx = (containerHeightDp * density).roundToInt()
+        val resolvedWidth = widthPx.coerceIn(minPx, maxWidthPx)
+        val resolvedHeight = heightPx.coerceIn(minPx, maxHeightPx)
+        return resolvedWidth to resolvedHeight
     }
 
     private fun positionView(
@@ -543,5 +724,20 @@ class HudOverlayController(private val context: Context) {
             height = view.measuredHeight
         }
         return width.toFloat() to height.toFloat()
+    }
+
+    private fun updateClockText() {
+        val view = clockView ?: return
+        view.text = clockFormatter.format(Date())
+    }
+
+    private fun startClockTicker() {
+        handler.removeCallbacks(clockTicker)
+        updateClockText()
+        handler.postDelayed(clockTicker, CLOCK_TICK_MS)
+    }
+
+    private fun stopClockTicker() {
+        handler.removeCallbacks(clockTicker)
     }
 }

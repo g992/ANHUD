@@ -5,6 +5,7 @@ import android.graphics.Bitmap
 data class NavigationHudState(
     val primaryText: String = "",
     val secondaryText: String = "",
+    val speedKmh: Int? = null,
     val speedLimit: String = "",
     val arrival: String = "",
     val distance: String = "",
@@ -32,6 +33,7 @@ data class NavigationHudState(
     fun isEmpty(): Boolean {
         return primaryText.isBlank() &&
             secondaryText.isBlank() &&
+            speedKmh == null &&
             speedLimit.isBlank() &&
             arrival.isBlank() &&
             distance.isBlank() &&
@@ -71,6 +73,7 @@ object NavigationHudStore {
             current.copy(
                 primaryText = "",
                 secondaryText = "",
+                speedKmh = current.speedKmh,
                 speedLimit = "",
                 arrival = "",
                 distance = "",
