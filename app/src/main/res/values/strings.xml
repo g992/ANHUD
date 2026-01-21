@@ -23,9 +23,6 @@
     <string name="nav_app_picker_title">Выберите навигатор</string>
     <string name="nav_app_clear">Сбросить привязку</string>
     <string name="nav_app_icon_desc">Иконка приложения</string>
-    <string name="hud_display_selector_title">Выбор экрана HUD</string>
-    <string name="virtual_display_section_title">Виртуальный дисплей</string>
-    <string name="virtual_display_enable_label">Активировать виртуальный дисплей</string>
     <string name="usage_access_title">Доступ к истории использования</string>
     <string name="usage_access_message">Для отслеживания открытия навигации нужен доступ к истории использования. Откройте настройки и разрешите доступ.</string>
     <string name="usage_access_open">Открыть доступ</string>
@@ -33,6 +30,7 @@
     <string name="overlay_display_label">Экран отображения</string>
     <string name="overlay_position_label">Позиции HUD</string>
     <string name="position_blocks_hint">Нажмите блок, чтобы открыть настройку положения.</string>
+    <string name="position_container_label">Контейнер HUD</string>
     <string name="position_nav_block_label">Блок навигации</string>
     <string name="position_speed_block_label">Ограничитель скорости</string>
     <string name="position_scale_label">Масштаб</string>

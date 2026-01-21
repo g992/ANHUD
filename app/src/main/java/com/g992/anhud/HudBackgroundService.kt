@@ -14,10 +14,10 @@ import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import androidx.core.app.NotificationCompat
+import androidx.core.content.ContextCompat
 
 class HudBackgroundService : Service() {
     private val overlayController by lazy { HudOverlayController(applicationContext) }
-    private val virtualDisplayController by lazy { VirtualDisplayController(applicationContext) }
     private val navAppMonitor by lazy {
         NavigationAppMonitor(applicationContext, ::onNavAppOpened, ::onNavAppClosed)
     }
@@ -29,10 +29,13 @@ class HudBackgroundService : Service() {
                 val navY = intent.getFloatExtra(OverlayBroadcasts.EXTRA_NAV_Y_DP, Float.NaN)
                 val speedX = intent.getFloatExtra(OverlayBroadcasts.EXTRA_SPEED_X_DP, Float.NaN)
                 val speedY = intent.getFloatExtra(OverlayBroadcasts.EXTRA_SPEED_Y_DP, Float.NaN)
+                val containerX = intent.getFloatExtra(OverlayBroadcasts.EXTRA_CONTAINER_X_DP, Float.NaN)
+                val containerY = intent.getFloatExtra(OverlayBroadcasts.EXTRA_CONTAINER_Y_DP, Float.NaN)
                 val navScale = intent.getFloatExtra(OverlayBroadcasts.EXTRA_NAV_SCALE, Float.NaN)
                 val speedScale = intent.getFloatExtra(OverlayBroadcasts.EXTRA_SPEED_SCALE, Float.NaN)
                 val navAlpha = intent.getFloatExtra(OverlayBroadcasts.EXTRA_NAV_ALPHA, Float.NaN)
                 val speedAlpha = intent.getFloatExtra(OverlayBroadcasts.EXTRA_SPEED_ALPHA, Float.NaN)
+                val containerAlpha = intent.getFloatExtra(OverlayBroadcasts.EXTRA_CONTAINER_ALPHA, Float.NaN)
                 val preview = intent.getBooleanExtra(OverlayBroadcasts.EXTRA_PREVIEW, false)
                 val previewTarget = intent.getStringExtra(OverlayBroadcasts.EXTRA_PREVIEW_TARGET)
                 val previewShowOthers = if (intent.hasExtra(OverlayBroadcasts.EXTRA_PREVIEW_SHOW_OTHERS)) {
@@ -51,24 +54,31 @@ class HudBackgroundService : Service() {
                 } else {
                     null
                 }
+                val containerPosition = if (!containerX.isNaN() && !containerY.isNaN()) {
+                    android.graphics.PointF(containerX, containerY)
+                } else {
+                    null
+                }
                 val navScaleValue = navScale.takeIf { !it.isNaN() }
                 val speedScaleValue = speedScale.takeIf { !it.isNaN() }
                 val navAlphaValue = navAlpha.takeIf { !it.isNaN() }
                 val speedAlphaValue = speedAlpha.takeIf { !it.isNaN() }
+                val containerAlphaValue = containerAlpha.takeIf { !it.isNaN() }
                 overlayController.updateLayout(
+                    containerPosition,
                     navPosition,
                     speedPosition,
                     navScaleValue,
                     speedScaleValue,
                     navAlphaValue,
                     speedAlphaValue,
+                    containerAlphaValue,
                     preview,
                     previewTarget,
                     previewShowOthers
                 )
                 overlayController.refresh()
                 overlayController.updateNavigation(NavigationHudStore.snapshot())
-                virtualDisplayController.refresh()
             }
         }
     }
@@ -86,11 +96,12 @@ class HudBackgroundService : Service() {
         NavigationHudStore.registerListener(navListener)
         navAppMonitor.start()
         val filter = android.content.IntentFilter(OverlayBroadcasts.ACTION_OVERLAY_SETTINGS_CHANGED)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            registerReceiver(settingsReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
-        } else {
-            registerReceiver(settingsReceiver, filter)
-        }
+        ContextCompat.registerReceiver(
+            this,
+            settingsReceiver,
+            filter,
+            ContextCompat.RECEIVER_NOT_EXPORTED
+        )
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 CHANNEL_ID,
@@ -111,7 +122,6 @@ class HudBackgroundService : Service() {
         startService(Intent(this, SensorDataService::class.java))
         overlayController.refresh()
         overlayController.updateNavigation(NavigationHudStore.snapshot())
-        virtualDisplayController.refresh()
         val activityIntent = Intent(this, MainActivity::class.java).apply {
             this.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
         }
@@ -153,7 +163,6 @@ class HudBackgroundService : Service() {
         } catch (_: Exception) {
         }
         overlayController.destroy()
-        virtualDisplayController.destroy()
         super.onDestroy()
     }
 

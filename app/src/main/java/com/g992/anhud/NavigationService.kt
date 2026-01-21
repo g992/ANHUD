@@ -4,9 +4,9 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
-import android.os.Build
 import android.os.IBinder
 import android.util.Log
+import androidx.core.content.ContextCompat
 
 class NavigationService : Service() {
     private var navigationReceiver: NavigationReceiver? = null
@@ -15,7 +15,8 @@ class NavigationService : Service() {
 
     override fun onCreate() {
         super.onCreate()
-        navigationReceiver = NavigationReceiver()
+        val receiver = NavigationReceiver()
+        navigationReceiver = receiver
         val filter = IntentFilter().apply {
             addAction(NavigationReceiver.ACTION_NAV_UPDATE)
             addAction(NavigationReceiver.ACTION_NAV_ENDED)
@@ -30,11 +31,12 @@ class NavigationService : Service() {
             addAction(NavigationReceiver.ACTION_YANDEX_TIME)
             addAction(NavigationReceiver.ACTION_YANDEX_TRAFFICLIGHT)
         }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            registerReceiver(navigationReceiver, filter, Context.RECEIVER_EXPORTED)
-        } else {
-            registerReceiver(navigationReceiver, filter)
-        }
+        ContextCompat.registerReceiver(
+            this,
+            receiver,
+            filter,
+            ContextCompat.RECEIVER_EXPORTED
+        )
         Log.d(TAG, "Navigation receiver registered")
         UiLogStore.append(LogCategory.SYSTEM, "NavigationService: ресивер зарегистрирован")
     }

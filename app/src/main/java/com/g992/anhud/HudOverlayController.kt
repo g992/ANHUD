@@ -17,12 +17,17 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.core.content.ContextCompat
+import kotlin.math.max
 import kotlin.math.roundToInt
 
 class HudOverlayController(private val context: Context) {
+    companion object {
+        private const val CONTAINER_OUTLINE_PREVIEW_MIN_ALPHA = 0.35f
+    }
     private val handler = Handler(Looper.getMainLooper())
     private var windowManager: WindowManager? = null
     private var overlayView: FrameLayout? = null
+    private var overlayLayoutParams: WindowManager.LayoutParams? = null
     private var navContainer: LinearLayout? = null
     private var maneuverContainer: FrameLayout? = null
     private var maneuverView: ImageView? = null
@@ -33,12 +38,14 @@ class HudOverlayController(private val context: Context) {
     private var speedLimitView: TextView? = null
     private var currentDisplayId: Int? = null
     private var lastState: NavigationHudState = NavigationHudState()
+    private var containerPositionDp: PointF = OverlayPrefs.containerPositionDp(context)
     private var navPositionDp: PointF = OverlayPrefs.navPositionDp(context)
     private var speedPositionDp: PointF = OverlayPrefs.speedPositionDp(context)
     private var navScale: Float = OverlayPrefs.navScale(context)
     private var speedScale: Float = OverlayPrefs.speedScale(context)
     private var navAlpha: Float = OverlayPrefs.navAlpha(context)
     private var speedAlpha: Float = OverlayPrefs.speedAlpha(context)
+    private var containerAlpha: Float = OverlayPrefs.containerAlpha(context)
     private var previewMode: Boolean = false
     private var previewTarget: String? = null
     private var previewShowOthers: Boolean = false
@@ -75,17 +82,22 @@ class HudOverlayController(private val context: Context) {
     }
 
     fun updateLayout(
+        containerPosition: PointF?,
         navPosition: PointF?,
         speedPosition: PointF?,
         navScale: Float?,
         speedScale: Float?,
         navAlpha: Float?,
         speedAlpha: Float?,
+        containerAlpha: Float?,
         preview: Boolean? = null,
         previewTarget: String? = null,
         previewShowOthers: Boolean? = null
     ) {
         handler.post {
+            if (containerPosition != null) {
+                containerPositionDp = containerPosition
+            }
             if (navPosition != null) {
                 navPositionDp = navPosition
             }
@@ -103,6 +115,9 @@ class HudOverlayController(private val context: Context) {
             }
             if (speedAlpha != null) {
                 this.speedAlpha = speedAlpha.coerceIn(0f, 1f)
+            }
+            if (containerAlpha != null) {
+                this.containerAlpha = containerAlpha.coerceIn(0f, 1f)
             }
             if (preview != null) {
                 previewMode = preview
@@ -136,16 +151,19 @@ class HudOverlayController(private val context: Context) {
         val iconSize = (48 * metrics.density).roundToInt()
         val iconMargin = (8 * metrics.density).roundToInt()
         val speedSize = (40 * metrics.density).roundToInt()
+        val containerSizePx = resolveContainerSizePx(metrics)
 
         val root = FrameLayout(displayContext).apply {
             setBackgroundColor(Color.TRANSPARENT)
+            clipChildren = false
+            clipToPadding = false
         }
 
         val navBlock = LinearLayout(displayContext).apply {
             orientation = LinearLayout.HORIZONTAL
             setPadding(padding, padding, padding, padding)
             layoutParams = FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.WRAP_CONTENT,
+                FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.WRAP_CONTENT
             )
         }
@@ -182,6 +200,11 @@ class HudOverlayController(private val context: Context) {
 
         val textColumn = LinearLayout(displayContext).apply {
             orientation = LinearLayout.VERTICAL
+            layoutParams = LinearLayout.LayoutParams(
+                0,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                1f
+            )
         }
 
         val primaryText = TextView(displayContext).apply {
@@ -219,8 +242,8 @@ class HudOverlayController(private val context: Context) {
         root.addView(speedText)
 
         val layoutParams = WindowManager.LayoutParams(
-            WindowManager.LayoutParams.MATCH_PARENT,
-            WindowManager.LayoutParams.MATCH_PARENT,
+            containerSizePx,
+            containerSizePx,
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
                 WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE,
@@ -235,6 +258,7 @@ class HudOverlayController(private val context: Context) {
             wm.addView(root, layoutParams)
             windowManager = wm
             overlayView = root
+            overlayLayoutParams = layoutParams
             navContainer = navBlock
             maneuverContainer = maneuverBox
             maneuverView = maneuverImage
@@ -273,6 +297,7 @@ class HudOverlayController(private val context: Context) {
         }
         windowManager = null
         overlayView = null
+        overlayLayoutParams = null
         navContainer = null
         maneuverContainer = null
         maneuverView = null
@@ -302,10 +327,6 @@ class HudOverlayController(private val context: Context) {
                 previewShowOthers
             )
 
-        if (state.isEmpty() && !showPreview) {
-            container?.visibility = View.GONE
-            return
-        }
         container?.visibility = View.VISIBLE
 
         val primaryText = if (previewNav) {
@@ -345,7 +366,7 @@ class HudOverlayController(private val context: Context) {
         val speedVisible = if (showPreview) previewSpeed else state.speedLimit.isNotBlank()
         navContainer?.visibility = if (navVisible) View.VISIBLE else View.GONE
         speedLimitView?.visibility = if (speedVisible) View.VISIBLE else View.GONE
-        container?.visibility = if (navVisible || speedVisible) View.VISIBLE else View.GONE
+        container?.visibility = View.VISIBLE
         applyLayout()
     }
 
@@ -432,8 +453,54 @@ class HudOverlayController(private val context: Context) {
         val displayId = currentDisplayId ?: return
         val display = HudDisplayUtils.resolveDisplay(context, displayId) ?: return
         val metrics = context.createDisplayContext(display).resources.displayMetrics
-        navContainer?.let { positionView(it, navPositionDp, navScale, navAlpha, metrics) }
-        speedLimitView?.let { positionView(it, speedPositionDp, speedScale, speedAlpha, metrics) }
+        val containerSizePx = resolveContainerSizePx(metrics)
+        updateContainerLayout(metrics, containerSizePx)
+        val containerWidth = containerSizePx.toFloat()
+        val containerHeight = containerSizePx.toFloat()
+        navContainer?.let {
+            positionView(it, navPositionDp, navScale, navAlpha, metrics.density, containerWidth, containerHeight)
+        }
+        speedLimitView?.let {
+            positionView(it, speedPositionDp, speedScale, speedAlpha, metrics.density, containerWidth, containerHeight)
+        }
+    }
+
+    private fun updateContainerLayout(metrics: android.util.DisplayMetrics, containerSizePx: Int) {
+        val wm = windowManager ?: return
+        val view = overlayView ?: return
+        val params = overlayLayoutParams ?: return
+        val xPx = (containerPositionDp.x * metrics.density).roundToInt()
+        val yPx = (containerPositionDp.y * metrics.density).roundToInt()
+        val maxX = (metrics.widthPixels - containerSizePx).coerceAtLeast(0)
+        val maxY = (metrics.heightPixels - containerSizePx).coerceAtLeast(0)
+        params.width = containerSizePx
+        params.height = containerSizePx
+        params.x = xPx.coerceIn(0, maxX)
+        params.y = yPx.coerceIn(0, maxY)
+        updateContainerOutlineAlpha(view)
+        try {
+            wm.updateViewLayout(view, params)
+        } catch (e: Exception) {
+            UiLogStore.append(LogCategory.SYSTEM, "Оверлей: ошибка обновления: ${e.message}")
+        }
+    }
+
+    private fun updateContainerOutlineAlpha(container: FrameLayout) {
+        if (previewMode && previewTarget == OverlayBroadcasts.PREVIEW_TARGET_CONTAINER) {
+            if (container.background == null) {
+                container.background = ContextCompat.getDrawable(container.context, R.drawable.bg_hud_container_outline)
+            }
+            val effectiveAlpha = max(containerAlpha, CONTAINER_OUTLINE_PREVIEW_MIN_ALPHA)
+            val alphaValue = (effectiveAlpha * 255).roundToInt().coerceIn(0, 255)
+            container.background?.alpha = alphaValue
+        } else {
+            container.background = null
+        }
+    }
+
+    private fun resolveContainerSizePx(metrics: android.util.DisplayMetrics): Int {
+        val maxSize = OverlayPrefs.CONTAINER_MAX_SIZE_PX
+        return minOf(maxSize, metrics.widthPixels, metrics.heightPixels).coerceAtLeast(1)
     }
 
     private fun positionView(
@@ -441,7 +508,9 @@ class HudOverlayController(private val context: Context) {
         positionDp: PointF,
         scale: Float,
         alpha: Float,
-        metrics: android.util.DisplayMetrics
+        density: Float,
+        containerWidthPx: Float,
+        containerHeightPx: Float
     ) {
         val (rawWidth, rawHeight) = resolveViewSize(view)
         if (rawWidth <= 0f || rawHeight <= 0f) {
@@ -455,10 +524,10 @@ class HudOverlayController(private val context: Context) {
         view.scaleX = scale
         view.scaleY = scale
         view.alpha = alpha
-        val xPx = positionDp.x * metrics.density
-        val yPx = positionDp.y * metrics.density
-        val maxX = (metrics.widthPixels - scaledWidth).coerceAtLeast(0f)
-        val maxY = (metrics.heightPixels - scaledHeight).coerceAtLeast(0f)
+        val xPx = positionDp.x * density
+        val yPx = positionDp.y * density
+        val maxX = (containerWidthPx - scaledWidth).coerceAtLeast(0f)
+        val maxY = (containerHeightPx - scaledHeight).coerceAtLeast(0f)
         view.x = xPx.coerceIn(0f, maxX)
         view.y = yPx.coerceIn(0f, maxY)
     }

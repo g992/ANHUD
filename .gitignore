@@ -33,3 +33,6 @@ captures/
 
 # OS files
 .DS_Store
+
+./CLAUDE.md
+./.claude/*

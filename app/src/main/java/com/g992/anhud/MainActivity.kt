@@ -32,20 +32,22 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.roundToInt
 
 class MainActivity : AppCompatActivity() {
+    companion object {
+        private const val CONTAINER_OUTLINE_PREVIEW_MIN_ALPHA = 0.35f
+    }
     private lateinit var permissionStatus: TextView
     private lateinit var requestPermissionButton: Button
     private lateinit var overlaySwitch: SwitchCompat
     private lateinit var displaySpinner: Spinner
+    private lateinit var positionContainerCard: View
     private lateinit var positionNavCard: View
     private lateinit var positionSpeedCard: View
     private lateinit var logsButton: Button
     private lateinit var navAppButton: Button
     private lateinit var navAppSelected: TextView
-    private lateinit var virtualDisplaySwitch: SwitchCompat
-    private lateinit var hudDisplaySpinner: Spinner
-    private lateinit var virtualDisplaySection: View
 
     private var displayOptions: List<DisplayOption> = emptyList()
     private var displaySize: Point = Point(1, 1)
@@ -65,14 +67,12 @@ class MainActivity : AppCompatActivity() {
         requestPermissionButton = findViewById(R.id.requestPermissionButton)
         overlaySwitch = findViewById(R.id.overlaySwitch)
         displaySpinner = findViewById(R.id.displaySpinner)
+        positionContainerCard = findViewById(R.id.positionContainerCard)
         positionNavCard = findViewById(R.id.positionNavCard)
         positionSpeedCard = findViewById(R.id.positionSpeedCard)
         logsButton = findViewById(R.id.btnLogs)
         navAppButton = findViewById(R.id.navAppButton)
         navAppSelected = findViewById(R.id.navAppSelected)
-        virtualDisplaySwitch = findViewById(R.id.virtualDisplaySwitch)
-        hudDisplaySpinner = findViewById(R.id.hudDisplaySpinner)
-        virtualDisplaySection = findViewById(R.id.virtualDisplaySection)
 
         logsButton.setOnClickListener {
             startActivity(Intent(this, LogsActivity::class.java))
@@ -97,26 +97,14 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        virtualDisplaySwitch.isChecked = OverlayPrefs.isVirtualDisplayEnabled(this)
-        virtualDisplaySwitch.setOnCheckedChangeListener { _, isChecked ->
-            if (isChecked && !Settings.canDrawOverlays(this)) {
-                virtualDisplaySwitch.isChecked = false
-                openOverlaySettings()
-                updatePermissionStatus()
-                return@setOnCheckedChangeListener
-            }
-            OverlayPrefs.setVirtualDisplayEnabled(this, isChecked)
-            notifyOverlaySettingsChanged()
-            if (isChecked) {
-                ContextCompat.startForegroundService(this, Intent(this, HudBackgroundService::class.java))
-            }
-        }
-
         positionNavCard.setOnClickListener {
             openPositionDialog(OverlayTarget.NAVIGATION)
         }
         positionSpeedCard.setOnClickListener {
             openPositionDialog(OverlayTarget.SPEED)
+        }
+        positionContainerCard.setOnClickListener {
+            openPositionDialog(OverlayTarget.CONTAINER)
         }
         navAppButton.setOnClickListener {
             handleNavAppSelection()
@@ -125,7 +113,6 @@ class MainActivity : AppCompatActivity() {
         setupDisplaySpinners()
         updatePermissionStatus()
         updateNavAppSelection()
-        updateVirtualDisplayVisibility()
         startCoreServices()
     }
 
@@ -133,7 +120,6 @@ class MainActivity : AppCompatActivity() {
         super.onResume()
         updatePermissionStatus()
         updateNavAppSelection()
-        updateVirtualDisplayVisibility()
     }
 
     private fun updatePermissionStatus() {
@@ -181,7 +167,6 @@ class MainActivity : AppCompatActivity() {
             return adapter
         }
         displaySpinner.adapter = buildAdapter()
-        hudDisplaySpinner.adapter = buildAdapter()
 
         val savedDisplayId = OverlayPrefs.displayId(this)
         val selectedIndex = displayOptions.indexOfFirst { it.id == savedDisplayId }.takeIf { it >= 0 } ?: 0
@@ -206,25 +191,6 @@ class MainActivity : AppCompatActivity() {
             override fun onNothingSelected(parent: android.widget.AdapterView<*>?) {
             }
         }
-
-        val savedHudDisplayId = OverlayPrefs.hudDisplayId(this)
-        val hudSelectedIndex = displayOptions.indexOfFirst { it.id == savedHudDisplayId }.takeIf { it >= 0 } ?: 0
-        hudDisplaySpinner.setSelection(hudSelectedIndex)
-        hudDisplaySpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
-            override fun onItemSelected(
-                parent: android.widget.AdapterView<*>?,
-                view: View?,
-                position: Int,
-                id: Long
-            ) {
-                val option = displayOptions[position]
-                OverlayPrefs.setHudDisplayId(this@MainActivity, option.id)
-                notifyOverlaySettingsChanged()
-            }
-
-            override fun onNothingSelected(parent: android.widget.AdapterView<*>?) {
-            }
-        }
     }
 
     private fun updateNavAppSelection() {
@@ -240,14 +206,6 @@ class MainActivity : AppCompatActivity() {
             } ?: packageName
         }
         navAppSelected.text = label
-    }
-
-    private fun updateVirtualDisplayVisibility() {
-        val hasPermission = HudDisplayUtils.hasVirtualDisplayPermission(this)
-        virtualDisplaySection.visibility = if (hasPermission) View.VISIBLE else View.GONE
-        if (hasPermission) {
-            virtualDisplaySwitch.isChecked = OverlayPrefs.isVirtualDisplayEnabled(this)
-        }
     }
 
     private fun resolveAppLabel(packageName: String): String? {
@@ -347,17 +305,24 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun notifyOverlaySettingsChanged(
+        containerPosition: PointF? = null,
         navPosition: PointF? = null,
         speedPosition: PointF? = null,
         navScale: Float? = null,
         speedScale: Float? = null,
         navAlpha: Float? = null,
         speedAlpha: Float? = null,
+        containerAlpha: Float? = null,
         preview: Boolean = false,
         previewTarget: OverlayTarget? = null,
         previewShowOthers: Boolean? = null
     ) {
         val intent = Intent(OverlayBroadcasts.ACTION_OVERLAY_SETTINGS_CHANGED)
+            .setPackage(packageName)
+        if (containerPosition != null) {
+            intent.putExtra(OverlayBroadcasts.EXTRA_CONTAINER_X_DP, containerPosition.x)
+            intent.putExtra(OverlayBroadcasts.EXTRA_CONTAINER_Y_DP, containerPosition.y)
+        }
         if (navPosition != null) {
             intent.putExtra(OverlayBroadcasts.EXTRA_NAV_X_DP, navPosition.x)
             intent.putExtra(OverlayBroadcasts.EXTRA_NAV_Y_DP, navPosition.y)
@@ -377,6 +342,9 @@ class MainActivity : AppCompatActivity() {
         }
         if (speedAlpha != null) {
             intent.putExtra(OverlayBroadcasts.EXTRA_SPEED_ALPHA, speedAlpha)
+        }
+        if (containerAlpha != null) {
+            intent.putExtra(OverlayBroadcasts.EXTRA_CONTAINER_ALPHA, containerAlpha)
         }
         intent.putExtra(OverlayBroadcasts.EXTRA_PREVIEW, preview)
         if (previewTarget != null) {
@@ -419,16 +387,19 @@ class MainActivity : AppCompatActivity() {
 
     private enum class OverlayTarget(val previewKey: String) {
         NAVIGATION(OverlayBroadcasts.PREVIEW_TARGET_NAV),
-        SPEED(OverlayBroadcasts.PREVIEW_TARGET_SPEED)
+        SPEED(OverlayBroadcasts.PREVIEW_TARGET_SPEED),
+        CONTAINER(OverlayBroadcasts.PREVIEW_TARGET_CONTAINER)
     }
 
     private fun openPositionDialog(target: OverlayTarget) {
         updateDisplayMetrics(OverlayPrefs.displayId(this))
         val dialogView = layoutInflater.inflate(R.layout.dialog_position_editor, null)
         val previewContainer = dialogView.findViewById<FrameLayout>(R.id.dialogPreviewContainer)
+        val previewHudContainer = dialogView.findViewById<FrameLayout>(R.id.dialogPreviewHudContainer)
         val previewNavBlock = dialogView.findViewById<View>(R.id.dialogPreviewNavBlock)
         val previewSpeedLimit = dialogView.findViewById<View>(R.id.dialogPreviewSpeedLimit)
         val showOthersCheck = dialogView.findViewById<CheckBox>(R.id.dialogShowOthers)
+        val scaleLabel = dialogView.findViewById<TextView>(R.id.dialogScaleLabel)
         val scaleSeek = dialogView.findViewById<SeekBar>(R.id.dialogScaleSeek)
         val scaleValue = dialogView.findViewById<TextView>(R.id.dialogScaleValue)
         val brightnessSeek = dialogView.findViewById<SeekBar>(R.id.dialogBrightnessSeek)
@@ -436,23 +407,25 @@ class MainActivity : AppCompatActivity() {
 
         val navPosition = OverlayPrefs.navPositionDp(this)
         val speedPosition = OverlayPrefs.speedPositionDp(this)
+        val containerPosition = OverlayPrefs.containerPositionDp(this)
         val navPoint = PointF(navPosition.x, navPosition.y)
         val speedPoint = PointF(speedPosition.x, speedPosition.y)
-        val scalePercent = if (target == OverlayTarget.NAVIGATION) {
-            (OverlayPrefs.navScale(this) * 100).toInt()
-        } else {
-            (OverlayPrefs.speedScale(this) * 100).toInt()
+        val containerPoint = PointF(containerPosition.x, containerPosition.y)
+        val scalePercent = when (target) {
+            OverlayTarget.NAVIGATION -> (OverlayPrefs.navScale(this) * 100).toInt()
+            OverlayTarget.SPEED -> (OverlayPrefs.speedScale(this) * 100).toInt()
+            OverlayTarget.CONTAINER -> 100
         }.coerceIn(50, 150)
-        val brightnessPercent = if (target == OverlayTarget.NAVIGATION) {
-            (OverlayPrefs.navAlpha(this) * 100).toInt()
-        } else {
-            (OverlayPrefs.speedAlpha(this) * 100).toInt()
+        val brightnessPercent = when (target) {
+            OverlayTarget.NAVIGATION -> (OverlayPrefs.navAlpha(this) * 100).toInt()
+            OverlayTarget.SPEED -> (OverlayPrefs.speedAlpha(this) * 100).toInt()
+            OverlayTarget.CONTAINER -> (OverlayPrefs.containerAlpha(this) * 100).toInt()
         }.coerceIn(0, 100)
 
-        val dialogTitle = if (target == OverlayTarget.NAVIGATION) {
-            getString(R.string.position_nav_block_label)
-        } else {
-            getString(R.string.position_speed_block_label)
+        val dialogTitle = when (target) {
+            OverlayTarget.NAVIGATION -> getString(R.string.position_nav_block_label)
+            OverlayTarget.SPEED -> getString(R.string.position_speed_block_label)
+            OverlayTarget.CONTAINER -> getString(R.string.position_container_label)
         }
 
         val dialog = AlertDialog.Builder(this, R.style.ThemeOverlay_ANHUD_Dialog)
@@ -464,55 +437,139 @@ class MainActivity : AppCompatActivity() {
             }
             .create()
 
+        if (target == OverlayTarget.CONTAINER) {
+            scaleLabel.visibility = View.GONE
+            scaleSeek.visibility = View.GONE
+            scaleValue.visibility = View.GONE
+        }
+
         fun updateDialogVisibility() {
             val showNav = target == OverlayTarget.NAVIGATION
             val showSpeed = target == OverlayTarget.SPEED
             previewNavBlock.visibility = if (showNav) View.VISIBLE else View.GONE
             previewSpeedLimit.visibility = if (showSpeed) View.VISIBLE else View.GONE
+            if (target == OverlayTarget.CONTAINER) {
+                previewHudContainer.background = ContextCompat.getDrawable(this@MainActivity, R.drawable.bg_hud_container_outline)
+                updatePreviewContainerSize(previewContainer, previewHudContainer)
+                positionPreviewView(
+                    previewContainer,
+                    previewHudContainer,
+                    containerPoint.x,
+                    containerPoint.y,
+                    displaySize.x.toFloat(),
+                    displaySize.y.toFloat()
+                )
+                val containerAlpha = brightnessSeek.progress.coerceIn(0, 100) / 100f
+                updatePreviewContainerAlpha(previewHudContainer, containerAlpha)
+            } else {
+                previewHudContainer.background = null
+            }
+            val containerSizePx = containerSizePx().toFloat()
             if (showNav) {
-                positionPreviewView(previewContainer, previewNavBlock, navPoint.x, navPoint.y)
-                previewNavBlock.alpha = brightnessSeek.progress.coerceIn(0, 100) / 100f
+                positionPreviewView(
+                    previewHudContainer,
+                    previewNavBlock,
+                    navPoint.x,
+                    navPoint.y,
+                    containerSizePx,
+                    containerSizePx
+                )
+                previewNavBlock.alpha = if (target == OverlayTarget.NAVIGATION) {
+                    brightnessSeek.progress.coerceIn(0, 100) / 100f
+                } else {
+                    OverlayPrefs.navAlpha(this@MainActivity).coerceIn(0f, 1f)
+                }
             }
             if (showSpeed) {
-                positionPreviewView(previewContainer, previewSpeedLimit, speedPoint.x, speedPoint.y)
-                previewSpeedLimit.alpha = brightnessSeek.progress.coerceIn(0, 100) / 100f
+                positionPreviewView(
+                    previewHudContainer,
+                    previewSpeedLimit,
+                    speedPoint.x,
+                    speedPoint.y,
+                    containerSizePx,
+                    containerSizePx
+                )
+                previewSpeedLimit.alpha = if (target == OverlayTarget.SPEED) {
+                    brightnessSeek.progress.coerceIn(0, 100) / 100f
+                } else {
+                    OverlayPrefs.speedAlpha(this@MainActivity).coerceIn(0f, 1f)
+                }
             }
         }
 
         fun updateOverlayPosition(previewX: Float, previewY: Float, persist: Boolean) {
-            val view = if (target == OverlayTarget.NAVIGATION) previewNavBlock else previewSpeedLimit
-            val (dpX, dpY) = positionDpFromPreview(previewContainer, view, previewX, previewY)
-            val point = PointF(dpX, dpY)
-            if (target == OverlayTarget.NAVIGATION) {
-                if (persist) {
-                    OverlayPrefs.setNavPositionDp(this, dpX, dpY)
-                    navPoint.x = dpX
-                    navPoint.y = dpY
-                }
-                notifyOverlaySettingsChanged(
-                    navPosition = point,
-                    preview = true,
-                    previewTarget = target,
-                    previewShowOthers = showOthersCheck.isChecked
-                )
+            val view = when (target) {
+                OverlayTarget.NAVIGATION -> previewNavBlock
+                OverlayTarget.SPEED -> previewSpeedLimit
+                OverlayTarget.CONTAINER -> previewHudContainer
+            }
+            val boundsWidth = if (target == OverlayTarget.CONTAINER) {
+                displaySize.x.toFloat()
             } else {
-                if (persist) {
-                    OverlayPrefs.setSpeedPositionDp(this, dpX, dpY)
-                    speedPoint.x = dpX
-                    speedPoint.y = dpY
+                containerSizePx().toFloat()
+            }
+            val boundsHeight = if (target == OverlayTarget.CONTAINER) {
+                displaySize.y.toFloat()
+            } else {
+                containerSizePx().toFloat()
+            }
+            val dragContainer = if (target == OverlayTarget.CONTAINER) {
+                previewContainer
+            } else {
+                previewHudContainer
+            }
+            val (dpX, dpY) = positionDpFromPreview(dragContainer, view, previewX, previewY, boundsWidth, boundsHeight)
+            val point = PointF(dpX, dpY)
+            when (target) {
+                OverlayTarget.NAVIGATION -> {
+                    if (persist) {
+                        OverlayPrefs.setNavPositionDp(this, dpX, dpY)
+                        navPoint.x = dpX
+                        navPoint.y = dpY
+                    }
+                    notifyOverlaySettingsChanged(
+                        navPosition = point,
+                        preview = true,
+                        previewTarget = target,
+                        previewShowOthers = showOthersCheck.isChecked
+                    )
                 }
-                notifyOverlaySettingsChanged(
-                    speedPosition = point,
-                    preview = true,
-                    previewTarget = target,
-                    previewShowOthers = showOthersCheck.isChecked
-                )
+                OverlayTarget.SPEED -> {
+                    if (persist) {
+                        OverlayPrefs.setSpeedPositionDp(this, dpX, dpY)
+                        speedPoint.x = dpX
+                        speedPoint.y = dpY
+                    }
+                    notifyOverlaySettingsChanged(
+                        speedPosition = point,
+                        preview = true,
+                        previewTarget = target,
+                        previewShowOthers = showOthersCheck.isChecked
+                    )
+                }
+                OverlayTarget.CONTAINER -> {
+                    if (persist) {
+                        OverlayPrefs.setContainerPositionDp(this, dpX, dpY)
+                        containerPoint.x = dpX
+                        containerPoint.y = dpY
+                    }
+                    notifyOverlaySettingsChanged(
+                        containerPosition = point,
+                        preview = true,
+                        previewTarget = target,
+                        previewShowOthers = showOthersCheck.isChecked
+                    )
+                }
             }
         }
 
         setupDialogDrag(
-            previewContainer,
-            if (target == OverlayTarget.NAVIGATION) previewNavBlock else previewSpeedLimit
+            if (target == OverlayTarget.CONTAINER) previewContainer else previewHudContainer,
+            when (target) {
+                OverlayTarget.NAVIGATION -> previewNavBlock
+                OverlayTarget.SPEED -> previewSpeedLimit
+                OverlayTarget.CONTAINER -> previewHudContainer
+            }
         ) { previewX, previewY, persist ->
             updateOverlayPosition(previewX, previewY, persist)
         }
@@ -521,6 +578,9 @@ class MainActivity : AppCompatActivity() {
         scaleValue.text = getString(R.string.scale_percent_format, scalePercent)
         scaleSeek.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                if (target == OverlayTarget.CONTAINER) {
+                    return
+                }
                 val percent = (progress + 50).coerceIn(50, 150)
                 val scale = percent / 100f
                 scaleValue.text = getString(R.string.scale_percent_format, percent)
@@ -544,6 +604,9 @@ class MainActivity : AppCompatActivity() {
             override fun onStartTrackingTouch(seekBar: SeekBar?) = Unit
 
             override fun onStopTrackingTouch(seekBar: SeekBar?) {
+                if (target == OverlayTarget.CONTAINER) {
+                    return
+                }
                 val percent = ((seekBar?.progress ?: 50) + 50).coerceIn(50, 150)
                 val scale = percent / 100f
                 if (target == OverlayTarget.NAVIGATION) {
@@ -573,22 +636,34 @@ class MainActivity : AppCompatActivity() {
                 val percent = progress.coerceIn(0, 100)
                 val alpha = percent / 100f
                 brightnessValue.text = getString(R.string.scale_percent_format, percent)
-                if (target == OverlayTarget.NAVIGATION) {
-                    previewNavBlock.alpha = alpha
-                    notifyOverlaySettingsChanged(
-                        navAlpha = alpha,
-                        preview = true,
-                        previewTarget = target,
-                        previewShowOthers = showOthersCheck.isChecked
-                    )
-                } else {
-                    previewSpeedLimit.alpha = alpha
-                    notifyOverlaySettingsChanged(
-                        speedAlpha = alpha,
-                        preview = true,
-                        previewTarget = target,
-                        previewShowOthers = showOthersCheck.isChecked
-                    )
+                when (target) {
+                    OverlayTarget.NAVIGATION -> {
+                        previewNavBlock.alpha = alpha
+                        notifyOverlaySettingsChanged(
+                            navAlpha = alpha,
+                            preview = true,
+                            previewTarget = target,
+                            previewShowOthers = showOthersCheck.isChecked
+                        )
+                    }
+                    OverlayTarget.SPEED -> {
+                        previewSpeedLimit.alpha = alpha
+                        notifyOverlaySettingsChanged(
+                            speedAlpha = alpha,
+                            preview = true,
+                            previewTarget = target,
+                            previewShowOthers = showOthersCheck.isChecked
+                        )
+                    }
+                    OverlayTarget.CONTAINER -> {
+                        updatePreviewContainerAlpha(previewHudContainer, alpha)
+                        notifyOverlaySettingsChanged(
+                            containerAlpha = alpha,
+                            preview = true,
+                            previewTarget = target,
+                            previewShowOthers = showOthersCheck.isChecked
+                        )
+                    }
                 }
             }
 
@@ -597,22 +672,34 @@ class MainActivity : AppCompatActivity() {
             override fun onStopTrackingTouch(seekBar: SeekBar?) {
                 val percent = (seekBar?.progress ?: 100).coerceIn(0, 100)
                 val alpha = percent / 100f
-                if (target == OverlayTarget.NAVIGATION) {
-                    OverlayPrefs.setNavAlpha(this@MainActivity, alpha)
-                    notifyOverlaySettingsChanged(
-                        navAlpha = alpha,
-                        preview = true,
-                        previewTarget = target,
-                        previewShowOthers = showOthersCheck.isChecked
-                    )
-                } else {
-                    OverlayPrefs.setSpeedAlpha(this@MainActivity, alpha)
-                    notifyOverlaySettingsChanged(
-                        speedAlpha = alpha,
-                        preview = true,
-                        previewTarget = target,
-                        previewShowOthers = showOthersCheck.isChecked
-                    )
+                when (target) {
+                    OverlayTarget.NAVIGATION -> {
+                        OverlayPrefs.setNavAlpha(this@MainActivity, alpha)
+                        notifyOverlaySettingsChanged(
+                            navAlpha = alpha,
+                            preview = true,
+                            previewTarget = target,
+                            previewShowOthers = showOthersCheck.isChecked
+                        )
+                    }
+                    OverlayTarget.SPEED -> {
+                        OverlayPrefs.setSpeedAlpha(this@MainActivity, alpha)
+                        notifyOverlaySettingsChanged(
+                            speedAlpha = alpha,
+                            preview = true,
+                            previewTarget = target,
+                            previewShowOthers = showOthersCheck.isChecked
+                        )
+                    }
+                    OverlayTarget.CONTAINER -> {
+                        OverlayPrefs.setContainerAlpha(this@MainActivity, alpha)
+                        notifyOverlaySettingsChanged(
+                            containerAlpha = alpha,
+                            preview = true,
+                            previewTarget = target,
+                            previewShowOthers = showOthersCheck.isChecked
+                        )
+                    }
                 }
             }
         })
@@ -671,13 +758,20 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun positionPreviewView(container: FrameLayout, view: View, dpX: Float, dpY: Float) {
+    private fun positionPreviewView(
+        container: FrameLayout,
+        view: View,
+        dpX: Float,
+        dpY: Float,
+        boundsWidthPx: Float,
+        boundsHeightPx: Float
+    ) {
         val posPxX = dpX * displayDensity
         val posPxY = dpY * displayDensity
         val maxX = maxPreviewX(container, view)
         val maxY = maxPreviewY(container, view)
-        val previewX = if (displaySize.x > 0) (posPxX / displaySize.x) * maxX else 0f
-        val previewY = if (displaySize.y > 0) (posPxY / displaySize.y) * maxY else 0f
+        val previewX = if (boundsWidthPx > 0f) (posPxX / boundsWidthPx) * maxX else 0f
+        val previewY = if (boundsHeightPx > 0f) (posPxY / boundsHeightPx) * maxY else 0f
         view.x = min(max(previewX, 0f), maxX)
         view.y = min(max(previewY, 0f), maxY)
     }
@@ -686,7 +780,9 @@ class MainActivity : AppCompatActivity() {
         container: FrameLayout,
         view: View,
         previewX: Float,
-        previewY: Float
+        previewY: Float,
+        boundsWidthPx: Float,
+        boundsHeightPx: Float
     ): Pair<Float, Float> {
         val maxX = maxPreviewX(container, view).coerceAtLeast(1f)
         val maxY = maxPreviewY(container, view).coerceAtLeast(1f)
@@ -694,8 +790,8 @@ class MainActivity : AppCompatActivity() {
         val clampedY = min(max(previewY, 0f), maxY)
         val fractionX = clampedX / maxX
         val fractionY = clampedY / maxY
-        val displayX = fractionX * displaySize.x
-        val displayY = fractionY * displaySize.y
+        val displayX = fractionX * boundsWidthPx
+        val displayY = fractionY * boundsHeightPx
         val dpX = (displayX / displayDensity).toFloat()
         val dpY = (displayY / displayDensity).toFloat()
         return dpX to dpY
@@ -707,6 +803,40 @@ class MainActivity : AppCompatActivity() {
 
     private fun maxPreviewY(container: FrameLayout, view: View): Float {
         return (container.height - view.height).toFloat().coerceAtLeast(0f)
+    }
+
+    private fun containerSizePx(): Int {
+        val maxSize = OverlayPrefs.CONTAINER_MAX_SIZE_PX
+        val width = displaySize.x.takeIf { it > 0 } ?: resources.displayMetrics.widthPixels
+        val height = displaySize.y.takeIf { it > 0 } ?: resources.displayMetrics.heightPixels
+        return minOf(maxSize, width, height).coerceAtLeast(1)
+    }
+
+    private fun updatePreviewContainerSize(previewContainer: FrameLayout, previewHudContainer: FrameLayout) {
+        val width = previewContainer.width
+        val height = previewContainer.height
+        if (width <= 0 || height <= 0) {
+            return
+        }
+        val containerPx = containerSizePx().toFloat()
+        val displayWidth = displaySize.x.coerceAtLeast(1).toFloat()
+        val displayHeight = displaySize.y.coerceAtLeast(1).toFloat()
+        val previewWidth = (containerPx / displayWidth) * width
+        val previewHeight = (containerPx / displayHeight) * height
+        val params = previewHudContainer.layoutParams
+        params.width = previewWidth.roundToInt().coerceAtLeast(1)
+        params.height = previewHeight.roundToInt().coerceAtLeast(1)
+        previewHudContainer.layoutParams = params
+    }
+
+    private fun updatePreviewContainerAlpha(container: FrameLayout, alphaOverride: Float? = null) {
+        val background = container.background ?: return
+        val rawAlpha = alphaOverride ?: OverlayPrefs.containerAlpha(this)
+        val effectiveAlpha = max(rawAlpha, CONTAINER_OUTLINE_PREVIEW_MIN_ALPHA)
+        val alphaValue = (effectiveAlpha * 255)
+            .roundToInt()
+            .coerceIn(0, 255)
+        background.alpha = alphaValue
     }
 
 }

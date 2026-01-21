@@ -59,7 +59,6 @@ class NavigationAppMonitor(
             lastTargetPackage = targetPackage
             targetInForeground = false
             lastTimestamp = 0L
-            NavigationAppGate.onTargetChanged(targetPackage)
             Log.d(TAG, "Target package set to \"$targetPackage\"")
         }
         if (targetPackage.isBlank()) {
@@ -105,18 +104,15 @@ class NavigationAppMonitor(
                 targetEventSeen = true
                 if (isForeground && !targetInForeground) {
                     targetInForeground = true
-                    NavigationAppGate.onAppOpened(targetPackage)
                     Log.d(TAG, "Target opened: $targetPackage")
                     onAppOpened(targetPackage)
                 } else if (isBackground && targetInForeground) {
                     targetInForeground = false
-                    NavigationAppGate.onAppClosed(targetPackage)
                     Log.d(TAG, "Target closed: $targetPackage")
                     onAppClosed(targetPackage)
                 }
             } else if (isForeground && targetInForeground) {
                 targetInForeground = false
-                NavigationAppGate.onAppClosed(targetPackage)
                 Log.d(TAG, "Target backgrounded by ${event.packageName}")
                 onAppClosed(targetPackage)
             }

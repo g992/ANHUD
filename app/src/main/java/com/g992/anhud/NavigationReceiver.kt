@@ -9,11 +9,11 @@ import android.util.Log
 
 class NavigationReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
-        if (!NavigationAppGate.shouldAllow(context)) {
-            Log.d(TAG, "Ignoring nav update while app closed: ${intent.action}")
-            return
+        val action = intent.action.orEmpty()
+        if (action.startsWith("com.yandex.")) {
+            Log.d(TAG, "Yandex intent: $action extras=${formatExtras(intent)}")
         }
-        when (intent.action) {
+        when (action) {
             ACTION_NAV_UPDATE, ACTION_NAV_UPDATE_DEBUG -> {
                 val update = NavigationUpdate(
                     title = normalizeText(intent.getStringExtra(EXTRA_TITLE).orEmpty()),
@@ -31,6 +31,11 @@ class NavigationReceiver : BroadcastReceiver() {
                     "обновление title=\"${update.title}\" text=\"${update.text}\" subtext=\"${update.subtext}\" " +
                         "speedLimit=\"${update.speedLimit}\" active=${update.routeActive} source=\"${update.source}\""
                 )
+                if (intent.hasExtra(EXTRA_ROUTE_ACTIVE) && !update.routeActive) {
+                    UiLogStore.append(LogCategory.NAVIGATION, "маршрут завершен (route_active=false)")
+                    NavigationHudStore.reset(intent.action.orEmpty(), update.timestamp)
+                    return
+                }
                 val primary = update.title.ifBlank { update.text }
                 val secondary = listOf(update.text, update.subtext)
                     .filter { it.isNotBlank() && it != primary }
@@ -43,7 +48,7 @@ class NavigationReceiver : BroadcastReceiver() {
                         source = update.source.ifBlank { state.source },
                         routeActive = update.routeActive,
                         lastUpdated = update.timestamp,
-                        lastAction = intent.action.orEmpty(),
+                    lastAction = action,
                         rawTitle = update.title,
                         rawText = update.text,
                         rawSubtext = update.subtext,
@@ -54,7 +59,7 @@ class NavigationReceiver : BroadcastReceiver() {
             ACTION_NAV_ENDED, ACTION_NAV_ENDED_DEBUG -> {
                 Log.d(TAG, "Navigation ended")
                 UiLogStore.append(LogCategory.NAVIGATION, "завершено")
-                NavigationHudStore.reset(intent.action.orEmpty())
+                NavigationHudStore.reset(action)
             }
             ACTION_YANDEX_MANEUVER -> {
                 val bitmap = getBitmapExtra(intent, EXTRA_MANEUVER_BITMAP)
@@ -66,7 +71,7 @@ class NavigationReceiver : BroadcastReceiver() {
                         maneuverBitmap = bitmap ?: state.maneuverBitmap,
                         source = SOURCE_YANDEX,
                         lastUpdated = System.currentTimeMillis(),
-                        lastAction = intent.action.orEmpty()
+                        lastAction = action
                     )
                 }
             }
@@ -80,7 +85,7 @@ class NavigationReceiver : BroadcastReceiver() {
                         primaryText = raw.takeIf { it.isNotBlank() } ?: state.primaryText,
                         source = SOURCE_YANDEX,
                         lastUpdated = System.currentTimeMillis(),
-                        lastAction = intent.action.orEmpty(),
+                        lastAction = action,
                         rawNextText = raw,
                         distanceUnit = unit.ifBlank { state.distanceUnit }
                     )
@@ -95,7 +100,7 @@ class NavigationReceiver : BroadcastReceiver() {
                         secondaryText = raw.takeIf { it.isNotBlank() } ?: state.secondaryText,
                         source = SOURCE_YANDEX,
                         lastUpdated = System.currentTimeMillis(),
-                        lastAction = intent.action.orEmpty(),
+                        lastAction = action,
                         rawNextStreet = raw
                     )
                 }
@@ -109,7 +114,7 @@ class NavigationReceiver : BroadcastReceiver() {
                         speedLimit = raw.takeIf { it.isNotBlank() } ?: state.speedLimit,
                         source = SOURCE_YANDEX,
                         lastUpdated = System.currentTimeMillis(),
-                        lastAction = intent.action.orEmpty(),
+                        lastAction = action,
                         rawSpeedLimit = raw
                     )
                 }
@@ -123,7 +128,7 @@ class NavigationReceiver : BroadcastReceiver() {
                         arrival = raw.takeIf { it.isNotBlank() } ?: state.arrival,
                         source = SOURCE_YANDEX,
                         lastUpdated = System.currentTimeMillis(),
-                        lastAction = intent.action.orEmpty(),
+                        lastAction = action,
                         rawArrival = raw
                     )
                 }
@@ -137,7 +142,7 @@ class NavigationReceiver : BroadcastReceiver() {
                         distance = raw.takeIf { it.isNotBlank() } ?: state.distance,
                         source = SOURCE_YANDEX,
                         lastUpdated = System.currentTimeMillis(),
-                        lastAction = intent.action.orEmpty(),
+                        lastAction = action,
                         rawDistance = raw
                     )
                 }
@@ -151,7 +156,7 @@ class NavigationReceiver : BroadcastReceiver() {
                         time = raw.takeIf { it.isNotBlank() } ?: state.time,
                         source = SOURCE_YANDEX,
                         lastUpdated = System.currentTimeMillis(),
-                        lastAction = intent.action.orEmpty(),
+                        lastAction = action,
                         rawTime = raw
                     )
                 }
@@ -171,7 +176,7 @@ class NavigationReceiver : BroadcastReceiver() {
                         trafficCountdown = rawCountdown.takeIf { it.isNotBlank() } ?: state.trafficCountdown,
                         source = SOURCE_YANDEX,
                         lastUpdated = if (timestamp > 0L) timestamp else System.currentTimeMillis(),
-                        lastAction = intent.action.orEmpty(),
+                        lastAction = action,
                         rawTrafficLight = rawColor,
                         rawTrafficCountdown = rawCountdown
                     )
@@ -256,6 +261,15 @@ class NavigationReceiver : BroadcastReceiver() {
                 @Suppress("DEPRECATION")
                 intent.getParcelableExtra(key)
             }
+        }
+
+        private fun formatExtras(intent: Intent): String {
+            val extras = intent.extras ?: return "{}"
+            val entries = extras.keySet().sorted().map { key ->
+                val value = extras.get(key)
+                "$key=${value?.toString()?.take(120) ?: "null"}"
+            }
+            return "{${entries.joinToString(", ")}}"
         }
     }
 }
