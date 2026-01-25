@@ -1,7 +1,9 @@
 package com.g992.anhud
 
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.graphics.Point
 import android.graphics.PointF
 import android.graphics.drawable.Drawable
@@ -37,6 +39,16 @@ import kotlin.math.roundToInt
 class MainActivity : AppCompatActivity() {
     companion object {
         private const val CONTAINER_OUTLINE_PREVIEW_MIN_ALPHA = 0.35f
+    }
+
+    private var isSyncingUi = false
+    private val settingsChangedReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            if (intent.action != OverlayBroadcasts.ACTION_OVERLAY_SETTINGS_CHANGED) {
+                return
+            }
+            syncUiFromPrefs()
+        }
     }
     private lateinit var permissionStatus: TextView
     private lateinit var requestPermissionButton: Button
@@ -104,6 +116,9 @@ class MainActivity : AppCompatActivity() {
 
         overlaySwitch.isChecked = OverlayPrefs.isEnabled(this)
         overlaySwitch.setOnCheckedChangeListener { _, isChecked ->
+            if (isSyncingUi) {
+                return@setOnCheckedChangeListener
+            }
             if (isChecked && !Settings.canDrawOverlays(this)) {
                 overlaySwitch.isChecked = false
                 openOverlaySettings()
@@ -141,18 +156,30 @@ class MainActivity : AppCompatActivity() {
         speedometerProjectionSwitch.isChecked = OverlayPrefs.speedometerEnabled(this)
         clockProjectionSwitch.isChecked = OverlayPrefs.clockEnabled(this)
         navProjectionSwitch.setOnCheckedChangeListener { _, isChecked ->
+            if (isSyncingUi) {
+                return@setOnCheckedChangeListener
+            }
             OverlayPrefs.setNavEnabled(this, isChecked)
             notifyOverlaySettingsChanged(navEnabled = isChecked)
         }
         speedProjectionSwitch.setOnCheckedChangeListener { _, isChecked ->
+            if (isSyncingUi) {
+                return@setOnCheckedChangeListener
+            }
             OverlayPrefs.setSpeedEnabled(this, isChecked)
             notifyOverlaySettingsChanged(speedEnabled = isChecked)
         }
         speedometerProjectionSwitch.setOnCheckedChangeListener { _, isChecked ->
+            if (isSyncingUi) {
+                return@setOnCheckedChangeListener
+            }
             OverlayPrefs.setSpeedometerEnabled(this, isChecked)
             notifyOverlaySettingsChanged(speedometerEnabled = isChecked)
         }
         clockProjectionSwitch.setOnCheckedChangeListener { _, isChecked ->
+            if (isSyncingUi) {
+                return@setOnCheckedChangeListener
+            }
             OverlayPrefs.setClockEnabled(this, isChecked)
             notifyOverlaySettingsChanged(clockEnabled = isChecked)
         }
@@ -168,6 +195,9 @@ class MainActivity : AppCompatActivity() {
             speedLimitAlertThreshold
         )
         speedLimitAlertCheck.setOnCheckedChangeListener { _, isChecked ->
+            if (isSyncingUi) {
+                return@setOnCheckedChangeListener
+            }
             OverlayPrefs.setSpeedLimitAlertEnabled(this, isChecked)
             speedLimitAlertThresholdRow.visibility = if (isChecked) View.VISIBLE else View.GONE
             notifyOverlaySettingsChanged(
@@ -182,12 +212,17 @@ class MainActivity : AppCompatActivity() {
                     R.string.speed_limit_alert_threshold_value,
                     threshold
                 )
-                notifyOverlaySettingsChanged(speedLimitAlertThreshold = threshold)
+                if (fromUser && !isSyncingUi) {
+                    notifyOverlaySettingsChanged(speedLimitAlertThreshold = threshold)
+                }
             }
 
             override fun onStartTrackingTouch(seekBar: SeekBar?) = Unit
 
             override fun onStopTrackingTouch(seekBar: SeekBar?) {
+                if (isSyncingUi) {
+                    return
+                }
                 val threshold = (seekBar?.progress ?: 0)
                     .coerceIn(0, OverlayPrefs.SPEED_LIMIT_ALERT_THRESHOLD_MAX)
                 OverlayPrefs.setSpeedLimitAlertThreshold(this@MainActivity, threshold)
@@ -199,6 +234,26 @@ class MainActivity : AppCompatActivity() {
         updatePermissionStatus()
         updateNavAppSelection()
         startCoreServices()
+    }
+
+    override fun onStart() {
+        super.onStart()
+        val filter = IntentFilter(OverlayBroadcasts.ACTION_OVERLAY_SETTINGS_CHANGED)
+        ContextCompat.registerReceiver(
+            this,
+            settingsChangedReceiver,
+            filter,
+            ContextCompat.RECEIVER_NOT_EXPORTED
+        )
+        syncUiFromPrefs()
+    }
+
+    override fun onStop() {
+        try {
+            unregisterReceiver(settingsChangedReceiver)
+        } catch (_: Exception) {
+        }
+        super.onStop()
     }
 
     override fun onResume() {
@@ -217,6 +272,30 @@ class MainActivity : AppCompatActivity() {
         val visibility = if (granted) View.GONE else View.VISIBLE
         permissionStatus.visibility = visibility
         requestPermissionButton.visibility = visibility
+    }
+
+    private fun syncUiFromPrefs() {
+        isSyncingUi = true
+        try {
+            overlaySwitch.isChecked = OverlayPrefs.isEnabled(this)
+            navProjectionSwitch.isChecked = OverlayPrefs.navEnabled(this)
+            speedProjectionSwitch.isChecked = OverlayPrefs.speedEnabled(this)
+            speedometerProjectionSwitch.isChecked = OverlayPrefs.speedometerEnabled(this)
+            clockProjectionSwitch.isChecked = OverlayPrefs.clockEnabled(this)
+
+            val speedLimitAlertEnabled = OverlayPrefs.speedLimitAlertEnabled(this)
+            val speedLimitAlertThreshold = OverlayPrefs.speedLimitAlertThreshold(this)
+            speedLimitAlertCheck.isChecked = speedLimitAlertEnabled
+            speedLimitAlertThresholdRow.visibility =
+                if (speedLimitAlertEnabled) View.VISIBLE else View.GONE
+            speedLimitAlertThresholdSeek.progress = speedLimitAlertThreshold
+            speedLimitAlertThresholdValue.text = getString(
+                R.string.speed_limit_alert_threshold_value,
+                speedLimitAlertThreshold
+            )
+        } finally {
+            isSyncingUi = false
+        }
     }
 
     private fun openOverlaySettings() {

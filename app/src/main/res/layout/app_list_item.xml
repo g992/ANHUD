@@ -4,20 +4,20 @@
     android:layout_height="wrap_content"
     android:gravity="center_vertical"
     android:orientation="horizontal"
-    android:padding="12dp">
+    android:padding="16dp">
 
     <ImageView
         android:id="@+id/appIcon"
-        android:layout_width="36dp"
-        android:layout_height="36dp"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
         android:contentDescription="@string/nav_app_icon_desc" />
 
     <TextView
         android:id="@+id/appName"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:layout_marginStart="12dp"
+        android:layout_marginStart="16dp"
         android:layout_weight="1"
         android:textColor="@color/white"
-        android:textSize="14sp" />
+        android:textSize="18sp" />
 </LinearLayout>

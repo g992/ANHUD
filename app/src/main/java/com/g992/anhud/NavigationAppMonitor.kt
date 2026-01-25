@@ -90,8 +90,10 @@ class NavigationAppMonitor(
         val event = UsageEvents.Event()
         var latestTimestamp = lastTimestamp
         var targetEventSeen = false
+        var eventCount = 0
         while (events.hasNextEvent()) {
             events.getNextEvent(event)
+            eventCount++
             if (event.timeStamp <= lastTimestamp) {
                 continue
             }
@@ -102,6 +104,7 @@ class NavigationAppMonitor(
             val isBackground = isBackgroundEvent(event.eventType)
             if (event.packageName == targetPackage) {
                 targetEventSeen = true
+                Log.d(TAG, "Target event: pkg=$targetPackage type=${event.eventType} fg=$isForeground bg=$isBackground")
                 if (isForeground && !targetInForeground) {
                     targetInForeground = true
                     Log.d(TAG, "Target opened: $targetPackage")
@@ -116,6 +119,9 @@ class NavigationAppMonitor(
                 Log.d(TAG, "Target backgrounded by ${event.packageName}")
                 onAppClosed(targetPackage)
             }
+        }
+        if (eventCount > 0 && now - lastHeartbeat >= HEARTBEAT_MS) {
+            Log.d(TAG, "Processed $eventCount events in window [$startTime-$now]")
         }
         if (!targetEventSeen && latestTimestamp > lastTimestamp) {
             Log.d(TAG, "No target events in window [$startTime-$now]")

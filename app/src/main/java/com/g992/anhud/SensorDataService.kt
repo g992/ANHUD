@@ -25,6 +25,7 @@ class SensorDataService : Service() {
             NavigationHudStore.update { current ->
                 current.copy(speedKmh = speedKmh)
             }
+            UiLogStore.append(LogCategory.SENSORS, "Скорость: $speedKmh км/ч (gbinder)")
         }
     }
 
@@ -37,7 +38,7 @@ class SensorDataService : Service() {
             addAction(ACTION_SENSOR_FLOAT_CHANGED)
             addAction(ACTION_SENSOR_FLOAT_RESULT)
         }
-        ContextCompat.registerReceiver(this, speedReceiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
+        ContextCompat.registerReceiver(this, speedReceiver, filter, ContextCompat.RECEIVER_EXPORTED)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
