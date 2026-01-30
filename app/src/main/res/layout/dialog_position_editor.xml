@@ -161,22 +161,12 @@
                     android:textStyle="bold" />
             </LinearLayout>
 
-            <FrameLayout
+            <LinearLayout
                 android:id="@+id/dialogPreviewTrafficLightBlock"
-                android:layout_width="48dp"
-                android:layout_height="48dp"
-                android:background="@drawable/traffic_light_background_green"
-                android:visibility="gone">
-
-                <TextView
-                    android:layout_width="match_parent"
-                    android:layout_height="match_parent"
-                    android:gravity="center"
-                    android:text="@string/preview_traffic_light_countdown"
-                    android:textColor="@color/white"
-                    android:textSize="16sp"
-                    android:textStyle="bold" />
-            </FrameLayout>
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:visibility="gone" />
 
             <TextView
                 android:id="@+id/dialogPreviewSpeedometer"

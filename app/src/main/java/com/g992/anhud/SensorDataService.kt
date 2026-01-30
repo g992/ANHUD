@@ -21,11 +21,16 @@ class SensorDataService : Service() {
                 return
             }
             val value = readFloatExtra(intent, EXTRA_VALUE) ?: return
-            val speedKmh = (value * MS_TO_KMH).roundToInt().coerceAtLeast(0)
+            val rawSpeed = (value * MS_TO_KMH).roundToInt()
+            val correction = OverlayPrefs.speedCorrection(context)
+            val speedKmh = (rawSpeed + correction).coerceAtLeast(0)
             NavigationHudStore.update { current ->
                 current.copy(speedKmh = speedKmh)
             }
-            UiLogStore.append(LogCategory.SENSORS, "Скорость: $speedKmh км/ч (gbinder)")
+            UiLogStore.append(
+                LogCategory.SENSORS,
+                "Скорость: $speedKmh км/ч (gbinder, raw=$rawSpeed, коррекция=$correction)"
+            )
         }
     }
 

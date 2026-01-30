@@ -39,7 +39,6 @@ class HudOverlayController(private val context: Context) {
         private const val NAV_TEXT_SCALE_MAX = 3f
         private const val PREVIEW_HUDSPEED_CAM_TYPE = 1
         private const val HUDSPEED_HIDE_DISTANCE_METERS = 50
-        private const val HUDSPEED_HIDE_TIMEOUT_MS = 3_000L
     }
     private val handler = Handler(Looper.getMainLooper())
     private val clockFormatter = SimpleDateFormat("HH:mm", Locale.getDefault())
@@ -1111,18 +1110,48 @@ class HudOverlayController(private val context: Context) {
             return false
         }
         val updatedAt = state.hudSpeedUpdatedAt
-        if (distance >= HUDSPEED_HIDE_DISTANCE_METERS || updatedAt <= 0L) {
+        if (updatedAt <= 0L) {
+            cancelHudSpeedHide()
+            return false
+        }
+        if (distance >= HUDSPEED_HIDE_DISTANCE_METERS) {
+            val timeoutMs = resolveHudSpeedTimeoutMs(distance) ?: run {
+                cancelHudSpeedHide()
+                return false
+            }
+            val elapsed = System.currentTimeMillis() - updatedAt
+            val remaining = timeoutMs - elapsed
+            if (remaining <= 0L) {
+                cancelHudSpeedHide()
+                return true
+            }
+            scheduleHudSpeedHide(remaining)
+            return false
+        }
+        val timeoutMs = resolveHudSpeedTimeoutMs(distance) ?: run {
             cancelHudSpeedHide()
             return false
         }
         val elapsed = System.currentTimeMillis() - updatedAt
-        val remaining = HUDSPEED_HIDE_TIMEOUT_MS - elapsed
+        val remaining = timeoutMs - elapsed
         if (remaining <= 0L) {
             cancelHudSpeedHide()
             return true
         }
         scheduleHudSpeedHide(remaining)
         return false
+    }
+
+    private fun resolveHudSpeedTimeoutMs(distanceMeters: Int): Long? {
+        val seconds = if (distanceMeters < HUDSPEED_HIDE_DISTANCE_METERS) {
+            OverlayPrefs.cameraTimeoutNear(context)
+        } else {
+            OverlayPrefs.cameraTimeoutFar(context)
+        }
+        if (seconds <= 0) {
+            return null
+        }
+        return seconds.toLong() * 1000L
     }
 
     private fun scheduleHudSpeedHide(delayMs: Long) {

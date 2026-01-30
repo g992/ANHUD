@@ -339,7 +339,6 @@ class NavigationReceiver : BroadcastReceiver() {
         private const val TAG = "NavigationReceiver"
         private const val NATIVE_NAV_DEBOUNCE_MS = 100L
         private const val STREET_RESET_DELAY_MS = 2000L
-        private const val TRAFFIC_LIGHT_NO_COUNTDOWN_TTL_MS = 2000L
 
         private val nativeNavHandler = android.os.Handler(android.os.Looper.getMainLooper())
         private var pendingNativeNavUpdate: Runnable? = null
@@ -650,12 +649,12 @@ class NavigationReceiver : BroadcastReceiver() {
                 updateTrafficLightState(context, action, now)
                 return
             }
-            val countdownSeconds = countdown.toIntOrNull()?.takeIf { it > 0 }
-            val countdownMs = countdownSeconds?.toLong()?.times(1000L)
-            val expiresAt = if (countdownMs != null && countdownMs > 0L) {
-                now + countdownMs
+            val timeoutSeconds = OverlayPrefs.trafficLightTimeout(context)
+            val timeoutMs = timeoutSeconds.takeIf { it > 0 }?.toLong()?.times(1000L)
+            val expiresAt = if (timeoutMs != null) {
+                now + timeoutMs
             } else {
-                now + TRAFFIC_LIGHT_NO_COUNTDOWN_TTL_MS
+                Long.MAX_VALUE
             }
             val resolvedId = if (id != 0) {
                 id
@@ -700,7 +699,10 @@ class NavigationReceiver : BroadcastReceiver() {
                 return
             }
             val now = System.currentTimeMillis()
-            val nextExpiry = activeTrafficLights.values.minOfOrNull { it.expiresAt } ?: return
+            val nextExpiry = activeTrafficLights.values
+                .filter { it.expiresAt < Long.MAX_VALUE }
+                .minOfOrNull { it.expiresAt }
+                ?: return
             val delayMs = (nextExpiry - now).coerceAtLeast(0L)
             val runnable = Runnable {
                 pendingTrafficLightCleanup = null
@@ -715,7 +717,7 @@ class NavigationReceiver : BroadcastReceiver() {
             val iterator = activeTrafficLights.iterator()
             while (iterator.hasNext()) {
                 val entry = iterator.next()
-                if (entry.value.expiresAt <= now) {
+                if (entry.value.expiresAt < Long.MAX_VALUE && entry.value.expiresAt <= now) {
                     iterator.remove()
                 }
             }

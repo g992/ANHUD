@@ -6,28 +6,26 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.graphics.Point
 import android.graphics.PointF
-import android.graphics.drawable.Drawable
 import android.net.Uri
 import android.os.Bundle
-import android.os.Process
 import android.provider.Settings
 import android.view.MotionEvent
 import android.view.View
-import android.view.ViewGroup
 import android.widget.AdapterView
 import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.CheckBox
 import android.widget.FrameLayout
+import android.widget.ImageButton
 import android.widget.ImageView
+import android.widget.LinearLayout
 import android.widget.SeekBar
 import android.widget.Spinner
 import android.widget.TextView
-import android.app.AppOpsManager
 import android.view.LayoutInflater
+import android.view.WindowManager
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AlertDialog
-import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.SwitchCompat
 import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
@@ -36,7 +34,7 @@ import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
 
-class MainActivity : AppCompatActivity() {
+class MainActivity : ScaledActivity() {
     companion object {
         private const val CONTAINER_OUTLINE_PREVIEW_MIN_ALPHA = 0.35f
     }
@@ -56,21 +54,33 @@ class MainActivity : AppCompatActivity() {
     private lateinit var displaySpinner: Spinner
     private lateinit var positionContainerCard: View
     private lateinit var positionNavCard: View
+    private lateinit var positionArrowCard: View
     private lateinit var positionSpeedCard: View
+    private lateinit var positionHudSpeedCard: View
+    private lateinit var positionRoadCameraCard: View
+    private lateinit var positionTrafficLightCard: View
     private lateinit var positionSpeedometerCard: View
     private lateinit var positionClockCard: View
     private lateinit var navProjectionSwitch: SwitchCompat
+    private lateinit var arrowProjectionSwitch: SwitchCompat
     private lateinit var speedProjectionSwitch: SwitchCompat
+    private lateinit var hudSpeedProjectionSwitch: SwitchCompat
+    private lateinit var roadCameraProjectionSwitch: SwitchCompat
+    private lateinit var trafficLightProjectionSwitch: SwitchCompat
     private lateinit var speedometerProjectionSwitch: SwitchCompat
     private lateinit var clockProjectionSwitch: SwitchCompat
+    private lateinit var speedLimitFromHudSpeedCheck: CheckBox
+    private lateinit var arrowOnlyWhenNoIconCheck: CheckBox
+    private lateinit var arrowOnlyWhenNoIconDesc: TextView
     private lateinit var speedLimitAlertCheck: CheckBox
     private lateinit var speedLimitAlertThresholdRow: View
     private lateinit var speedLimitAlertThresholdSeek: SeekBar
     private lateinit var speedLimitAlertThresholdValue: TextView
-    private lateinit var logsButton: Button
-    private lateinit var settingsButton: Button
-    private lateinit var navAppButton: Button
-    private lateinit var navAppSelected: TextView
+    private lateinit var trafficLightMaxActiveSeek: SeekBar
+    private lateinit var trafficLightMaxActiveValue: TextView
+    private lateinit var trafficLightPreviewContainer: LinearLayout
+    private lateinit var donateButton: ImageButton
+    private lateinit var settingsButton: ImageButton
 
     private var displayOptions: List<DisplayOption> = emptyList()
     private var displaySize: Point = Point(1, 1)
@@ -92,24 +102,36 @@ class MainActivity : AppCompatActivity() {
         displaySpinner = findViewById(R.id.displaySpinner)
         positionContainerCard = findViewById(R.id.positionContainerCard)
         positionNavCard = findViewById(R.id.positionNavCard)
+        positionArrowCard = findViewById(R.id.positionArrowCard)
         positionSpeedCard = findViewById(R.id.positionSpeedCard)
+        positionHudSpeedCard = findViewById(R.id.positionHudSpeedCard)
+        positionRoadCameraCard = findViewById(R.id.positionRoadCameraCard)
+        positionTrafficLightCard = findViewById(R.id.positionTrafficLightCard)
         positionSpeedometerCard = findViewById(R.id.positionSpeedometerCard)
         positionClockCard = findViewById(R.id.positionClockCard)
         navProjectionSwitch = findViewById(R.id.navProjectionSwitch)
+        arrowProjectionSwitch = findViewById(R.id.arrowProjectionSwitch)
         speedProjectionSwitch = findViewById(R.id.speedProjectionSwitch)
+        hudSpeedProjectionSwitch = findViewById(R.id.hudSpeedProjectionSwitch)
+        roadCameraProjectionSwitch = findViewById(R.id.roadCameraProjectionSwitch)
+        trafficLightProjectionSwitch = findViewById(R.id.trafficLightProjectionSwitch)
         speedometerProjectionSwitch = findViewById(R.id.speedometerProjectionSwitch)
         clockProjectionSwitch = findViewById(R.id.clockProjectionSwitch)
+        speedLimitFromHudSpeedCheck = findViewById(R.id.speedLimitFromHudSpeedCheck)
+        arrowOnlyWhenNoIconCheck = findViewById(R.id.arrowOnlyWhenNoIconCheck)
+        arrowOnlyWhenNoIconDesc = findViewById(R.id.arrowOnlyWhenNoIconDesc)
         speedLimitAlertCheck = findViewById(R.id.speedLimitAlertCheck)
         speedLimitAlertThresholdRow = findViewById(R.id.speedLimitAlertThresholdRow)
         speedLimitAlertThresholdSeek = findViewById(R.id.speedLimitAlertThresholdSeek)
         speedLimitAlertThresholdValue = findViewById(R.id.speedLimitAlertThresholdValue)
-        logsButton = findViewById(R.id.btnLogs)
+        trafficLightMaxActiveSeek = findViewById(R.id.trafficLightMaxActiveSeek)
+        trafficLightMaxActiveValue = findViewById(R.id.trafficLightMaxActiveValue)
+        trafficLightPreviewContainer = findViewById(R.id.trafficLightPreviewContainer)
+        donateButton = findViewById(R.id.btnDonate)
         settingsButton = findViewById(R.id.btnSettings)
-        navAppButton = findViewById(R.id.navAppButton)
-        navAppSelected = findViewById(R.id.navAppSelected)
 
-        logsButton.setOnClickListener {
-            startActivity(Intent(this, LogsActivity::class.java))
+        donateButton.setOnClickListener {
+            showDonateDialog()
         }
         settingsButton.setOnClickListener {
             startActivity(Intent(this, SettingsActivity::class.java))
@@ -140,8 +162,20 @@ class MainActivity : AppCompatActivity() {
         positionNavCard.setOnClickListener {
             openPositionDialog(OverlayTarget.NAVIGATION)
         }
+        positionArrowCard.setOnClickListener {
+            openPositionDialog(OverlayTarget.ARROW)
+        }
         positionSpeedCard.setOnClickListener {
             openPositionDialog(OverlayTarget.SPEED)
+        }
+        positionHudSpeedCard.setOnClickListener {
+            openPositionDialog(OverlayTarget.HUDSPEED)
+        }
+        positionRoadCameraCard.setOnClickListener {
+            openPositionDialog(OverlayTarget.ROAD_CAMERA)
+        }
+        positionTrafficLightCard.setOnClickListener {
+            openPositionDialog(OverlayTarget.TRAFFIC_LIGHT)
         }
         positionSpeedometerCard.setOnClickListener {
             openPositionDialog(OverlayTarget.SPEEDOMETER)
@@ -152,14 +186,17 @@ class MainActivity : AppCompatActivity() {
         positionContainerCard.setOnClickListener {
             openPositionDialog(OverlayTarget.CONTAINER)
         }
-        navAppButton.setOnClickListener {
-            handleNavAppSelection()
-        }
 
         navProjectionSwitch.isChecked = OverlayPrefs.navEnabled(this)
+        arrowProjectionSwitch.isChecked = OverlayPrefs.arrowEnabled(this)
         speedProjectionSwitch.isChecked = OverlayPrefs.speedEnabled(this)
+        hudSpeedProjectionSwitch.isChecked = OverlayPrefs.hudSpeedEnabled(this)
+        roadCameraProjectionSwitch.isChecked = OverlayPrefs.roadCameraEnabled(this)
+        trafficLightProjectionSwitch.isChecked = OverlayPrefs.trafficLightEnabled(this)
         speedometerProjectionSwitch.isChecked = OverlayPrefs.speedometerEnabled(this)
         clockProjectionSwitch.isChecked = OverlayPrefs.clockEnabled(this)
+        speedLimitFromHudSpeedCheck.isChecked = OverlayPrefs.speedLimitFromHudSpeed(this)
+        arrowOnlyWhenNoIconCheck.isChecked = OverlayPrefs.arrowOnlyWhenNoIcon(this)
         navProjectionSwitch.setOnCheckedChangeListener { _, isChecked ->
             if (isSyncingUi) {
                 return@setOnCheckedChangeListener
@@ -167,12 +204,40 @@ class MainActivity : AppCompatActivity() {
             OverlayPrefs.setNavEnabled(this, isChecked)
             notifyOverlaySettingsChanged(navEnabled = isChecked)
         }
+        arrowProjectionSwitch.setOnCheckedChangeListener { _, isChecked ->
+            if (isSyncingUi) {
+                return@setOnCheckedChangeListener
+            }
+            OverlayPrefs.setArrowEnabled(this, isChecked)
+            notifyOverlaySettingsChanged(arrowEnabled = isChecked)
+        }
         speedProjectionSwitch.setOnCheckedChangeListener { _, isChecked ->
             if (isSyncingUi) {
                 return@setOnCheckedChangeListener
             }
             OverlayPrefs.setSpeedEnabled(this, isChecked)
             notifyOverlaySettingsChanged(speedEnabled = isChecked)
+        }
+        hudSpeedProjectionSwitch.setOnCheckedChangeListener { _, isChecked ->
+            if (isSyncingUi) {
+                return@setOnCheckedChangeListener
+            }
+            OverlayPrefs.setHudSpeedEnabled(this, isChecked)
+            notifyOverlaySettingsChanged(hudSpeedEnabled = isChecked)
+        }
+        roadCameraProjectionSwitch.setOnCheckedChangeListener { _, isChecked ->
+            if (isSyncingUi) {
+                return@setOnCheckedChangeListener
+            }
+            OverlayPrefs.setRoadCameraEnabled(this, isChecked)
+            notifyOverlaySettingsChanged(roadCameraEnabled = isChecked)
+        }
+        trafficLightProjectionSwitch.setOnCheckedChangeListener { _, isChecked ->
+            if (isSyncingUi) {
+                return@setOnCheckedChangeListener
+            }
+            OverlayPrefs.setTrafficLightEnabled(this, isChecked)
+            notifyOverlaySettingsChanged(trafficLightEnabled = isChecked)
         }
         speedometerProjectionSwitch.setOnCheckedChangeListener { _, isChecked ->
             if (isSyncingUi) {
@@ -187,6 +252,19 @@ class MainActivity : AppCompatActivity() {
             }
             OverlayPrefs.setClockEnabled(this, isChecked)
             notifyOverlaySettingsChanged(clockEnabled = isChecked)
+        }
+        speedLimitFromHudSpeedCheck.setOnCheckedChangeListener { _, isChecked ->
+            if (isSyncingUi) {
+                return@setOnCheckedChangeListener
+            }
+            OverlayPrefs.setSpeedLimitFromHudSpeed(this, isChecked)
+        }
+        arrowOnlyWhenNoIconCheck.setOnCheckedChangeListener { _, isChecked ->
+            if (isSyncingUi) {
+                return@setOnCheckedChangeListener
+            }
+            OverlayPrefs.setArrowOnlyWhenNoIcon(this, isChecked)
+            notifyOverlaySettingsChanged(arrowOnlyWhenNoIcon = isChecked)
         }
 
         val speedLimitAlertEnabled = OverlayPrefs.speedLimitAlertEnabled(this)
@@ -235,9 +313,47 @@ class MainActivity : AppCompatActivity() {
             }
         })
 
+        val trafficLightMaxActiveMin = 1
+        val trafficLightMaxActiveMax = 3
+        trafficLightMaxActiveSeek.max = (trafficLightMaxActiveMax - trafficLightMaxActiveMin)
+            .coerceAtLeast(0)
+        fun updateTrafficLightMaxActive(value: Int) {
+            trafficLightMaxActiveValue.text = getString(
+                R.string.traffic_light_max_active_value,
+                value
+            )
+            renderTrafficLightPreview(trafficLightPreviewContainer, value)
+        }
+        val trafficLightMaxActive = OverlayPrefs.trafficLightMaxActive(this)
+            .coerceIn(trafficLightMaxActiveMin, trafficLightMaxActiveMax)
+        trafficLightMaxActiveSeek.progress = (trafficLightMaxActive - trafficLightMaxActiveMin)
+            .coerceIn(0, trafficLightMaxActiveSeek.max)
+        updateTrafficLightMaxActive(trafficLightMaxActive)
+        trafficLightMaxActiveSeek.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                val resolved = (progress + trafficLightMaxActiveMin)
+                    .coerceIn(trafficLightMaxActiveMin, trafficLightMaxActiveMax)
+                updateTrafficLightMaxActive(resolved)
+                if (fromUser && !isSyncingUi) {
+                    notifyOverlaySettingsChanged(trafficLightMaxActive = resolved)
+                }
+            }
+
+            override fun onStartTrackingTouch(seekBar: SeekBar?) = Unit
+
+            override fun onStopTrackingTouch(seekBar: SeekBar?) {
+                if (isSyncingUi) {
+                    return
+                }
+                val resolved = ((seekBar?.progress ?: 0) + trafficLightMaxActiveMin)
+                    .coerceIn(trafficLightMaxActiveMin, trafficLightMaxActiveMax)
+                OverlayPrefs.setTrafficLightMaxActive(this@MainActivity, resolved)
+                notifyOverlaySettingsChanged(trafficLightMaxActive = resolved)
+            }
+        })
+
         setupDisplaySpinners()
         updatePermissionStatus()
-        updateNavAppSelection()
         startCoreServices()
     }
 
@@ -264,7 +380,6 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         updatePermissionStatus()
-        updateNavAppSelection()
     }
 
     private fun updatePermissionStatus() {
@@ -284,9 +399,15 @@ class MainActivity : AppCompatActivity() {
         try {
             overlaySwitch.isChecked = OverlayPrefs.isEnabled(this)
             navProjectionSwitch.isChecked = OverlayPrefs.navEnabled(this)
+            arrowProjectionSwitch.isChecked = OverlayPrefs.arrowEnabled(this)
             speedProjectionSwitch.isChecked = OverlayPrefs.speedEnabled(this)
+            hudSpeedProjectionSwitch.isChecked = OverlayPrefs.hudSpeedEnabled(this)
+            roadCameraProjectionSwitch.isChecked = OverlayPrefs.roadCameraEnabled(this)
+            trafficLightProjectionSwitch.isChecked = OverlayPrefs.trafficLightEnabled(this)
             speedometerProjectionSwitch.isChecked = OverlayPrefs.speedometerEnabled(this)
             clockProjectionSwitch.isChecked = OverlayPrefs.clockEnabled(this)
+            speedLimitFromHudSpeedCheck.isChecked = OverlayPrefs.speedLimitFromHudSpeed(this)
+            arrowOnlyWhenNoIconCheck.isChecked = OverlayPrefs.arrowOnlyWhenNoIcon(this)
 
             val speedLimitAlertEnabled = OverlayPrefs.speedLimitAlertEnabled(this)
             val speedLimitAlertThreshold = OverlayPrefs.speedLimitAlertThreshold(this)
@@ -298,6 +419,18 @@ class MainActivity : AppCompatActivity() {
                 R.string.speed_limit_alert_threshold_value,
                 speedLimitAlertThreshold
             )
+
+            val trafficLightMaxActiveMin = 1
+            val trafficLightMaxActiveMax = 3
+            val trafficLightMaxActive = OverlayPrefs.trafficLightMaxActive(this)
+                .coerceIn(trafficLightMaxActiveMin, trafficLightMaxActiveMax)
+            trafficLightMaxActiveSeek.progress = (trafficLightMaxActive - trafficLightMaxActiveMin)
+                .coerceIn(0, trafficLightMaxActiveSeek.max)
+            trafficLightMaxActiveValue.text = getString(
+                R.string.traffic_light_max_active_value,
+                trafficLightMaxActive
+            )
+            renderTrafficLightPreview(trafficLightPreviewContainer, trafficLightMaxActive)
         } finally {
             isSyncingUi = false
         }
@@ -308,6 +441,50 @@ class MainActivity : AppCompatActivity() {
             data = Uri.parse("package:$packageName")
         }
         startActivity(intent)
+    }
+
+    private fun renderTrafficLightPreview(container: LinearLayout, count: Int) {
+        val resolvedCount = count.coerceIn(1, 3)
+        val inflater = LayoutInflater.from(container.context)
+        val density = resources.displayMetrics.density
+        val itemSpacingPx = (8 * density).roundToInt()
+        container.removeAllViews()
+        repeat(resolvedCount) { index ->
+            val item = inflater.inflate(R.layout.traffic_light_notification_view, container, false)
+            val compactView = item.findViewById<FrameLayout>(R.id.traffic_light_view)
+            val expandedView = item.findViewById<LinearLayout>(R.id.traffic_light_view_expanded)
+            val expandedCircle = item.findViewById<FrameLayout>(R.id.traffic_light_view_expanded_circle)
+            val expandedText = item.findViewById<TextView>(R.id.traffic_light_data_expanded)
+            val expandedIcon = item.findViewById<ImageView>(R.id.traffic_light_icon_expanded)
+
+            compactView.visibility = View.GONE
+            expandedView.visibility = View.VISIBLE
+            expandedCircle.setBackgroundResource(R.drawable.traffic_light_background_green)
+            expandedText.text = "11"
+            expandedText.visibility = View.VISIBLE
+            expandedIcon.setImageResource(R.drawable.context_lane_straightahead_small_24)
+
+            val params = item.layoutParams as? LinearLayout.LayoutParams
+                ?: LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                )
+            if (index < resolvedCount - 1) {
+                params.marginEnd = itemSpacingPx
+            } else {
+                params.marginEnd = 0
+            }
+            item.layoutParams = params
+            container.addView(item)
+        }
+    }
+
+    private fun showDonateDialog() {
+        val dialogView = layoutInflater.inflate(R.layout.dialog_donate, null)
+        AlertDialog.Builder(this, R.style.ThemeOverlay_ANHUD_Dialog)
+            .setView(dialogView)
+            .setPositiveButton(R.string.donate_dialog_close, null)
+            .show()
     }
 
     private fun setupDisplaySpinners() {
@@ -362,105 +539,6 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun updateNavAppSelection() {
-        val packageName = OverlayPrefs.navAppPackage(this)
-        val storedLabel = OverlayPrefs.navAppLabel(this)
-        if (packageName.isBlank()) {
-            navAppSelected.text = getString(R.string.nav_app_not_selected)
-            return
-        }
-        val label = storedLabel.ifBlank {
-            resolveAppLabel(packageName)?.also { resolved ->
-                OverlayPrefs.setNavApp(this, packageName, resolved)
-            } ?: packageName
-        }
-        navAppSelected.text = label
-    }
-
-    private fun resolveAppLabel(packageName: String): String? {
-        val pm = packageManager
-        return try {
-            pm.getApplicationInfo(packageName, 0).loadLabel(pm).toString()
-        } catch (_: Exception) {
-            null
-        }
-    }
-
-    private fun handleNavAppSelection() {
-        if (!hasUsageAccess()) {
-            AlertDialog.Builder(this, R.style.ThemeOverlay_ANHUD_Dialog)
-                .setTitle(getString(R.string.usage_access_title))
-                .setMessage(getString(R.string.usage_access_message))
-                .setPositiveButton(getString(R.string.usage_access_open)) { _, _ ->
-                    openUsageAccessSettings()
-                }
-                .setNegativeButton(getString(R.string.usage_access_continue)) { _, _ ->
-                    showNavAppPicker()
-                }
-                .show()
-            return
-        }
-        showNavAppPicker()
-    }
-
-    private fun openUsageAccessSettings() {
-        startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS))
-    }
-
-    private fun showNavAppPicker() {
-        val apps = loadLaunchableApps()
-        if (apps.isEmpty()) {
-            UiLogStore.append(LogCategory.SYSTEM, "Список приложений пуст")
-            return
-        }
-        val adapter = NavAppAdapter(this, apps)
-        val builder = AlertDialog.Builder(this, R.style.ThemeOverlay_ANHUD_Dialog)
-            .setTitle(getString(R.string.nav_app_picker_title))
-            .setAdapter(adapter) { _, which ->
-                val selected = apps[which]
-                OverlayPrefs.setNavApp(this, selected.packageName, selected.label)
-                updateNavAppSelection()
-            }
-            .setNegativeButton(android.R.string.cancel, null)
-        if (OverlayPrefs.navAppPackage(this).isNotBlank()) {
-            builder.setNeutralButton(getString(R.string.nav_app_clear)) { _, _ ->
-                OverlayPrefs.clearNavApp(this)
-                updateNavAppSelection()
-            }
-        }
-        builder.show()
-    }
-
-    private fun loadLaunchableApps(): List<NavAppOption> {
-        val intent = Intent(Intent.ACTION_MAIN, null).apply {
-            addCategory(Intent.CATEGORY_LAUNCHER)
-        }
-        @Suppress("DEPRECATION")
-        val results = packageManager.queryIntentActivities(intent, 0)
-        val seen = HashSet<String>(results.size)
-        val apps = ArrayList<NavAppOption>(results.size)
-        for (resolveInfo in results) {
-            val packageName = resolveInfo.activityInfo?.packageName ?: continue
-            if (!seen.add(packageName)) {
-                continue
-            }
-            val label = resolveInfo.loadLabel(packageManager)?.toString()?.ifBlank { packageName } ?: packageName
-            val icon = resolveInfo.loadIcon(packageManager)
-            apps.add(NavAppOption(label, packageName, icon))
-        }
-        return apps.sortedBy { it.label.lowercase() }
-    }
-
-    private fun hasUsageAccess(): Boolean {
-        val appOps = getSystemService(AppOpsManager::class.java)
-        val mode = appOps.checkOpNoThrow(
-            AppOpsManager.OPSTR_GET_USAGE_STATS,
-            Process.myUid(),
-            packageName
-        )
-        return mode == AppOpsManager.MODE_ALLOWED
-    }
-
     private fun updateDisplayMetrics(displayId: Int) {
         val display = HudDisplayUtils.resolveDisplay(this, displayId)
         if (display != null) {
@@ -478,24 +556,42 @@ class MainActivity : AppCompatActivity() {
         containerWidthDp: Float? = null,
         containerHeightDp: Float? = null,
         navPosition: PointF? = null,
+        arrowPosition: PointF? = null,
         speedPosition: PointF? = null,
+        hudSpeedPosition: PointF? = null,
+        roadCameraPosition: PointF? = null,
+        trafficLightPosition: PointF? = null,
         speedometerPosition: PointF? = null,
         clockPosition: PointF? = null,
         navScale: Float? = null,
+        arrowScale: Float? = null,
         speedScale: Float? = null,
+        hudSpeedScale: Float? = null,
+        roadCameraScale: Float? = null,
+        trafficLightScale: Float? = null,
         speedometerScale: Float? = null,
         clockScale: Float? = null,
         navAlpha: Float? = null,
+        arrowAlpha: Float? = null,
         speedAlpha: Float? = null,
+        hudSpeedAlpha: Float? = null,
+        roadCameraAlpha: Float? = null,
+        trafficLightAlpha: Float? = null,
         speedometerAlpha: Float? = null,
         clockAlpha: Float? = null,
         containerAlpha: Float? = null,
         navEnabled: Boolean? = null,
+        arrowEnabled: Boolean? = null,
         speedEnabled: Boolean? = null,
+        hudSpeedEnabled: Boolean? = null,
+        roadCameraEnabled: Boolean? = null,
+        trafficLightEnabled: Boolean? = null,
+        arrowOnlyWhenNoIcon: Boolean? = null,
         speedLimitAlertEnabled: Boolean? = null,
         speedLimitAlertThreshold: Int? = null,
         speedometerEnabled: Boolean? = null,
         clockEnabled: Boolean? = null,
+        trafficLightMaxActive: Int? = null,
         preview: Boolean = false,
         previewTarget: OverlayTarget? = null,
         previewShowOthers: Boolean? = null
@@ -516,9 +612,25 @@ class MainActivity : AppCompatActivity() {
             intent.putExtra(OverlayBroadcasts.EXTRA_NAV_X_DP, navPosition.x)
             intent.putExtra(OverlayBroadcasts.EXTRA_NAV_Y_DP, navPosition.y)
         }
+        if (arrowPosition != null) {
+            intent.putExtra(OverlayBroadcasts.EXTRA_ARROW_X_DP, arrowPosition.x)
+            intent.putExtra(OverlayBroadcasts.EXTRA_ARROW_Y_DP, arrowPosition.y)
+        }
         if (speedPosition != null) {
             intent.putExtra(OverlayBroadcasts.EXTRA_SPEED_X_DP, speedPosition.x)
             intent.putExtra(OverlayBroadcasts.EXTRA_SPEED_Y_DP, speedPosition.y)
+        }
+        if (hudSpeedPosition != null) {
+            intent.putExtra(OverlayBroadcasts.EXTRA_HUDSPEED_X_DP, hudSpeedPosition.x)
+            intent.putExtra(OverlayBroadcasts.EXTRA_HUDSPEED_Y_DP, hudSpeedPosition.y)
+        }
+        if (roadCameraPosition != null) {
+            intent.putExtra(OverlayBroadcasts.EXTRA_ROAD_CAMERA_X_DP, roadCameraPosition.x)
+            intent.putExtra(OverlayBroadcasts.EXTRA_ROAD_CAMERA_Y_DP, roadCameraPosition.y)
+        }
+        if (trafficLightPosition != null) {
+            intent.putExtra(OverlayBroadcasts.EXTRA_TRAFFIC_LIGHT_X_DP, trafficLightPosition.x)
+            intent.putExtra(OverlayBroadcasts.EXTRA_TRAFFIC_LIGHT_Y_DP, trafficLightPosition.y)
         }
         if (speedometerPosition != null) {
             intent.putExtra(OverlayBroadcasts.EXTRA_SPEEDOMETER_X_DP, speedometerPosition.x)
@@ -531,8 +643,20 @@ class MainActivity : AppCompatActivity() {
         if (navScale != null) {
             intent.putExtra(OverlayBroadcasts.EXTRA_NAV_SCALE, navScale)
         }
+        if (arrowScale != null) {
+            intent.putExtra(OverlayBroadcasts.EXTRA_ARROW_SCALE, arrowScale)
+        }
         if (speedScale != null) {
             intent.putExtra(OverlayBroadcasts.EXTRA_SPEED_SCALE, speedScale)
+        }
+        if (hudSpeedScale != null) {
+            intent.putExtra(OverlayBroadcasts.EXTRA_HUDSPEED_SCALE, hudSpeedScale)
+        }
+        if (roadCameraScale != null) {
+            intent.putExtra(OverlayBroadcasts.EXTRA_ROAD_CAMERA_SCALE, roadCameraScale)
+        }
+        if (trafficLightScale != null) {
+            intent.putExtra(OverlayBroadcasts.EXTRA_TRAFFIC_LIGHT_SCALE, trafficLightScale)
         }
         if (speedometerScale != null) {
             intent.putExtra(OverlayBroadcasts.EXTRA_SPEEDOMETER_SCALE, speedometerScale)
@@ -543,8 +667,20 @@ class MainActivity : AppCompatActivity() {
         if (navAlpha != null) {
             intent.putExtra(OverlayBroadcasts.EXTRA_NAV_ALPHA, navAlpha)
         }
+        if (arrowAlpha != null) {
+            intent.putExtra(OverlayBroadcasts.EXTRA_ARROW_ALPHA, arrowAlpha)
+        }
         if (speedAlpha != null) {
             intent.putExtra(OverlayBroadcasts.EXTRA_SPEED_ALPHA, speedAlpha)
+        }
+        if (hudSpeedAlpha != null) {
+            intent.putExtra(OverlayBroadcasts.EXTRA_HUDSPEED_ALPHA, hudSpeedAlpha)
+        }
+        if (roadCameraAlpha != null) {
+            intent.putExtra(OverlayBroadcasts.EXTRA_ROAD_CAMERA_ALPHA, roadCameraAlpha)
+        }
+        if (trafficLightAlpha != null) {
+            intent.putExtra(OverlayBroadcasts.EXTRA_TRAFFIC_LIGHT_ALPHA, trafficLightAlpha)
         }
         if (speedometerAlpha != null) {
             intent.putExtra(OverlayBroadcasts.EXTRA_SPEEDOMETER_ALPHA, speedometerAlpha)
@@ -558,8 +694,23 @@ class MainActivity : AppCompatActivity() {
         if (navEnabled != null) {
             intent.putExtra(OverlayBroadcasts.EXTRA_NAV_ENABLED, navEnabled)
         }
+        if (arrowEnabled != null) {
+            intent.putExtra(OverlayBroadcasts.EXTRA_ARROW_ENABLED, arrowEnabled)
+        }
         if (speedEnabled != null) {
             intent.putExtra(OverlayBroadcasts.EXTRA_SPEED_ENABLED, speedEnabled)
+        }
+        if (hudSpeedEnabled != null) {
+            intent.putExtra(OverlayBroadcasts.EXTRA_HUDSPEED_ENABLED, hudSpeedEnabled)
+        }
+        if (roadCameraEnabled != null) {
+            intent.putExtra(OverlayBroadcasts.EXTRA_ROAD_CAMERA_ENABLED, roadCameraEnabled)
+        }
+        if (trafficLightEnabled != null) {
+            intent.putExtra(OverlayBroadcasts.EXTRA_TRAFFIC_LIGHT_ENABLED, trafficLightEnabled)
+        }
+        if (arrowOnlyWhenNoIcon != null) {
+            intent.putExtra(OverlayBroadcasts.EXTRA_ARROW_ONLY_WHEN_NO_ICON, arrowOnlyWhenNoIcon)
         }
         if (speedLimitAlertEnabled != null) {
             intent.putExtra(OverlayBroadcasts.EXTRA_SPEED_LIMIT_ALERT_ENABLED, speedLimitAlertEnabled)
@@ -572,6 +723,9 @@ class MainActivity : AppCompatActivity() {
         }
         if (clockEnabled != null) {
             intent.putExtra(OverlayBroadcasts.EXTRA_CLOCK_ENABLED, clockEnabled)
+        }
+        if (trafficLightMaxActive != null) {
+            intent.putExtra(OverlayBroadcasts.EXTRA_TRAFFIC_LIGHT_MAX_ACTIVE, trafficLightMaxActive)
         }
         intent.putExtra(OverlayBroadcasts.EXTRA_PREVIEW, preview)
         if (previewTarget != null) {
@@ -590,31 +744,13 @@ class MainActivity : AppCompatActivity() {
     }
 
     private data class DisplayOption(val id: Int, val label: String)
-    private data class NavAppOption(
-        val label: String,
-        val packageName: String,
-        val icon: Drawable
-    )
-
-    private class NavAppAdapter(
-        context: Context,
-        private val items: List<NavAppOption>
-    ) : ArrayAdapter<NavAppOption>(context, R.layout.app_list_item, items) {
-        override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
-            val view = convertView ?: LayoutInflater.from(context)
-                .inflate(R.layout.app_list_item, parent, false)
-            val iconView = view.findViewById<ImageView>(R.id.appIcon)
-            val nameView = view.findViewById<TextView>(R.id.appName)
-            val item = items[position]
-            iconView.setImageDrawable(item.icon)
-            nameView.text = item.label
-            return view
-        }
-    }
-
     private enum class OverlayTarget(val previewKey: String) {
         NAVIGATION(OverlayBroadcasts.PREVIEW_TARGET_NAV),
+        ARROW(OverlayBroadcasts.PREVIEW_TARGET_ARROW),
         SPEED(OverlayBroadcasts.PREVIEW_TARGET_SPEED),
+        HUDSPEED(OverlayBroadcasts.PREVIEW_TARGET_HUDSPEED),
+        ROAD_CAMERA(OverlayBroadcasts.PREVIEW_TARGET_ROAD_CAMERA),
+        TRAFFIC_LIGHT(OverlayBroadcasts.PREVIEW_TARGET_TRAFFIC_LIGHT),
         SPEEDOMETER(OverlayBroadcasts.PREVIEW_TARGET_SPEEDOMETER),
         CLOCK(OverlayBroadcasts.PREVIEW_TARGET_CLOCK),
         CONTAINER(OverlayBroadcasts.PREVIEW_TARGET_CONTAINER)
@@ -626,7 +762,11 @@ class MainActivity : AppCompatActivity() {
         val previewContainer = dialogView.findViewById<FrameLayout>(R.id.dialogPreviewContainer)
         val previewHudContainer = dialogView.findViewById<FrameLayout>(R.id.dialogPreviewHudContainer)
         val previewNavBlock = dialogView.findViewById<View>(R.id.dialogPreviewNavBlock)
+        val previewArrowBlock = dialogView.findViewById<View>(R.id.dialogPreviewArrowBlock)
         val previewSpeedLimit = dialogView.findViewById<View>(R.id.dialogPreviewSpeedLimit)
+        val previewHudSpeedBlock = dialogView.findViewById<View>(R.id.dialogPreviewHudSpeedBlock)
+        val previewRoadCameraBlock = dialogView.findViewById<View>(R.id.dialogPreviewRoadCameraBlock)
+        val previewTrafficLightBlock = dialogView.findViewById<LinearLayout>(R.id.dialogPreviewTrafficLightBlock)
         val previewSpeedometer = dialogView.findViewById<TextView>(R.id.dialogPreviewSpeedometer)
         val previewClock = dialogView.findViewById<TextView>(R.id.dialogPreviewClock)
         val showOthersCheck = dialogView.findViewById<CheckBox>(R.id.dialogShowOthers)
@@ -643,13 +783,21 @@ class MainActivity : AppCompatActivity() {
         val brightnessValue = dialogView.findViewById<TextView>(R.id.dialogBrightnessValue)
 
         val navPosition = OverlayPrefs.navPositionDp(this)
+        val arrowPosition = OverlayPrefs.arrowPositionDp(this)
         val speedPosition = OverlayPrefs.speedPositionDp(this)
+        val hudSpeedPosition = OverlayPrefs.hudSpeedPositionDp(this)
+        val roadCameraPosition = OverlayPrefs.roadCameraPositionDp(this)
+        val trafficLightPosition = OverlayPrefs.trafficLightPositionDp(this)
         val speedometerPosition = OverlayPrefs.speedometerPositionDp(this)
         val clockPosition = OverlayPrefs.clockPositionDp(this)
         val containerPosition = OverlayPrefs.containerPositionDp(this)
         val containerSize = OverlayPrefs.containerSizeDp(this)
         val navPoint = PointF(navPosition.x, navPosition.y)
+        val arrowPoint = PointF(arrowPosition.x, arrowPosition.y)
         val speedPoint = PointF(speedPosition.x, speedPosition.y)
+        val hudSpeedPoint = PointF(hudSpeedPosition.x, hudSpeedPosition.y)
+        val roadCameraPoint = PointF(roadCameraPosition.x, roadCameraPosition.y)
+        val trafficLightPoint = PointF(trafficLightPosition.x, trafficLightPosition.y)
         val speedometerPoint = PointF(speedometerPosition.x, speedometerPosition.y)
         val clockPoint = PointF(clockPosition.x, clockPosition.y)
         val containerPoint = PointF(containerPosition.x, containerPosition.y)
@@ -657,14 +805,22 @@ class MainActivity : AppCompatActivity() {
         var containerHeightDp = containerSize.y
         val scalePercent = when (target) {
             OverlayTarget.NAVIGATION -> (OverlayPrefs.navScale(this) * 100).toInt()
+            OverlayTarget.ARROW -> (OverlayPrefs.arrowScale(this) * 100).toInt()
             OverlayTarget.SPEED -> (OverlayPrefs.speedScale(this) * 100).toInt()
+            OverlayTarget.HUDSPEED -> (OverlayPrefs.hudSpeedScale(this) * 100).toInt()
+            OverlayTarget.ROAD_CAMERA -> (OverlayPrefs.roadCameraScale(this) * 100).toInt()
+            OverlayTarget.TRAFFIC_LIGHT -> (OverlayPrefs.trafficLightScale(this) * 100).toInt()
             OverlayTarget.SPEEDOMETER -> (OverlayPrefs.speedometerScale(this) * 100).toInt()
             OverlayTarget.CLOCK -> (OverlayPrefs.clockScale(this) * 100).toInt()
             OverlayTarget.CONTAINER -> 100
         }
         val brightnessPercent = when (target) {
             OverlayTarget.NAVIGATION -> (OverlayPrefs.navAlpha(this) * 100).toInt()
+            OverlayTarget.ARROW -> (OverlayPrefs.arrowAlpha(this) * 100).toInt()
             OverlayTarget.SPEED -> (OverlayPrefs.speedAlpha(this) * 100).toInt()
+            OverlayTarget.HUDSPEED -> (OverlayPrefs.hudSpeedAlpha(this) * 100).toInt()
+            OverlayTarget.ROAD_CAMERA -> (OverlayPrefs.roadCameraAlpha(this) * 100).toInt()
+            OverlayTarget.TRAFFIC_LIGHT -> (OverlayPrefs.trafficLightAlpha(this) * 100).toInt()
             OverlayTarget.SPEEDOMETER -> (OverlayPrefs.speedometerAlpha(this) * 100).toInt()
             OverlayTarget.CLOCK -> (OverlayPrefs.clockAlpha(this) * 100).toInt()
             OverlayTarget.CONTAINER -> (OverlayPrefs.containerAlpha(this) * 100).toInt()
@@ -672,7 +828,11 @@ class MainActivity : AppCompatActivity() {
 
         val dialogTitle = when (target) {
             OverlayTarget.NAVIGATION -> getString(R.string.position_nav_block_label)
+            OverlayTarget.ARROW -> getString(R.string.position_arrow_block_label)
             OverlayTarget.SPEED -> getString(R.string.position_speed_block_label)
+            OverlayTarget.HUDSPEED -> getString(R.string.position_hudspeed_block_label)
+            OverlayTarget.ROAD_CAMERA -> getString(R.string.position_road_camera_block_label)
+            OverlayTarget.TRAFFIC_LIGHT -> getString(R.string.position_traffic_light_block_label)
             OverlayTarget.SPEEDOMETER -> getString(R.string.position_speedometer_block_label)
             OverlayTarget.CLOCK -> getString(R.string.position_clock_block_label)
             OverlayTarget.CONTAINER -> getString(R.string.position_container_label)
@@ -698,6 +858,8 @@ class MainActivity : AppCompatActivity() {
             containerHeightRow.visibility = View.GONE
         }
 
+        renderTrafficLightPreview(previewTrafficLightBlock, OverlayPrefs.trafficLightMaxActive(this))
+
         val density = displayDensity.takeIf { it > 0f } ?: resources.displayMetrics.density
         val minContainerSizeDp = OverlayPrefs.CONTAINER_MIN_SIZE_PX / density
         val maxWidthDp = (displaySize.x.coerceAtLeast(1) / density).coerceAtLeast(minContainerSizeDp)
@@ -721,11 +883,19 @@ class MainActivity : AppCompatActivity() {
 
         fun updateDialogVisibility() {
             val showNav = target == OverlayTarget.NAVIGATION
+            val showArrow = target == OverlayTarget.ARROW
             val showSpeed = target == OverlayTarget.SPEED
+            val showHudSpeed = target == OverlayTarget.HUDSPEED
+            val showRoadCamera = target == OverlayTarget.ROAD_CAMERA
+            val showTrafficLight = target == OverlayTarget.TRAFFIC_LIGHT
             val showSpeedometer = target == OverlayTarget.SPEEDOMETER
             val showClock = target == OverlayTarget.CLOCK
             previewNavBlock.visibility = if (showNav) View.VISIBLE else View.GONE
+            previewArrowBlock.visibility = if (showArrow) View.VISIBLE else View.GONE
             previewSpeedLimit.visibility = if (showSpeed) View.VISIBLE else View.GONE
+            previewHudSpeedBlock.visibility = if (showHudSpeed) View.VISIBLE else View.GONE
+            previewRoadCameraBlock.visibility = if (showRoadCamera) View.VISIBLE else View.GONE
+            previewTrafficLightBlock.visibility = if (showTrafficLight) View.VISIBLE else View.GONE
             previewSpeedometer.visibility = if (showSpeedometer) View.VISIBLE else View.GONE
             previewClock.visibility = if (showClock) View.VISIBLE else View.GONE
             if (target == OverlayTarget.CONTAINER) {
@@ -761,6 +931,21 @@ class MainActivity : AppCompatActivity() {
                     OverlayPrefs.navAlpha(this@MainActivity).coerceIn(0f, 1f)
                 }
             }
+            if (showArrow) {
+                positionPreviewView(
+                    previewHudContainer,
+                    previewArrowBlock,
+                    arrowPoint.x,
+                    arrowPoint.y,
+                    containerWidthPx,
+                    containerHeightPx
+                )
+                previewArrowBlock.alpha = if (target == OverlayTarget.ARROW) {
+                    brightnessSeek.progress.coerceIn(0, 100) / 100f
+                } else {
+                    OverlayPrefs.arrowAlpha(this@MainActivity).coerceIn(0f, 1f)
+                }
+            }
             if (showSpeed) {
                 positionPreviewView(
                     previewHudContainer,
@@ -774,6 +959,51 @@ class MainActivity : AppCompatActivity() {
                     brightnessSeek.progress.coerceIn(0, 100) / 100f
                 } else {
                     OverlayPrefs.speedAlpha(this@MainActivity).coerceIn(0f, 1f)
+                }
+            }
+            if (showHudSpeed) {
+                positionPreviewView(
+                    previewHudContainer,
+                    previewHudSpeedBlock,
+                    hudSpeedPoint.x,
+                    hudSpeedPoint.y,
+                    containerWidthPx,
+                    containerHeightPx
+                )
+                previewHudSpeedBlock.alpha = if (target == OverlayTarget.HUDSPEED) {
+                    brightnessSeek.progress.coerceIn(0, 100) / 100f
+                } else {
+                    OverlayPrefs.hudSpeedAlpha(this@MainActivity).coerceIn(0f, 1f)
+                }
+            }
+            if (showRoadCamera) {
+                positionPreviewView(
+                    previewHudContainer,
+                    previewRoadCameraBlock,
+                    roadCameraPoint.x,
+                    roadCameraPoint.y,
+                    containerWidthPx,
+                    containerHeightPx
+                )
+                previewRoadCameraBlock.alpha = if (target == OverlayTarget.ROAD_CAMERA) {
+                    brightnessSeek.progress.coerceIn(0, 100) / 100f
+                } else {
+                    OverlayPrefs.roadCameraAlpha(this@MainActivity).coerceIn(0f, 1f)
+                }
+            }
+            if (showTrafficLight) {
+                positionPreviewView(
+                    previewHudContainer,
+                    previewTrafficLightBlock,
+                    trafficLightPoint.x,
+                    trafficLightPoint.y,
+                    containerWidthPx,
+                    containerHeightPx
+                )
+                previewTrafficLightBlock.alpha = if (target == OverlayTarget.TRAFFIC_LIGHT) {
+                    brightnessSeek.progress.coerceIn(0, 100) / 100f
+                } else {
+                    OverlayPrefs.trafficLightAlpha(this@MainActivity).coerceIn(0f, 1f)
                 }
             }
             if (showSpeedometer) {
@@ -811,7 +1041,11 @@ class MainActivity : AppCompatActivity() {
         fun updateOverlayPosition(previewX: Float, previewY: Float, persist: Boolean) {
             val view = when (target) {
                 OverlayTarget.NAVIGATION -> previewNavBlock
+                OverlayTarget.ARROW -> previewArrowBlock
                 OverlayTarget.SPEED -> previewSpeedLimit
+                OverlayTarget.HUDSPEED -> previewHudSpeedBlock
+                OverlayTarget.ROAD_CAMERA -> previewRoadCameraBlock
+                OverlayTarget.TRAFFIC_LIGHT -> previewTrafficLightBlock
                 OverlayTarget.SPEEDOMETER -> previewSpeedometer
                 OverlayTarget.CLOCK -> previewClock
                 OverlayTarget.CONTAINER -> previewHudContainer
@@ -847,6 +1081,19 @@ class MainActivity : AppCompatActivity() {
                         previewShowOthers = showOthersCheck.isChecked
                     )
                 }
+                OverlayTarget.ARROW -> {
+                    if (persist) {
+                        OverlayPrefs.setArrowPositionDp(this, dpX, dpY)
+                        arrowPoint.x = dpX
+                        arrowPoint.y = dpY
+                    }
+                    notifyOverlaySettingsChanged(
+                        arrowPosition = point,
+                        preview = true,
+                        previewTarget = target,
+                        previewShowOthers = showOthersCheck.isChecked
+                    )
+                }
                 OverlayTarget.SPEED -> {
                     if (persist) {
                         OverlayPrefs.setSpeedPositionDp(this, dpX, dpY)
@@ -855,6 +1102,45 @@ class MainActivity : AppCompatActivity() {
                     }
                     notifyOverlaySettingsChanged(
                         speedPosition = point,
+                        preview = true,
+                        previewTarget = target,
+                        previewShowOthers = showOthersCheck.isChecked
+                    )
+                }
+                OverlayTarget.HUDSPEED -> {
+                    if (persist) {
+                        OverlayPrefs.setHudSpeedPositionDp(this, dpX, dpY)
+                        hudSpeedPoint.x = dpX
+                        hudSpeedPoint.y = dpY
+                    }
+                    notifyOverlaySettingsChanged(
+                        hudSpeedPosition = point,
+                        preview = true,
+                        previewTarget = target,
+                        previewShowOthers = showOthersCheck.isChecked
+                    )
+                }
+                OverlayTarget.ROAD_CAMERA -> {
+                    if (persist) {
+                        OverlayPrefs.setRoadCameraPositionDp(this, dpX, dpY)
+                        roadCameraPoint.x = dpX
+                        roadCameraPoint.y = dpY
+                    }
+                    notifyOverlaySettingsChanged(
+                        roadCameraPosition = point,
+                        preview = true,
+                        previewTarget = target,
+                        previewShowOthers = showOthersCheck.isChecked
+                    )
+                }
+                OverlayTarget.TRAFFIC_LIGHT -> {
+                    if (persist) {
+                        OverlayPrefs.setTrafficLightPositionDp(this, dpX, dpY)
+                        trafficLightPoint.x = dpX
+                        trafficLightPoint.y = dpY
+                    }
+                    notifyOverlaySettingsChanged(
+                        trafficLightPosition = point,
                         preview = true,
                         previewTarget = target,
                         previewShowOthers = showOthersCheck.isChecked
@@ -906,7 +1192,11 @@ class MainActivity : AppCompatActivity() {
             if (target == OverlayTarget.CONTAINER) previewContainer else previewHudContainer,
             when (target) {
                 OverlayTarget.NAVIGATION -> previewNavBlock
+                OverlayTarget.ARROW -> previewArrowBlock
                 OverlayTarget.SPEED -> previewSpeedLimit
+                OverlayTarget.HUDSPEED -> previewHudSpeedBlock
+                OverlayTarget.ROAD_CAMERA -> previewRoadCameraBlock
+                OverlayTarget.TRAFFIC_LIGHT -> previewTrafficLightBlock
                 OverlayTarget.SPEEDOMETER -> previewSpeedometer
                 OverlayTarget.CLOCK -> previewClock
                 OverlayTarget.CONTAINER -> previewHudContainer
@@ -1007,8 +1297,32 @@ class MainActivity : AppCompatActivity() {
                         previewTarget = target,
                         previewShowOthers = showOthersCheck.isChecked
                     )
+                    OverlayTarget.ARROW -> notifyOverlaySettingsChanged(
+                        arrowScale = scale,
+                        preview = true,
+                        previewTarget = target,
+                        previewShowOthers = showOthersCheck.isChecked
+                    )
                     OverlayTarget.SPEED -> notifyOverlaySettingsChanged(
                         speedScale = scale,
+                        preview = true,
+                        previewTarget = target,
+                        previewShowOthers = showOthersCheck.isChecked
+                    )
+                    OverlayTarget.HUDSPEED -> notifyOverlaySettingsChanged(
+                        hudSpeedScale = scale,
+                        preview = true,
+                        previewTarget = target,
+                        previewShowOthers = showOthersCheck.isChecked
+                    )
+                    OverlayTarget.ROAD_CAMERA -> notifyOverlaySettingsChanged(
+                        roadCameraScale = scale,
+                        preview = true,
+                        previewTarget = target,
+                        previewShowOthers = showOthersCheck.isChecked
+                    )
+                    OverlayTarget.TRAFFIC_LIGHT -> notifyOverlaySettingsChanged(
+                        trafficLightScale = scale,
                         preview = true,
                         previewTarget = target,
                         previewShowOthers = showOthersCheck.isChecked
@@ -1048,10 +1362,46 @@ class MainActivity : AppCompatActivity() {
                             previewShowOthers = showOthersCheck.isChecked
                         )
                     }
+                    OverlayTarget.ARROW -> {
+                        OverlayPrefs.setArrowScale(this@MainActivity, scale)
+                        notifyOverlaySettingsChanged(
+                            arrowScale = scale,
+                            preview = true,
+                            previewTarget = target,
+                            previewShowOthers = showOthersCheck.isChecked
+                        )
+                    }
                     OverlayTarget.SPEED -> {
                         OverlayPrefs.setSpeedScale(this@MainActivity, scale)
                         notifyOverlaySettingsChanged(
                             speedScale = scale,
+                            preview = true,
+                            previewTarget = target,
+                            previewShowOthers = showOthersCheck.isChecked
+                        )
+                    }
+                    OverlayTarget.HUDSPEED -> {
+                        OverlayPrefs.setHudSpeedScale(this@MainActivity, scale)
+                        notifyOverlaySettingsChanged(
+                            hudSpeedScale = scale,
+                            preview = true,
+                            previewTarget = target,
+                            previewShowOthers = showOthersCheck.isChecked
+                        )
+                    }
+                    OverlayTarget.ROAD_CAMERA -> {
+                        OverlayPrefs.setRoadCameraScale(this@MainActivity, scale)
+                        notifyOverlaySettingsChanged(
+                            roadCameraScale = scale,
+                            preview = true,
+                            previewTarget = target,
+                            previewShowOthers = showOthersCheck.isChecked
+                        )
+                    }
+                    OverlayTarget.TRAFFIC_LIGHT -> {
+                        OverlayPrefs.setTrafficLightScale(this@MainActivity, scale)
+                        notifyOverlaySettingsChanged(
+                            trafficLightScale = scale,
                             preview = true,
                             previewTarget = target,
                             previewShowOthers = showOthersCheck.isChecked
@@ -1097,10 +1447,46 @@ class MainActivity : AppCompatActivity() {
                             previewShowOthers = showOthersCheck.isChecked
                         )
                     }
+                    OverlayTarget.ARROW -> {
+                        previewArrowBlock.alpha = alpha
+                        notifyOverlaySettingsChanged(
+                            arrowAlpha = alpha,
+                            preview = true,
+                            previewTarget = target,
+                            previewShowOthers = showOthersCheck.isChecked
+                        )
+                    }
                     OverlayTarget.SPEED -> {
                         previewSpeedLimit.alpha = alpha
                         notifyOverlaySettingsChanged(
                             speedAlpha = alpha,
+                            preview = true,
+                            previewTarget = target,
+                            previewShowOthers = showOthersCheck.isChecked
+                        )
+                    }
+                    OverlayTarget.HUDSPEED -> {
+                        previewHudSpeedBlock.alpha = alpha
+                        notifyOverlaySettingsChanged(
+                            hudSpeedAlpha = alpha,
+                            preview = true,
+                            previewTarget = target,
+                            previewShowOthers = showOthersCheck.isChecked
+                        )
+                    }
+                    OverlayTarget.ROAD_CAMERA -> {
+                        previewRoadCameraBlock.alpha = alpha
+                        notifyOverlaySettingsChanged(
+                            roadCameraAlpha = alpha,
+                            preview = true,
+                            previewTarget = target,
+                            previewShowOthers = showOthersCheck.isChecked
+                        )
+                    }
+                    OverlayTarget.TRAFFIC_LIGHT -> {
+                        previewTrafficLightBlock.alpha = alpha
+                        notifyOverlaySettingsChanged(
+                            trafficLightAlpha = alpha,
                             preview = true,
                             previewTarget = target,
                             previewShowOthers = showOthersCheck.isChecked
@@ -1151,10 +1537,46 @@ class MainActivity : AppCompatActivity() {
                             previewShowOthers = showOthersCheck.isChecked
                         )
                     }
+                    OverlayTarget.ARROW -> {
+                        OverlayPrefs.setArrowAlpha(this@MainActivity, alpha)
+                        notifyOverlaySettingsChanged(
+                            arrowAlpha = alpha,
+                            preview = true,
+                            previewTarget = target,
+                            previewShowOthers = showOthersCheck.isChecked
+                        )
+                    }
                     OverlayTarget.SPEED -> {
                         OverlayPrefs.setSpeedAlpha(this@MainActivity, alpha)
                         notifyOverlaySettingsChanged(
                             speedAlpha = alpha,
+                            preview = true,
+                            previewTarget = target,
+                            previewShowOthers = showOthersCheck.isChecked
+                        )
+                    }
+                    OverlayTarget.HUDSPEED -> {
+                        OverlayPrefs.setHudSpeedAlpha(this@MainActivity, alpha)
+                        notifyOverlaySettingsChanged(
+                            hudSpeedAlpha = alpha,
+                            preview = true,
+                            previewTarget = target,
+                            previewShowOthers = showOthersCheck.isChecked
+                        )
+                    }
+                    OverlayTarget.ROAD_CAMERA -> {
+                        OverlayPrefs.setRoadCameraAlpha(this@MainActivity, alpha)
+                        notifyOverlaySettingsChanged(
+                            roadCameraAlpha = alpha,
+                            preview = true,
+                            previewTarget = target,
+                            previewShowOthers = showOthersCheck.isChecked
+                        )
+                    }
+                    OverlayTarget.TRAFFIC_LIGHT -> {
+                        OverlayPrefs.setTrafficLightAlpha(this@MainActivity, alpha)
+                        notifyOverlaySettingsChanged(
+                            trafficLightAlpha = alpha,
                             preview = true,
                             previewTarget = target,
                             previewShowOthers = showOthersCheck.isChecked
@@ -1197,6 +1619,12 @@ class MainActivity : AppCompatActivity() {
         }
 
         dialog.setOnShowListener {
+            dialog.window?.let { window ->
+                val metrics = resources.displayMetrics
+                val horizontalPaddingPx = (24 * metrics.density).roundToInt()
+                val widthPx = (metrics.widthPixels - horizontalPaddingPx * 2).coerceAtLeast(1)
+                window.setLayout(widthPx, WindowManager.LayoutParams.WRAP_CONTENT)
+            }
             notifyOverlaySettingsChanged(
                 preview = true,
                 previewTarget = target,

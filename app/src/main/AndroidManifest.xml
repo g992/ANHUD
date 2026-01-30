@@ -48,17 +48,9 @@
             </intent-filter>
         </activity>
         <activity
-            android:name=".LogsActivity"
-            android:exported="false"
-            android:label="@string/logs_title" />
-        <activity
             android:name=".SettingsActivity"
             android:exported="false"
             android:label="Настройки" />
-        <activity
-            android:name=".ManeuverMatchActivity"
-            android:exported="false"
-            android:label="@string/maneuver_match_title" />
         <activity
             android:name=".SensorsActivity"
             android:exported="false"

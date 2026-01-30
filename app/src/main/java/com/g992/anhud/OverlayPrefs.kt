@@ -65,8 +65,6 @@ object OverlayPrefs {
     private const val KEY_CAMERA_TIMEOUT_FAR = "camera_timeout_far"
     private const val KEY_TRAFFIC_LIGHT_TIMEOUT = "traffic_light_timeout"
     private const val KEY_SPEED_CORRECTION = "speed_correction"
-    private const val KEY_NAV_APP_PACKAGE = "nav_app_package"
-    private const val KEY_NAV_APP_LABEL = "nav_app_label"
 
     const val DISPLAY_ID_AUTO = -1
     const val CONTAINER_MIN_SIZE_PX = 150f
@@ -574,7 +572,7 @@ object OverlayPrefs {
     }
 
     fun cameraTimeoutNear(context: Context): Int {
-        return prefs(context).getInt(KEY_CAMERA_TIMEOUT_NEAR, 0)
+        return prefs(context).getInt(KEY_CAMERA_TIMEOUT_NEAR, 3)
             .coerceIn(0, TIMEOUT_MAX)
     }
 
@@ -596,7 +594,7 @@ object OverlayPrefs {
     }
 
     fun trafficLightTimeout(context: Context): Int {
-        return prefs(context).getInt(KEY_TRAFFIC_LIGHT_TIMEOUT, 0)
+        return prefs(context).getInt(KEY_TRAFFIC_LIGHT_TIMEOUT, 2)
             .coerceIn(0, TIMEOUT_MAX)
     }
 
@@ -614,28 +612,6 @@ object OverlayPrefs {
     fun setSpeedCorrection(context: Context, correction: Int) {
         prefs(context).edit()
             .putInt(KEY_SPEED_CORRECTION, correction.coerceIn(SPEED_CORRECTION_MIN, SPEED_CORRECTION_MAX))
-            .apply()
-    }
-
-    fun navAppPackage(context: Context): String {
-        return prefs(context).getString(KEY_NAV_APP_PACKAGE, "").orEmpty()
-    }
-
-    fun navAppLabel(context: Context): String {
-        return prefs(context).getString(KEY_NAV_APP_LABEL, "").orEmpty()
-    }
-
-    fun setNavApp(context: Context, packageName: String, label: String) {
-        prefs(context).edit()
-            .putString(KEY_NAV_APP_PACKAGE, packageName)
-            .putString(KEY_NAV_APP_LABEL, label)
-            .apply()
-    }
-
-    fun clearNavApp(context: Context) {
-        prefs(context).edit()
-            .remove(KEY_NAV_APP_PACKAGE)
-            .remove(KEY_NAV_APP_LABEL)
             .apply()
     }
 
