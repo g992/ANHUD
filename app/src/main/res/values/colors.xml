@@ -7,4 +7,9 @@
     <color name="dialog_background">#141414</color>
     <color name="dialog_text_primary">#FFFFFFFF</color>
     <color name="dialog_text_secondary">#FFFFFFFF</color>
+    <color name="alicekit_palette_secondary_background_v2">#202124</color>
+    <color name="alicekit_palette_futuris_secondary_background">#1B1D20</color>
+    <color name="traffic_light_green_primary">#2ECC71</color>
+    <color name="traffic_light_yellow_primary">#F1C40F</color>
+    <color name="traffic_light_red_primary">#FF4433</color>
 </resources>

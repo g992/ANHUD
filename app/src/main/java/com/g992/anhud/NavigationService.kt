@@ -19,9 +19,7 @@ class NavigationService : Service() {
         navigationReceiver = receiver
         val filter = IntentFilter().apply {
             addAction(NavigationReceiver.ACTION_NAV_UPDATE)
-            addAction(NavigationReceiver.ACTION_NAV_ENDED)
             addAction(NavigationReceiver.ACTION_NAV_UPDATE_DEBUG)
-            addAction(NavigationReceiver.ACTION_NAV_ENDED_DEBUG)
             addAction(NavigationReceiver.ACTION_YANDEX_MANEUVER)
             addAction(NavigationReceiver.ACTION_YANDEX_NEXT_TEXT)
             addAction(NavigationReceiver.ACTION_YANDEX_NEXT_STREET)
@@ -29,7 +27,12 @@ class NavigationService : Service() {
             addAction(NavigationReceiver.ACTION_YANDEX_ARRIVAL)
             addAction(NavigationReceiver.ACTION_YANDEX_DISTANCE)
             addAction(NavigationReceiver.ACTION_YANDEX_TIME)
+            addAction(NavigationReceiver.ACTION_YANDEX_NAV_ACTIVE)
+            addAction(NavigationReceiver.ACTION_YANDEX_ROADCAMERA)
             addAction(NavigationReceiver.ACTION_YANDEX_TRAFFICLIGHT)
+            addAction(NavigationReceiver.ACTION_YANDEX_ROUTE_POLYLINE)
+            addAction(NavigationReceiver.ACTION_NATIVE_NAV_STOP)
+            addAction(NavigationReceiver.ACTION_HUDSPEED_UPDATE)
         }
         ContextCompat.registerReceiver(
             this,

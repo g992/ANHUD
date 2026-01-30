@@ -15,33 +15,65 @@ object OverlayPrefs {
     private const val KEY_CONTAINER_HEIGHT_DP = "overlay_container_height_dp"
     private const val KEY_NAV_X_DP = "overlay_nav_x_dp"
     private const val KEY_NAV_Y_DP = "overlay_nav_y_dp"
+    private const val KEY_ARROW_X_DP = "overlay_arrow_x_dp"
+    private const val KEY_ARROW_Y_DP = "overlay_arrow_y_dp"
     private const val KEY_SPEED_X_DP = "overlay_speed_x_dp"
     private const val KEY_SPEED_Y_DP = "overlay_speed_y_dp"
+    private const val KEY_HUDSPEED_X_DP = "overlay_hudspeed_x_dp"
+    private const val KEY_HUDSPEED_Y_DP = "overlay_hudspeed_y_dp"
+    private const val KEY_ROAD_CAMERA_X_DP = "overlay_road_camera_x_dp"
+    private const val KEY_ROAD_CAMERA_Y_DP = "overlay_road_camera_y_dp"
+    private const val KEY_TRAFFIC_LIGHT_X_DP = "overlay_traffic_light_x_dp"
+    private const val KEY_TRAFFIC_LIGHT_Y_DP = "overlay_traffic_light_y_dp"
     private const val KEY_SPEEDOMETER_X_DP = "overlay_speedometer_x_dp"
     private const val KEY_SPEEDOMETER_Y_DP = "overlay_speedometer_y_dp"
     private const val KEY_CLOCK_X_DP = "overlay_clock_x_dp"
     private const val KEY_CLOCK_Y_DP = "overlay_clock_y_dp"
     private const val KEY_NAV_SCALE = "overlay_nav_scale"
+    private const val KEY_NAV_TEXT_SCALE = "overlay_nav_text_scale"
+    private const val KEY_ARROW_SCALE = "overlay_arrow_scale"
     private const val KEY_SPEED_SCALE = "overlay_speed_scale"
+    private const val KEY_HUDSPEED_SCALE = "overlay_hudspeed_scale"
+    private const val KEY_ROAD_CAMERA_SCALE = "overlay_road_camera_scale"
+    private const val KEY_TRAFFIC_LIGHT_SCALE = "overlay_traffic_light_scale"
     private const val KEY_SPEEDOMETER_SCALE = "overlay_speedometer_scale"
     private const val KEY_CLOCK_SCALE = "overlay_clock_scale"
     private const val KEY_NAV_ALPHA = "overlay_nav_alpha"
+    private const val KEY_ARROW_ALPHA = "overlay_arrow_alpha"
     private const val KEY_SPEED_ALPHA = "overlay_speed_alpha"
+    private const val KEY_HUDSPEED_ALPHA = "overlay_hudspeed_alpha"
+    private const val KEY_ROAD_CAMERA_ALPHA = "overlay_road_camera_alpha"
+    private const val KEY_TRAFFIC_LIGHT_ALPHA = "overlay_traffic_light_alpha"
     private const val KEY_SPEEDOMETER_ALPHA = "overlay_speedometer_alpha"
     private const val KEY_CLOCK_ALPHA = "overlay_clock_alpha"
     private const val KEY_CONTAINER_ALPHA = "overlay_container_alpha"
     private const val KEY_NAV_ENABLED = "overlay_nav_enabled"
+    private const val KEY_ARROW_ENABLED = "overlay_arrow_enabled"
+    private const val KEY_ARROW_ONLY_WHEN_NO_ICON = "overlay_arrow_only_when_no_icon"
     private const val KEY_SPEED_ENABLED = "overlay_speed_enabled"
+    private const val KEY_SPEED_LIMIT_FROM_HUDSPEED = "overlay_speed_limit_from_hudspeed"
+    private const val KEY_HUDSPEED_ENABLED = "overlay_hudspeed_enabled"
+    private const val KEY_ROAD_CAMERA_ENABLED = "overlay_road_camera_enabled"
+    private const val KEY_TRAFFIC_LIGHT_ENABLED = "overlay_traffic_light_enabled"
     private const val KEY_SPEED_LIMIT_ALERT_ENABLED = "overlay_speed_limit_alert_enabled"
     private const val KEY_SPEED_LIMIT_ALERT_THRESHOLD = "overlay_speed_limit_alert_threshold"
     private const val KEY_SPEEDOMETER_ENABLED = "overlay_speedometer_enabled"
     private const val KEY_CLOCK_ENABLED = "overlay_clock_enabled"
+    private const val KEY_TRAFFIC_LIGHT_MAX_ACTIVE = "overlay_traffic_light_max_active"
+    private const val KEY_NATIVE_NAV_ENABLED = "native_nav_enabled"
+    private const val KEY_CAMERA_TIMEOUT_NEAR = "camera_timeout_near"
+    private const val KEY_CAMERA_TIMEOUT_FAR = "camera_timeout_far"
+    private const val KEY_TRAFFIC_LIGHT_TIMEOUT = "traffic_light_timeout"
+    private const val KEY_SPEED_CORRECTION = "speed_correction"
     private const val KEY_NAV_APP_PACKAGE = "nav_app_package"
     private const val KEY_NAV_APP_LABEL = "nav_app_label"
 
     const val DISPLAY_ID_AUTO = -1
     const val CONTAINER_MIN_SIZE_PX = 150f
     const val SPEED_LIMIT_ALERT_THRESHOLD_MAX = 20
+    const val TIMEOUT_MAX = 360
+    const val SPEED_CORRECTION_MIN = -10
+    const val SPEED_CORRECTION_MAX = 10
 
     fun isEnabled(context: Context): Boolean {
         return prefs(context).getBoolean(KEY_ENABLED, false)
@@ -66,6 +98,14 @@ object OverlayPrefs {
         return PointF(x, y)
     }
 
+    fun arrowPositionDp(context: Context): PointF {
+        val prefs = prefs(context)
+        val defaultPos = navPositionDp(context)
+        val x = prefs.getFloat(KEY_ARROW_X_DP, defaultPos.x)
+        val y = prefs.getFloat(KEY_ARROW_Y_DP, defaultPos.y)
+        return PointF(x, y)
+    }
+
     fun containerPositionDp(context: Context): PointF {
         val prefs = prefs(context)
         val x = prefs.getFloat(KEY_CONTAINER_X_DP, 16f)
@@ -87,6 +127,13 @@ object OverlayPrefs {
             .apply()
     }
 
+    fun setArrowPositionDp(context: Context, xDp: Float, yDp: Float) {
+        prefs(context).edit()
+            .putFloat(KEY_ARROW_X_DP, xDp)
+            .putFloat(KEY_ARROW_Y_DP, yDp)
+            .apply()
+    }
+
     fun speedPositionDp(context: Context): PointF {
         val prefs = prefs(context)
         val containerWidthDp = containerSizeDp(context).x
@@ -100,6 +147,59 @@ object OverlayPrefs {
         prefs(context).edit()
             .putFloat(KEY_SPEED_X_DP, xDp)
             .putFloat(KEY_SPEED_Y_DP, yDp)
+            .apply()
+    }
+
+    fun hudSpeedPositionDp(context: Context): PointF {
+        val prefs = prefs(context)
+        val containerWidthDp = containerSizeDp(context).x
+        val defaultX = (containerWidthDp - HUD_SPEED_BLOCK_SIZE_DP - DEFAULT_MARGIN_DP).coerceAtLeast(0f)
+        val defaultY = (DEFAULT_MARGIN_DP + SPEED_BLOCK_SIZE_DP + HUD_SPEED_BLOCK_GAP_DP).coerceAtLeast(0f)
+        val x = prefs.getFloat(KEY_HUDSPEED_X_DP, defaultX)
+        val y = prefs.getFloat(KEY_HUDSPEED_Y_DP, defaultY)
+        return PointF(x, y)
+    }
+
+    fun setHudSpeedPositionDp(context: Context, xDp: Float, yDp: Float) {
+        prefs(context).edit()
+            .putFloat(KEY_HUDSPEED_X_DP, xDp)
+            .putFloat(KEY_HUDSPEED_Y_DP, yDp)
+            .apply()
+    }
+
+    fun roadCameraPositionDp(context: Context): PointF {
+        val prefs = prefs(context)
+        val hudSpeedPos = hudSpeedPositionDp(context)
+        val defaultX = hudSpeedPos.x
+        val defaultY = (hudSpeedPos.y + HUD_SPEED_BLOCK_SIZE_DP + ROAD_CAMERA_BLOCK_GAP_DP)
+            .coerceAtLeast(0f)
+        val x = prefs.getFloat(KEY_ROAD_CAMERA_X_DP, defaultX)
+        val y = prefs.getFloat(KEY_ROAD_CAMERA_Y_DP, defaultY)
+        return PointF(x, y)
+    }
+
+    fun setRoadCameraPositionDp(context: Context, xDp: Float, yDp: Float) {
+        prefs(context).edit()
+            .putFloat(KEY_ROAD_CAMERA_X_DP, xDp)
+            .putFloat(KEY_ROAD_CAMERA_Y_DP, yDp)
+            .apply()
+    }
+
+    fun trafficLightPositionDp(context: Context): PointF {
+        val prefs = prefs(context)
+        val hudSpeedPos = hudSpeedPositionDp(context)
+        val defaultX = hudSpeedPos.x
+        val defaultY = (hudSpeedPos.y + HUD_SPEED_BLOCK_SIZE_DP + TRAFFIC_LIGHT_BLOCK_GAP_DP)
+            .coerceAtLeast(0f)
+        val x = prefs.getFloat(KEY_TRAFFIC_LIGHT_X_DP, defaultX)
+        val y = prefs.getFloat(KEY_TRAFFIC_LIGHT_Y_DP, defaultY)
+        return PointF(x, y)
+    }
+
+    fun setTrafficLightPositionDp(context: Context, xDp: Float, yDp: Float) {
+        prefs(context).edit()
+            .putFloat(KEY_TRAFFIC_LIGHT_X_DP, xDp)
+            .putFloat(KEY_TRAFFIC_LIGHT_Y_DP, yDp)
             .apply()
     }
 
@@ -145,6 +245,26 @@ object OverlayPrefs {
             .apply()
     }
 
+    fun navTextScale(context: Context): Float {
+        return prefs(context).getFloat(KEY_NAV_TEXT_SCALE, 1f)
+    }
+
+    fun setNavTextScale(context: Context, scale: Float) {
+        prefs(context).edit()
+            .putFloat(KEY_NAV_TEXT_SCALE, scale)
+            .apply()
+    }
+
+    fun arrowScale(context: Context): Float {
+        return prefs(context).getFloat(KEY_ARROW_SCALE, 1f)
+    }
+
+    fun setArrowScale(context: Context, scale: Float) {
+        prefs(context).edit()
+            .putFloat(KEY_ARROW_SCALE, scale)
+            .apply()
+    }
+
     fun speedScale(context: Context): Float {
         return prefs(context).getFloat(KEY_SPEED_SCALE, 1f)
     }
@@ -152,6 +272,36 @@ object OverlayPrefs {
     fun setSpeedScale(context: Context, scale: Float) {
         prefs(context).edit()
             .putFloat(KEY_SPEED_SCALE, scale)
+            .apply()
+    }
+
+    fun hudSpeedScale(context: Context): Float {
+        return prefs(context).getFloat(KEY_HUDSPEED_SCALE, 1f)
+    }
+
+    fun setHudSpeedScale(context: Context, scale: Float) {
+        prefs(context).edit()
+            .putFloat(KEY_HUDSPEED_SCALE, scale)
+            .apply()
+    }
+
+    fun roadCameraScale(context: Context): Float {
+        return prefs(context).getFloat(KEY_ROAD_CAMERA_SCALE, 1f)
+    }
+
+    fun setRoadCameraScale(context: Context, scale: Float) {
+        prefs(context).edit()
+            .putFloat(KEY_ROAD_CAMERA_SCALE, scale)
+            .apply()
+    }
+
+    fun trafficLightScale(context: Context): Float {
+        return prefs(context).getFloat(KEY_TRAFFIC_LIGHT_SCALE, 1f)
+    }
+
+    fun setTrafficLightScale(context: Context, scale: Float) {
+        prefs(context).edit()
+            .putFloat(KEY_TRAFFIC_LIGHT_SCALE, scale)
             .apply()
     }
 
@@ -185,6 +335,16 @@ object OverlayPrefs {
             .apply()
     }
 
+    fun arrowAlpha(context: Context): Float {
+        return prefs(context).getFloat(KEY_ARROW_ALPHA, 1f)
+    }
+
+    fun setArrowAlpha(context: Context, alpha: Float) {
+        prefs(context).edit()
+            .putFloat(KEY_ARROW_ALPHA, alpha)
+            .apply()
+    }
+
     fun speedAlpha(context: Context): Float {
         return prefs(context).getFloat(KEY_SPEED_ALPHA, 1f)
     }
@@ -192,6 +352,36 @@ object OverlayPrefs {
     fun setSpeedAlpha(context: Context, alpha: Float) {
         prefs(context).edit()
             .putFloat(KEY_SPEED_ALPHA, alpha)
+            .apply()
+    }
+
+    fun hudSpeedAlpha(context: Context): Float {
+        return prefs(context).getFloat(KEY_HUDSPEED_ALPHA, 1f)
+    }
+
+    fun setHudSpeedAlpha(context: Context, alpha: Float) {
+        prefs(context).edit()
+            .putFloat(KEY_HUDSPEED_ALPHA, alpha)
+            .apply()
+    }
+
+    fun roadCameraAlpha(context: Context): Float {
+        return prefs(context).getFloat(KEY_ROAD_CAMERA_ALPHA, 1f)
+    }
+
+    fun setRoadCameraAlpha(context: Context, alpha: Float) {
+        prefs(context).edit()
+            .putFloat(KEY_ROAD_CAMERA_ALPHA, alpha)
+            .apply()
+    }
+
+    fun trafficLightAlpha(context: Context): Float {
+        return prefs(context).getFloat(KEY_TRAFFIC_LIGHT_ALPHA, 1f)
+    }
+
+    fun setTrafficLightAlpha(context: Context, alpha: Float) {
+        prefs(context).edit()
+            .putFloat(KEY_TRAFFIC_LIGHT_ALPHA, alpha)
             .apply()
     }
 
@@ -250,6 +440,27 @@ object OverlayPrefs {
             .apply()
     }
 
+    fun arrowEnabled(context: Context): Boolean {
+        return prefs(context).getBoolean(KEY_ARROW_ENABLED, false)
+    }
+
+    fun setArrowEnabled(context: Context, enabled: Boolean) {
+        prefs(context).edit()
+            .putBoolean(KEY_ARROW_ENABLED, enabled)
+            .apply()
+    }
+
+    fun arrowOnlyWhenNoIcon(context: Context): Boolean {
+        return prefs(context).getBoolean(KEY_ARROW_ONLY_WHEN_NO_ICON, false)
+    }
+
+    fun setArrowOnlyWhenNoIcon(context: Context, enabled: Boolean) {
+        prefs(context).edit()
+            .putBoolean(KEY_ARROW_ONLY_WHEN_NO_ICON, enabled)
+            .apply()
+    }
+
+
     fun speedEnabled(context: Context): Boolean {
         return prefs(context).getBoolean(KEY_SPEED_ENABLED, true)
     }
@@ -257,6 +468,57 @@ object OverlayPrefs {
     fun setSpeedEnabled(context: Context, enabled: Boolean) {
         prefs(context).edit()
             .putBoolean(KEY_SPEED_ENABLED, enabled)
+            .apply()
+    }
+
+    fun speedLimitFromHudSpeed(context: Context): Boolean {
+        return prefs(context).getBoolean(KEY_SPEED_LIMIT_FROM_HUDSPEED, false)
+    }
+
+    fun setSpeedLimitFromHudSpeed(context: Context, enabled: Boolean) {
+        prefs(context).edit()
+            .putBoolean(KEY_SPEED_LIMIT_FROM_HUDSPEED, enabled)
+            .apply()
+    }
+
+    fun hudSpeedEnabled(context: Context): Boolean {
+        return prefs(context).getBoolean(KEY_HUDSPEED_ENABLED, true)
+    }
+
+    fun setHudSpeedEnabled(context: Context, enabled: Boolean) {
+        prefs(context).edit()
+            .putBoolean(KEY_HUDSPEED_ENABLED, enabled)
+            .apply()
+    }
+
+    fun roadCameraEnabled(context: Context): Boolean {
+        return prefs(context).getBoolean(KEY_ROAD_CAMERA_ENABLED, true)
+    }
+
+    fun setRoadCameraEnabled(context: Context, enabled: Boolean) {
+        prefs(context).edit()
+            .putBoolean(KEY_ROAD_CAMERA_ENABLED, enabled)
+            .apply()
+    }
+
+    fun trafficLightEnabled(context: Context): Boolean {
+        return prefs(context).getBoolean(KEY_TRAFFIC_LIGHT_ENABLED, true)
+    }
+
+    fun setTrafficLightEnabled(context: Context, enabled: Boolean) {
+        prefs(context).edit()
+            .putBoolean(KEY_TRAFFIC_LIGHT_ENABLED, enabled)
+            .apply()
+    }
+
+    fun trafficLightMaxActive(context: Context): Int {
+        val value = prefs(context).getInt(KEY_TRAFFIC_LIGHT_MAX_ACTIVE, 3)
+        return value.coerceAtLeast(1)
+    }
+
+    fun setTrafficLightMaxActive(context: Context, maxActive: Int) {
+        prefs(context).edit()
+            .putInt(KEY_TRAFFIC_LIGHT_MAX_ACTIVE, maxActive.coerceAtLeast(1))
             .apply()
     }
 
@@ -301,6 +563,60 @@ object OverlayPrefs {
             .apply()
     }
 
+    fun nativeNavEnabled(context: Context): Boolean {
+        return prefs(context).getBoolean(KEY_NATIVE_NAV_ENABLED, false)
+    }
+
+    fun setNativeNavEnabled(context: Context, enabled: Boolean) {
+        prefs(context).edit()
+            .putBoolean(KEY_NATIVE_NAV_ENABLED, enabled)
+            .apply()
+    }
+
+    fun cameraTimeoutNear(context: Context): Int {
+        return prefs(context).getInt(KEY_CAMERA_TIMEOUT_NEAR, 0)
+            .coerceIn(0, TIMEOUT_MAX)
+    }
+
+    fun setCameraTimeoutNear(context: Context, timeout: Int) {
+        prefs(context).edit()
+            .putInt(KEY_CAMERA_TIMEOUT_NEAR, timeout.coerceIn(0, TIMEOUT_MAX))
+            .apply()
+    }
+
+    fun cameraTimeoutFar(context: Context): Int {
+        return prefs(context).getInt(KEY_CAMERA_TIMEOUT_FAR, 0)
+            .coerceIn(0, TIMEOUT_MAX)
+    }
+
+    fun setCameraTimeoutFar(context: Context, timeout: Int) {
+        prefs(context).edit()
+            .putInt(KEY_CAMERA_TIMEOUT_FAR, timeout.coerceIn(0, TIMEOUT_MAX))
+            .apply()
+    }
+
+    fun trafficLightTimeout(context: Context): Int {
+        return prefs(context).getInt(KEY_TRAFFIC_LIGHT_TIMEOUT, 0)
+            .coerceIn(0, TIMEOUT_MAX)
+    }
+
+    fun setTrafficLightTimeout(context: Context, timeout: Int) {
+        prefs(context).edit()
+            .putInt(KEY_TRAFFIC_LIGHT_TIMEOUT, timeout.coerceIn(0, TIMEOUT_MAX))
+            .apply()
+    }
+
+    fun speedCorrection(context: Context): Int {
+        return prefs(context).getInt(KEY_SPEED_CORRECTION, 0)
+            .coerceIn(SPEED_CORRECTION_MIN, SPEED_CORRECTION_MAX)
+    }
+
+    fun setSpeedCorrection(context: Context, correction: Int) {
+        prefs(context).edit()
+            .putInt(KEY_SPEED_CORRECTION, correction.coerceIn(SPEED_CORRECTION_MIN, SPEED_CORRECTION_MAX))
+            .apply()
+    }
+
     fun navAppPackage(context: Context): String {
         return prefs(context).getString(KEY_NAV_APP_PACKAGE, "").orEmpty()
     }
@@ -336,6 +652,10 @@ object OverlayPrefs {
     }
 
     private const val SPEED_BLOCK_SIZE_DP = 40f
+    private const val HUD_SPEED_BLOCK_SIZE_DP = 48f
+    private const val HUD_SPEED_BLOCK_GAP_DP = 8f
+    private const val ROAD_CAMERA_BLOCK_GAP_DP = 8f
+    private const val TRAFFIC_LIGHT_BLOCK_GAP_DP = 8f
     private const val SPEEDOMETER_BLOCK_HEIGHT_DP = 32f
     private const val CLOCK_BLOCK_HEIGHT_DP = 24f
     private const val DEFAULT_MARGIN_DP = 16f

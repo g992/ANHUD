@@ -2,7 +2,17 @@
     <string name="app_name">ANHUD</string>
     <string name="logs_title">Логи</string>
     <string name="logs_button">Логи</string>
+    <string name="logs_button_content_desc">Открыть логи</string>
     <string name="logs_back_button">Назад</string>
+    <string name="donate_button_content_desc">Поддержать проект</string>
+    <string name="donate_thanks_text">Отдельное спасибо dizz74 (GeeOption) за помощь в исследовании функционала штатной навигации</string>
+    <string name="donate_support_text">Вы можете поддержать проект, перейдя по QR-коду.</string>
+    <string name="donate_qr_content_desc">QR-код для доната</string>
+    <string name="donate_dialog_close">Закрыть</string>
+    <string name="maneuver_settings_content_desc">Настройки сопоставления маневров</string>
+    <string name="maneuver_match_title">Сопоставление маневров</string>
+    <string name="maneuver_match_right_placeholder">Правая колонка будет добавлена позже.</string>
+    <string name="maneuver_icon_content_desc">Иконка маневра</string>
     <string name="sensors_title">Датчики</string>
     <string name="navigation_title">Навигация</string>
     <string name="system_title">Система</string>
@@ -16,8 +26,13 @@
     <string name="overlay_permission_missing">Разрешение на оверлей: нет</string>
     <string name="overlay_permission_button">Разрешить оверлей</string>
     <string name="overlay_enable_label">Показывать HUD</string>
+    <string name="native_nav_enable_label">Использовать штатную навигацию</string>
+    <string name="native_nav_stop_button">Завершить навигацию</string>
     <string name="nav_app_section_title">Привязка навигатора</string>
-    <string name="nav_app_hint">Нужно только для сброса статуса навигации при открытии или закрытии приложения.</string>
+    <string name="nav_app_hint">Привязка нужна для сброса статуса навигации.</string>
+    <string name="notification_permission_granted">Доступ к уведомлениям: включен</string>
+    <string name="notification_permission_missing">Доступ к уведомлениям нужен для определения конца навигации.</string>
+    <string name="notification_permission_button">Разрешить доступ к уведомлениям</string>
     <string name="nav_app_bind_button">Привязать навигатор</string>
     <string name="nav_app_not_selected">Не выбрано</string>
     <string name="nav_app_picker_title">Выберите навигатор</string>
@@ -32,11 +47,16 @@
     <string name="position_blocks_hint">Нажмите блок, чтобы открыть настройку положения.</string>
     <string name="position_container_label">Контейнер HUD</string>
     <string name="position_nav_block_label">Блок навигации</string>
+    <string name="position_arrow_block_label">Блок стрелки</string>
     <string name="position_speed_block_label">Ограничитель скорости</string>
+    <string name="position_hudspeed_block_label">Блок HUD Speed</string>
+    <string name="position_road_camera_block_label">Блок камер Яндекс Навигатора</string>
+    <string name="position_traffic_light_block_label">Блок светофоров</string>
     <string name="position_speedometer_block_label">Спидометр</string>
     <string name="position_clock_block_label">Блок часов</string>
     <string name="projection_toggle_label">Проекция</string>
     <string name="position_scale_label">Масштаб</string>
+    <string name="position_nav_text_scale_label">Размер шрифта навигации</string>
     <string name="position_brightness_label">Яркость</string>
     <string name="position_container_width_label">Ширина</string>
     <string name="position_container_height_label">Высота</string>
@@ -46,9 +66,12 @@
     <string name="nav_scale_label">Масштаб блока навигации</string>
     <string name="speed_scale_label">Масштаб ограничителя скорости</string>
     <string name="speed_limit_alert_enable">Индикация превышения скорости</string>
+    <string name="speed_limit_from_hudspeed_label">Брать ограничение из HUD Speed</string>
     <string name="speed_limit_alert_threshold_label">Порог индикации превышения</string>
     <string name="speed_limit_alert_threshold_value">+%1$d км/ч</string>
     <string name="speed_limit_alert_threshold_default">+0 км/ч</string>
+    <string name="arrow_only_when_no_icon_label">Отображать только при отсутствии иконки</string>
+    <string name="arrow_only_when_no_icon_desc">При включении блок работает только при штатной навигации и когда приходит стрелка, которой нет в штатном навигаторе.</string>
     <string name="scale_percent_default">100%</string>
     <string name="scale_percent_format">%1$d%%</string>
     <string name="preview_direction_label">Стрелка</string>
@@ -58,6 +81,24 @@
     <string name="preview_speed_limit_text">100</string>
     <string name="preview_speedometer_text">88</string>
     <string name="preview_clock_text">12:34</string>
+    <string name="preview_hudspeed_distance">500м</string>
+    <string name="preview_road_camera_distance">460м</string>
+    <string name="preview_traffic_light_countdown">30</string>
+    <string name="traffic_light_max_active_label">Максимум активных светофоров</string>
+    <string name="traffic_light_max_active_value">%1$d</string>
     <string name="display_auto_option">Авто (если доступна презентация)</string>
     <string name="display_option_label">Экран %1$d: %2$s %3$dx%4$d</string>
+
+    <string name="tab_general_settings">Общие настройки</string>
+    <string name="tab_nav_settings">Повороты навигатора</string>
+    <string name="tab_debug">Отладка</string>
+
+    <string name="camera_timeout_near_label">Таймаут камер (расстояние &lt; 50м)</string>
+    <string name="camera_timeout_far_label">Таймаут камер (расстояние ≥ 50м)</string>
+    <string name="camera_timeout_hint">0 - отключить таймаут, 1-360 секунд</string>
+    <string name="traffic_light_timeout_label">Таймаут светофоров</string>
+    <string name="traffic_light_timeout_hint">0 - отключить, 1-360 секунд. Скрывает светофор при отсутствии данных</string>
+    <string name="speed_correction_label">Корректировка скорости спидометра</string>
+    <string name="speed_correction_value">%1$+d км/ч</string>
+    <string name="timeout_seconds">%1$d сек</string>
 </resources>

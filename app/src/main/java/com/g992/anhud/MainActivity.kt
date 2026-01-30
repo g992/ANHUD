@@ -68,6 +68,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var speedLimitAlertThresholdSeek: SeekBar
     private lateinit var speedLimitAlertThresholdValue: TextView
     private lateinit var logsButton: Button
+    private lateinit var settingsButton: Button
     private lateinit var navAppButton: Button
     private lateinit var navAppSelected: TextView
 
@@ -103,11 +104,15 @@ class MainActivity : AppCompatActivity() {
         speedLimitAlertThresholdSeek = findViewById(R.id.speedLimitAlertThresholdSeek)
         speedLimitAlertThresholdValue = findViewById(R.id.speedLimitAlertThresholdValue)
         logsButton = findViewById(R.id.btnLogs)
+        settingsButton = findViewById(R.id.btnSettings)
         navAppButton = findViewById(R.id.navAppButton)
         navAppSelected = findViewById(R.id.navAppSelected)
 
         logsButton.setOnClickListener {
             startActivity(Intent(this, LogsActivity::class.java))
+        }
+        settingsButton.setOnClickListener {
+            startActivity(Intent(this, SettingsActivity::class.java))
         }
 
         requestPermissionButton.setOnClickListener {

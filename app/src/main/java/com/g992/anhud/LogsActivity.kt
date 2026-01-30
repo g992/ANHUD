@@ -5,12 +5,11 @@ import android.view.View
 import android.widget.ScrollView
 import android.widget.TextView
 import androidx.activity.enableEdgeToEdge
-import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import java.util.EnumMap
 
-class LogsActivity : AppCompatActivity() {
+class LogsActivity : ScaledActivity() {
     private data class LogSection(
         val scrollView: ScrollView,
         val textView: TextView

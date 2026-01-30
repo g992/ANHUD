@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android" xmlns:aapt="http://schemas.android.com/aapt"
+    android:name="context_lane_bus_ru"
+    android:height="40dp"
+    android:width="36dp"
+    android:viewportWidth="36"
+    android:viewportHeight="40">
+    <path
+        android:name="a"
+        android:fillColor="#ffffffff"
+        android:pathData="M 16.8,27 L 19.19,27 L 23,38 L 21.12,38 L 20.13,35.12 L 15.6,35.12 L 14.61,38 L 13,38 L 16.8,27 ZM 19.58,33.52 L 17.86,28.56 L 16.15,33.52 L 19.58,33.52 Z"
+        android:fillType="evenOdd"/>
+</vector>

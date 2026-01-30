@@ -4,9 +4,8 @@ import android.os.Bundle
 import android.view.View
 import android.widget.ScrollView
 import android.widget.TextView
-import androidx.appcompat.app.AppCompatActivity
 
-class SensorsActivity : AppCompatActivity() {
+class SensorsActivity : ScaledActivity() {
     private lateinit var logScroll: ScrollView
     private lateinit var logText: TextView
     private val logListener = object : UiLogStore.Listener {

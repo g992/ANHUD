@@ -12,6 +12,7 @@ class HudStatusReceiver : BroadcastReceiver() {
             return
         }
         val enabled = parseBooleanExtra(intent, EXTRA_ENABLE)
+        val stopNavigation = parseBooleanExtra(intent, EXTRA_STOP_NAVIGATION)
         val navEnabled = parseBooleanExtra(intent, EXTRA_NAV_ENABLED)
         val speedEnabled = parseBooleanExtra(intent, EXTRA_SPEED_ENABLED)
         val speedLimitAlertEnabled = parseBooleanExtra(intent, EXTRA_SPEED_LIMIT_ALERT_ENABLED)
@@ -31,7 +32,18 @@ class HudStatusReceiver : BroadcastReceiver() {
                 LogCategory.SYSTEM,
                 if (effectiveEnabled) "HUD enabled via intent" else "HUD disabled via intent"
             )
+
+            // When disabling HUD, also stop any active navigation
+            if (!effectiveEnabled) {
+                stopActiveNavigation(context)
+            }
         }
+
+        // Handle explicit stop navigation request
+        if (stopNavigation == true) {
+            stopActiveNavigation(context)
+        }
+
         if (navEnabled != null) {
             OverlayPrefs.setNavEnabled(context, navEnabled)
         }
@@ -137,9 +149,27 @@ class HudStatusReceiver : BroadcastReceiver() {
         }
     }
 
+    private fun stopActiveNavigation(context: Context) {
+        // Stop native navigation if it's enabled and active
+        if (OverlayPrefs.nativeNavEnabled(context) && NativeNavigationController.isActive()) {
+            NativeNavigationController.stopNavigation(context)
+            UiLogStore.append(LogCategory.NAVIGATION, "Штатная навигация остановлена через intent")
+        }
+
+        // Clear navigation HUD store
+        NavigationHudStore.reset("G992.ANHUD.STATUS", preserveSpeedLimit = true)
+        UiLogStore.append(LogCategory.NAVIGATION, "Маршрут завершен через intent")
+
+        // Send broadcast to clear overlay display
+        val clearIntent = Intent(OverlayBroadcasts.ACTION_CLEAR_NAVIGATION)
+            .setPackage(context.packageName)
+        context.sendBroadcast(clearIntent)
+    }
+
     companion object {
         const val ACTION_ANHUD_STATUS = "G992.ANHUD.STATUS"
         const val EXTRA_ENABLE = "ENABLE"
+        const val EXTRA_STOP_NAVIGATION = "STOP_NAVIGATION"
         const val EXTRA_NAV_ENABLED = "NAV"
         const val EXTRA_SPEED_ENABLED = "SPEED_LIMIT"
         const val EXTRA_SPEED_LIMIT_ALERT_ENABLED = "SPEED_ALERT"

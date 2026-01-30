@@ -2,6 +2,16 @@ package com.g992.anhud
 
 import android.graphics.Bitmap
 
+data class TrafficLightInfo(
+    val id: Int,
+    val color: String,
+    val countdownText: String,
+    val arrowBitmap: Bitmap?,
+    val arrowDirection: String,
+    val lastUpdated: Long,
+    val expiresAt: Long
+)
+
 data class NavigationHudState(
     val primaryText: String = "",
     val secondaryText: String = "",
@@ -13,6 +23,7 @@ data class NavigationHudState(
     val trafficLight: String = "",
     val trafficCountdown: String = "",
     val maneuverBitmap: Bitmap? = null,
+    val maneuverType: String = "",
     val source: String = "",
     val routeActive: Boolean? = null,
     val lastUpdated: Long = 0L,
@@ -28,7 +39,20 @@ data class NavigationHudState(
     val rawTitle: String = "",
     val rawText: String = "",
     val rawSubtext: String = "",
-    val distanceUnit: String = ""
+    val distanceUnit: String = "",
+    val nativeTurnId: Int? = null,
+    val hudSpeedHasCamera: Boolean = false,
+    val hudSpeedDistanceMeters: Int? = null,
+    val hudSpeedCamType: Int? = null,
+    val hudSpeedCamFlag: Int? = null,
+    val hudSpeedLimit1: Int? = null,
+    val hudSpeedUpdatedAt: Long = 0L,
+    val roadCameraId: String? = null,
+    val roadCameraDistance: String? = null,
+    val roadCameraIcon: Bitmap? = null,
+    val trafficLightColor: String = "",
+    val trafficLightCountdown: String = "",
+    val trafficLights: List<TrafficLightInfo> = emptyList()
 ) {
     fun isEmpty(): Boolean {
         return primaryText.isBlank() &&
@@ -40,7 +64,10 @@ data class NavigationHudState(
             time.isBlank() &&
             trafficLight.isBlank() &&
             trafficCountdown.isBlank() &&
-            maneuverBitmap == null
+            maneuverBitmap == null &&
+            maneuverType.isBlank() &&
+            !hudSpeedHasCamera &&
+            trafficLights.isEmpty()
     }
 }
 
@@ -68,26 +95,33 @@ object NavigationHudStore {
         }
     }
 
-    fun reset(lastAction: String, timestamp: Long = System.currentTimeMillis()) {
+    fun reset(
+        lastAction: String,
+        timestamp: Long = System.currentTimeMillis(),
+        preserveSpeedLimit: Boolean = false
+    ) {
+        android.util.Log.d("NavigationHudStore", "reset() called: action=$lastAction")
         update { current ->
+            android.util.Log.d("NavigationHudStore", "Clearing all navigation data")
             current.copy(
                 primaryText = "",
                 secondaryText = "",
-                speedKmh = current.speedKmh,
-                speedLimit = "",
+                speedKmh = null,
+                speedLimit = if (preserveSpeedLimit) current.speedLimit else "",
                 arrival = "",
                 distance = "",
                 time = "",
                 trafficLight = "",
                 trafficCountdown = "",
                 maneuverBitmap = null,
+                maneuverType = "",
                 source = "",
                 routeActive = false,
                 lastUpdated = timestamp,
                 lastAction = lastAction,
                 rawNextText = "",
                 rawNextStreet = "",
-                rawSpeedLimit = "",
+                rawSpeedLimit = if (preserveSpeedLimit) current.rawSpeedLimit else "",
                 rawArrival = "",
                 rawDistance = "",
                 rawTime = "",
@@ -96,7 +130,20 @@ object NavigationHudStore {
                 rawTitle = "",
                 rawText = "",
                 rawSubtext = "",
-                distanceUnit = ""
+                distanceUnit = "",
+                nativeTurnId = null,
+                hudSpeedHasCamera = false,
+                hudSpeedDistanceMeters = null,
+                hudSpeedCamType = null,
+                hudSpeedCamFlag = null,
+                hudSpeedLimit1 = null,
+                hudSpeedUpdatedAt = 0L,
+                roadCameraId = null,
+                roadCameraDistance = null,
+                roadCameraIcon = null,
+                trafficLightColor = "",
+                trafficLightCountdown = "",
+                trafficLights = emptyList()
             )
         }
     }

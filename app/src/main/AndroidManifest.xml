@@ -52,6 +52,14 @@
             android:exported="false"
             android:label="@string/logs_title" />
         <activity
+            android:name=".SettingsActivity"
+            android:exported="false"
+            android:label="Настройки" />
+        <activity
+            android:name=".ManeuverMatchActivity"
+            android:exported="false"
+            android:label="@string/maneuver_match_title" />
+        <activity
             android:name=".SensorsActivity"
             android:exported="false"
             android:label="@string/sensors_title" />
@@ -70,6 +78,14 @@
             android:name=".NavigationService"
             android:enabled="true"
             android:exported="false" />
+        <service
+            android:name=".NavigationNotificationListener"
+            android:exported="true"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
         <service
             android:name=".SensorDataService"
             android:enabled="true"

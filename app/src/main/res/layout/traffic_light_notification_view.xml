@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content">
+
+    <FrameLayout
+        android:id="@+id/traffic_light_view"
+        android:layout_width="@dimen/traffic_light_icon_size"
+        android:layout_height="@dimen/traffic_light_icon_size"
+        android:background="@drawable/traffic_light_background_green">
+
+        <TextView
+            android:id="@+id/traffic_light_data"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:gravity="center"
+            android:text="30"
+            android:textColor="@color/white"
+            android:textSize="@dimen/traffic_light_icon_text_size"
+            android:textStyle="bold" />
+    </FrameLayout>
+
+    <LinearLayout
+        android:id="@+id/traffic_light_view_expanded"
+        android:layout_width="wrap_content"
+        android:layout_height="@dimen/traffic_light_icon_size_expanded"
+        android:layout_marginTop="8dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:visibility="gone">
+
+        <FrameLayout
+            android:id="@+id/traffic_light_view_expanded_circle"
+            android:layout_width="@dimen/traffic_light_icon_size_expanded"
+            android:layout_height="@dimen/traffic_light_icon_size_expanded"
+            android:background="@drawable/traffic_light_background_green">
+
+            <ImageView
+                android:id="@+id/traffic_light_icon_expanded"
+                android:layout_width="@dimen/traffic_light_arrow_size_expanded"
+                android:layout_height="@dimen/traffic_light_arrow_size_expanded"
+                android:contentDescription="@string/preview_direction_label"
+                android:layout_gravity="center"
+                android:scaleType="fitCenter"
+                android:src="@drawable/traffic_light_background_circle" />
+        </FrameLayout>
+
+        <TextView
+            android:id="@+id/traffic_light_data_expanded"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:gravity="center"
+            android:text="30"
+            android:textColor="@color/white"
+            android:textSize="@dimen/traffic_light_icon_text_size_expanded"
+            android:textStyle="bold" />
+    </LinearLayout>
+</FrameLayout>
