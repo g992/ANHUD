@@ -77,7 +77,6 @@
     <string name="preview_traffic_light_countdown">11</string>
     <string name="traffic_light_max_active_label">Максимум активных светофоров</string>
     <string name="traffic_light_max_active_value">%1$d</string>
-    <string name="display_auto_option">Авто (если доступна презентация)</string>
     <string name="display_option_label">Экран %1$d: %2$s %3$dx%4$d</string>
 
     <string name="tab_general_settings">Общие настройки</string>
@@ -97,9 +96,16 @@
     <string name="speed_correction_label">Корректировка скорости спидометра</string>
     <string name="speed_correction_value">%1$+d км/ч</string>
     <string name="timeout_seconds">%1$d сек</string>
+    <string name="settings_export_button">Экспорт настроек</string>
+    <string name="settings_import_button">Импорт настроек</string>
+    <string name="settings_export_success">Настройки экспортированы</string>
+    <string name="settings_export_failed">Не удалось экспортировать настройки</string>
+    <string name="settings_import_success">Настройки импортированы</string>
+    <string name="settings_import_failed">Не удалось импортировать настройки</string>
 
     <string name="help_title">Гид по приложению</string>
     <string name="help_start_guide_button">Запустить гайд на главном экране</string>
+    <string name="help_section_faq">FAQ</string>
     <string name="help_section_main">Главный экран</string>
     <string name="help_section_settings">Настройки</string>
     <string name="help_section_editor">Редактор блоков</string>
@@ -114,7 +120,7 @@
     <string name="guide_main_overlay_title">Показывать HUD</string>
     <string name="guide_main_overlay_body">Включает или выключает показ HUD поверх навигации.</string>
     <string name="guide_main_display_title">Экран отображения</string>
-    <string name="guide_main_display_body">Выберите дисплей для HUD: авто или конкретный экран.</string>
+    <string name="guide_main_display_body">Выберите дисплей для HUD. По умолчанию — экран 1 (если доступен), иначе экран 0.</string>
     <string name="guide_main_container_title">Контейнер HUD</string>
     <string name="guide_main_container_body">Границы области HUD. Нажмите, чтобы менять размер и позицию.</string>
     <string name="guide_main_nav_title">Блок навигации</string>
@@ -137,6 +143,17 @@
     <string name="guide_main_settings_body">Открывает расширенные настройки и помощь.</string>
     <string name="guide_main_donate_title">Поддержка проекта</string>
     <string name="guide_main_donate_body">Кнопка доната, если хотите поддержать разработку.</string>
+
+    <string name="guide_faq_what_am_i_installed_title">Что я установил?</string>
+    <string name="guide_faq_what_am_i_installed_body">AtlasNavigationHeadUnitDisplay - ПО для вывода информации на проекцию Geely Atlas, для корректной работы требуется специальная версия навигатора/карт, и HUD Speed (если планируется использование)</string>
+    <string name="guide_faq_overlay_title">HUD не появляется. Что делать?</string>
+    <string name="guide_faq_overlay_body">Проверьте разрешение на оверлей и включите «Показывать HUD» на главном экране. Если проблема остается - попробуйте выбрать другой дисплей на главном экране.</string>
+    <string name="guide_faq_editor_title">Как перемещать/масштабировать элементы проекции?</string>
+    <string name="guide_faq_editor_body">Откройте редактор любого блока в приложении (там по контейнеру), в открывшемся окне редактируйте масштаб, положение и доп. функции как Вам требуется.</string>
+    <string name="guide_faq_hud_speed_title">Как вывести камеры из HUD Speed?</string>
+    <string name="guide_faq_hud_speed_body">Для вывода знаков HUD Speed в контейнер данного приложения, необходим модифицированный HUD Speed Broadcast (HUD_Speed_Broadcast.apk)</string>
+    <string name="guide_faq_stock_hud_unavailable_title">Что делать если пропал штатный спидометр на проекции?</string>
+    <string name="guide_faq_stock_hud_unavailable_body">На проекцию Атласа можно вывести лишь 1 приложение, поэтому в ANHUD реализована поддержка вывода HUD Speed (модифицированного). Если нужен вывод данныхс ANHUD и стоковых данных, то требуется отключить все сторонние выводы на проецию. Если HUD Speed выводился туда с помощью Macrodroid скрипта, то требуется отключить скрипт и удалить Hud Speed с проеции ADB командой.</string>
 
     <string name="guide_settings_timeout_near_title">Таймаут камер (близко)</string>
     <string name="guide_settings_timeout_near_body">Сколько секунд держать предупреждение, если камера ближе 50 м. 0 — выключить.</string>

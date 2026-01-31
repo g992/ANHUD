@@ -88,7 +88,39 @@ object GuideContent {
         )
     )
 
+    fun faqItems(): List<GuideItem> = listOf(
+        GuideItem(
+            null,
+            R.string.guide_faq_what_am_i_installed_title,
+            R.string.guide_faq_what_am_i_installed_body
+        ),
+        GuideItem(
+            null,
+            R.string.guide_faq_overlay_title,
+            R.string.guide_faq_overlay_body
+        ),
+        GuideItem(
+            null,
+            R.string.guide_faq_editor_title,
+            R.string.guide_faq_editor_body
+        ),
+        GuideItem(
+            null,
+            R.string.guide_faq_hud_speed_title,
+            R.string.guide_faq_hud_speed_body
+        ),
+        GuideItem(
+            null,
+            R.string.guide_faq_stock_hud_unavailable_title,
+            R.string.guide_faq_stock_hud_unavailable_body
+        )
+    )
+
     fun helpSections(): List<GuideSection> = listOf(
+        GuideSection(
+            R.string.help_section_faq,
+            faqItems()
+        ),
         GuideSection(
             R.string.help_section_main,
             mainItems()

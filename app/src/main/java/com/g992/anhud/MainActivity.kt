@@ -55,6 +55,7 @@ class MainActivity : ScaledActivity() {
     private lateinit var permissionStatus: TextView
     private lateinit var requestPermissionButton: Button
     private lateinit var overlaySwitch: SwitchCompat
+    private lateinit var nativeNavSwitch: SwitchCompat
     private lateinit var settingsRoot: ScrollView
     private lateinit var displaySpinner: Spinner
     private lateinit var positionContainerCard: View
@@ -108,6 +109,7 @@ class MainActivity : ScaledActivity() {
         permissionStatus = findViewById(R.id.permissionStatus)
         requestPermissionButton = findViewById(R.id.requestPermissionButton)
         overlaySwitch = findViewById(R.id.overlaySwitch)
+        nativeNavSwitch = findViewById(R.id.nativeNavSwitch)
         displaySpinner = findViewById(R.id.displaySpinner)
         positionContainerCard = findViewById(R.id.positionContainerCard)
         positionNavCard = findViewById(R.id.positionNavCard)
@@ -165,6 +167,17 @@ class MainActivity : ScaledActivity() {
             notifyOverlaySettingsChanged()
             if (isChecked) {
                 ContextCompat.startForegroundService(this, Intent(this, HudBackgroundService::class.java))
+            }
+        }
+
+        nativeNavSwitch.isChecked = OverlayPrefs.nativeNavEnabled(this)
+        nativeNavSwitch.setOnCheckedChangeListener { _, isChecked ->
+            if (isSyncingUi) {
+                return@setOnCheckedChangeListener
+            }
+            OverlayPrefs.setNativeNavEnabled(this, isChecked)
+            if (!isChecked && NativeNavigationController.isActive()) {
+                NativeNavigationController.stopNavigation(this)
             }
         }
 
@@ -538,6 +551,7 @@ class MainActivity : ScaledActivity() {
         isSyncingUi = true
         try {
             overlaySwitch.isChecked = OverlayPrefs.isEnabled(this)
+            nativeNavSwitch.isChecked = OverlayPrefs.nativeNavEnabled(this)
             navProjectionSwitch.isChecked = OverlayPrefs.navEnabled(this)
             arrowProjectionSwitch.isChecked = OverlayPrefs.arrowEnabled(this)
             speedProjectionSwitch.isChecked = OverlayPrefs.speedEnabled(this)
@@ -628,12 +642,8 @@ class MainActivity : ScaledActivity() {
     }
 
     private fun setupDisplaySpinners() {
-        val autoOption = DisplayOption(
-            OverlayPrefs.DISPLAY_ID_AUTO,
-            getString(R.string.display_auto_option)
-        )
         val displays = HudDisplayUtils.availableDisplays(this)
-        displayOptions = listOf(autoOption) + displays.map { display ->
+        displayOptions = displays.map { display ->
             val size = HudDisplayUtils.displaySize(display)
             DisplayOption(
                 display.displayId,
@@ -654,11 +664,21 @@ class MainActivity : ScaledActivity() {
         }
         displaySpinner.adapter = buildAdapter()
 
+        val preferredDisplayId = HudDisplayUtils.preferredDisplayId(this)
         val savedDisplayId = OverlayPrefs.displayId(this)
-        val selectedIndex = displayOptions.indexOfFirst { it.id == savedDisplayId }.takeIf { it >= 0 } ?: 0
-        displaySpinner.setSelection(selectedIndex)
-        displaySpinner.post {
-            updateDisplayMetrics(displayOptions[selectedIndex].id)
+        val preferredIndex = displayOptions.indexOfFirst { it.id == preferredDisplayId }.takeIf { it >= 0 } ?: 0
+        val selectedIndex = displayOptions.indexOfFirst { it.id == savedDisplayId }.takeIf { it >= 0 } ?: preferredIndex
+        val selectedOption = displayOptions.getOrNull(selectedIndex)
+        if (selectedOption != null) {
+            displaySpinner.setSelection(selectedIndex)
+            if (savedDisplayId != selectedOption.id) {
+                OverlayPrefs.setDisplayId(this, selectedOption.id)
+            }
+            displaySpinner.post {
+                updateDisplayMetrics(selectedOption.id)
+            }
+        } else {
+            updateDisplayMetrics(preferredDisplayId)
         }
 
         displaySpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
@@ -951,7 +971,7 @@ class MainActivity : ScaledActivity() {
         val clockPosition = OverlayPrefs.clockPositionDp(this)
         val containerPosition = OverlayPrefs.containerPositionDp(this)
         val containerSize = OverlayPrefs.containerSizeDp(this)
-        val navPoint = PointF(navPosition.x, navPosition.y)
+        val navPoint = PointF(0f, navPosition.y)
         val arrowPoint = PointF(arrowPosition.x, arrowPosition.y)
         val speedPoint = PointF(speedPosition.x, speedPosition.y)
         val hudSpeedPoint = PointF(hudSpeedPosition.x, hudSpeedPosition.y)
@@ -1321,7 +1341,8 @@ class MainActivity : ScaledActivity() {
             } else {
                 previewHudContainer
             }
-            val (dpX, dpY) = positionDpFromPreview(dragContainer, view, previewX, previewY, boundsWidth, boundsHeight)
+            val (dpXRaw, dpY) = positionDpFromPreview(dragContainer, view, previewX, previewY, boundsWidth, boundsHeight)
+            val dpX = if (target == OverlayTarget.NAVIGATION) 0f else dpXRaw
             val point = PointF(dpX, dpY)
             when (target) {
                 OverlayTarget.NAVIGATION -> {
@@ -1456,7 +1477,8 @@ class MainActivity : ScaledActivity() {
                 OverlayTarget.SPEEDOMETER -> previewSpeedometer
                 OverlayTarget.CLOCK -> previewClock
                 OverlayTarget.CONTAINER -> previewHudContainer
-            }
+            },
+            lockX = target == OverlayTarget.NAVIGATION
         ) { previewX, previewY, persist ->
             updateOverlayPosition(previewX, previewY, persist)
         }
@@ -1898,6 +1920,7 @@ class MainActivity : ScaledActivity() {
     private fun setupDialogDrag(
         container: FrameLayout,
         view: View,
+        lockX: Boolean = false,
         onDrag: (Float, Float, Boolean) -> Unit
     ) {
         var dragOffsetX = 0f
@@ -1916,7 +1939,7 @@ class MainActivity : ScaledActivity() {
                     val maxY = maxPreviewY(container, v)
                     val newX = event.rawX - containerLocation[0] - dragOffsetX
                     val newY = event.rawY - containerLocation[1] - dragOffsetY
-                    v.x = min(max(newX, 0f), maxX)
+                    v.x = if (lockX) 0f else min(max(newX, 0f), maxX)
                     v.y = min(max(newY, 0f), maxY)
                     onDrag(v.x, v.y, false)
                     true

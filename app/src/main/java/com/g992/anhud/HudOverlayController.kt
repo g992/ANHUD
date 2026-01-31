@@ -77,7 +77,7 @@ class HudOverlayController(private val context: Context) {
     private var containerPositionDp: PointF = OverlayPrefs.containerPositionDp(context)
     private var containerWidthDp: Float = OverlayPrefs.containerSizeDp(context).x
     private var containerHeightDp: Float = OverlayPrefs.containerSizeDp(context).y
-    private var navPositionDp: PointF = OverlayPrefs.navPositionDp(context)
+    private var navPositionDp: PointF = OverlayPrefs.navPositionDp(context).let { PointF(0f, it.y) }
     private var arrowPositionDp: PointF = OverlayPrefs.arrowPositionDp(context)
     private var speedPositionDp: PointF = OverlayPrefs.speedPositionDp(context)
     private var hudSpeedPositionDp: PointF = OverlayPrefs.hudSpeedPositionDp(context)
@@ -384,7 +384,7 @@ class HudOverlayController(private val context: Context) {
                 this.containerHeightDp = containerHeightDp.coerceAtLeast(0f)
             }
             if (navPosition != null) {
-                navPositionDp = navPosition
+                navPositionDp = PointF(0f, navPosition.y)
             }
             if (arrowPosition != null) {
                 arrowPositionDp = arrowPosition

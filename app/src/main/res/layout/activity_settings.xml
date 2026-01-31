@@ -244,6 +244,20 @@
                     android:layout_marginTop="4dp"
                     android:max="20"
                     android:progress="10" />
+
+                <Button
+                    android:id="@+id/exportSettingsButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="24dp"
+                    android:text="@string/settings_export_button" />
+
+                <Button
+                    android:id="@+id/importSettingsButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:text="@string/settings_import_button" />
             </LinearLayout>
 
             <!-- Повороты навигатора -->

@@ -70,7 +70,6 @@ object OverlayPrefs {
     private const val KEY_SPEED_CORRECTION = "speed_correction"
     private const val KEY_GUIDE_SHOWN = "guide_shown"
 
-    const val DISPLAY_ID_AUTO = -1
     const val CONTAINER_MIN_SIZE_PX = 150f
     const val SPEED_LIMIT_ALERT_THRESHOLD_MAX = 20
     const val TIMEOUT_MAX = 360
@@ -86,7 +85,14 @@ object OverlayPrefs {
     }
 
     fun displayId(context: Context): Int {
-        return prefs(context).getInt(KEY_DISPLAY_ID, DISPLAY_ID_AUTO)
+        val prefs = prefs(context)
+        val stored = prefs.getInt(KEY_DISPLAY_ID, Int.MIN_VALUE)
+        val preferred = HudDisplayUtils.preferredDisplayId(context)
+        val resolved = if (stored >= 0) stored else preferred
+        if (resolved != stored) {
+            prefs.edit().putInt(KEY_DISPLAY_ID, resolved).apply()
+        }
+        return resolved
     }
 
     fun setDisplayId(context: Context, displayId: Int) {

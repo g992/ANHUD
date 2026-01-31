@@ -528,6 +528,15 @@ class NavigationReceiver : BroadcastReceiver() {
                 Log.d(TAG, "No navigation data yet, skipping native nav update")
                 return
             }
+            if (!NativeNavigationController.ensureInitialized(context)) {
+                Log.w(TAG, "Native nav update skipped: DIM interaction not available")
+                Log.d(
+                    TAG,
+                    "Native nav update (would send): turnId=$turnId street=$street dist=$distanceMeters " +
+                        "dest=$destinationDistanceMeters eta=$etaSeconds"
+                )
+                return
+            }
 
             if (NativeNavigationController.isActive() && lastNativeNavPayload == payload) {
                 Log.d(TAG, "Native nav update skipped (no changes)")

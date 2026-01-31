@@ -68,6 +68,11 @@ object NativeNavigationController {
         totalDistanceToDestinationMeters: Int,
         etaSeconds: Int
     ) {
+        Log.d(
+            TAG,
+            "Native nav update: turnId=$turnId street=\"$streetName\" nextDistM=$distanceToManeuverMeters " +
+                    "destDistM=$distanceToDestinationMeters totalDestDistM=$totalDistanceToDestinationMeters etaSec=$etaSeconds"
+        )
         if (!ensureInitialized(context)) {
             return
         }
@@ -115,6 +120,8 @@ object NativeNavigationController {
         } catch (e: Exception) {
             Log.w(TAG, "updateNavigationInfo failed: ${e.cause?.message ?: e.message}")
         }
+        invokeOptionalIntMethod(navi, "updateDistanceToDestination", distanceToDestinationMeters)
+        invokeOptionalIntMethod(navi, "updateTotalDistanceToDestination", totalDistanceToDestinationMeters)
     }
 
     private fun tryInitGlyDimInteraction(context: Context): Boolean {
@@ -155,6 +162,17 @@ object NativeNavigationController {
         val navi = naviInteraction ?: return
         try {
             val method = navi.javaClass.getMethod(methodName, Int::class.java)
+            method.invoke(navi, intParam)
+        } catch (e: Exception) {
+            Log.w(TAG, "$methodName failed: ${e.cause?.message ?: e.message}")
+        }
+    }
+
+    private fun invokeOptionalIntMethod(navi: Any, methodName: String, intParam: Int) {
+        try {
+            val method = navi.javaClass.methods.firstOrNull {
+                it.name == methodName && it.parameterTypes.size == 1
+            } ?: return
             method.invoke(navi, intParam)
         } catch (e: Exception) {
             Log.w(TAG, "$methodName failed: ${e.cause?.message ?: e.message}")
