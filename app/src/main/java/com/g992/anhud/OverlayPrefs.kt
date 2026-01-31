@@ -31,6 +31,7 @@ object OverlayPrefs {
     private const val KEY_CLOCK_Y_DP = "overlay_clock_y_dp"
     private const val KEY_NAV_SCALE = "overlay_nav_scale"
     private const val KEY_NAV_TEXT_SCALE = "overlay_nav_text_scale"
+    private const val KEY_SPEED_TEXT_SCALE = "overlay_speed_text_scale"
     private const val KEY_ARROW_SCALE = "overlay_arrow_scale"
     private const val KEY_SPEED_SCALE = "overlay_speed_scale"
     private const val KEY_HUDSPEED_SCALE = "overlay_hudspeed_scale"
@@ -64,7 +65,10 @@ object OverlayPrefs {
     private const val KEY_CAMERA_TIMEOUT_NEAR = "camera_timeout_near"
     private const val KEY_CAMERA_TIMEOUT_FAR = "camera_timeout_far"
     private const val KEY_TRAFFIC_LIGHT_TIMEOUT = "traffic_light_timeout"
+    private const val KEY_NAV_NOTIFICATION_END_TIMEOUT = "nav_notification_end_timeout"
+    private const val KEY_ROAD_CAMERA_TIMEOUT = "road_camera_timeout"
     private const val KEY_SPEED_CORRECTION = "speed_correction"
+    private const val KEY_GUIDE_SHOWN = "guide_shown"
 
     const val DISPLAY_ID_AUTO = -1
     const val CONTAINER_MIN_SIZE_PX = 150f
@@ -250,6 +254,16 @@ object OverlayPrefs {
     fun setNavTextScale(context: Context, scale: Float) {
         prefs(context).edit()
             .putFloat(KEY_NAV_TEXT_SCALE, scale)
+            .apply()
+    }
+
+    fun speedTextScale(context: Context): Float {
+        return prefs(context).getFloat(KEY_SPEED_TEXT_SCALE, 1f)
+    }
+
+    fun setSpeedTextScale(context: Context, scale: Float) {
+        prefs(context).edit()
+            .putFloat(KEY_SPEED_TEXT_SCALE, scale)
             .apply()
     }
 
@@ -604,6 +618,28 @@ object OverlayPrefs {
             .apply()
     }
 
+    fun navNotificationEndTimeout(context: Context): Int {
+        return prefs(context).getInt(KEY_NAV_NOTIFICATION_END_TIMEOUT, 2)
+            .coerceIn(0, TIMEOUT_MAX)
+    }
+
+    fun setNavNotificationEndTimeout(context: Context, timeout: Int) {
+        prefs(context).edit()
+            .putInt(KEY_NAV_NOTIFICATION_END_TIMEOUT, timeout.coerceIn(0, TIMEOUT_MAX))
+            .apply()
+    }
+
+    fun roadCameraTimeout(context: Context): Int {
+        return prefs(context).getInt(KEY_ROAD_CAMERA_TIMEOUT, 2)
+            .coerceIn(0, TIMEOUT_MAX)
+    }
+
+    fun setRoadCameraTimeout(context: Context, timeout: Int) {
+        prefs(context).edit()
+            .putInt(KEY_ROAD_CAMERA_TIMEOUT, timeout.coerceIn(0, TIMEOUT_MAX))
+            .apply()
+    }
+
     fun speedCorrection(context: Context): Int {
         return prefs(context).getInt(KEY_SPEED_CORRECTION, 0)
             .coerceIn(SPEED_CORRECTION_MIN, SPEED_CORRECTION_MAX)
@@ -612,6 +648,16 @@ object OverlayPrefs {
     fun setSpeedCorrection(context: Context, correction: Int) {
         prefs(context).edit()
             .putInt(KEY_SPEED_CORRECTION, correction.coerceIn(SPEED_CORRECTION_MIN, SPEED_CORRECTION_MAX))
+            .apply()
+    }
+
+    fun guideShown(context: Context): Boolean {
+        return prefs(context).getBoolean(KEY_GUIDE_SHOWN, false)
+    }
+
+    fun setGuideShown(context: Context, shown: Boolean) {
+        prefs(context).edit()
+            .putBoolean(KEY_GUIDE_SHOWN, shown)
             .apply()
     }
 

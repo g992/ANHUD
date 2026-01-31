@@ -21,18 +21,24 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import com.google.android.material.tabs.TabLayout
 import java.util.EnumMap
+import kotlin.math.roundToInt
 
 class SettingsActivity : ScaledActivity() {
     private lateinit var tabLayout: TabLayout
     private lateinit var tabGeneralContent: View
     private lateinit var tabManeuverContent: View
     private lateinit var tabDebugContent: View
+    private lateinit var tabHelpContent: View
     private lateinit var cameraTimeoutNearInput: EditText
     private lateinit var cameraTimeoutFarInput: EditText
     private lateinit var trafficLightTimeoutInput: EditText
+    private lateinit var roadCameraTimeoutInput: EditText
+    private lateinit var navNotificationEndTimeoutInput: EditText
     private lateinit var speedCorrectionSeek: SeekBar
     private lateinit var speedCorrectionValue: TextView
     private lateinit var maneuverRowContainer: LinearLayout
+    private lateinit var helpListContainer: LinearLayout
+    private lateinit var helpStartGuideButton: View
 
     private var isSyncingUi = false
 
@@ -72,17 +78,23 @@ class SettingsActivity : ScaledActivity() {
         tabGeneralContent = findViewById(R.id.tabGeneralContent)
         tabManeuverContent = findViewById(R.id.tabManeuverContent)
         tabDebugContent = findViewById(R.id.tabDebugContent)
+        tabHelpContent = findViewById(R.id.tabHelpContent)
         cameraTimeoutNearInput = findViewById(R.id.cameraTimeoutNearInput)
         cameraTimeoutFarInput = findViewById(R.id.cameraTimeoutFarInput)
         trafficLightTimeoutInput = findViewById(R.id.trafficLightTimeoutInput)
+        roadCameraTimeoutInput = findViewById(R.id.roadCameraTimeoutInput)
+        navNotificationEndTimeoutInput = findViewById(R.id.navNotificationEndTimeoutInput)
         speedCorrectionSeek = findViewById(R.id.speedCorrectionSeek)
         speedCorrectionValue = findViewById(R.id.speedCorrectionValue)
         maneuverRowContainer = findViewById(R.id.maneuverRowContainer)
+        helpListContainer = findViewById(R.id.helpListContainer)
+        helpStartGuideButton = findViewById(R.id.helpStartGuideButton)
 
         setupTabs()
         setupGeneralSettings()
         setupManeuverTab()
         setupDebugTab()
+        setupHelpTab()
         syncUiFromPrefs()
     }
 
@@ -95,6 +107,7 @@ class SettingsActivity : ScaledActivity() {
         tabLayout.addTab(tabLayout.newTab().setText(R.string.tab_general_settings))
         tabLayout.addTab(tabLayout.newTab().setText(R.string.tab_nav_settings))
         tabLayout.addTab(tabLayout.newTab().setText(R.string.tab_debug))
+        tabLayout.addTab(tabLayout.newTab().setText(R.string.tab_help))
 
         tabLayout.addOnTabSelectedListener(object : TabLayout.OnTabSelectedListener {
             override fun onTabSelected(tab: TabLayout.Tab) {
@@ -103,16 +116,25 @@ class SettingsActivity : ScaledActivity() {
                         tabGeneralContent.visibility = View.VISIBLE
                         tabManeuverContent.visibility = View.GONE
                         tabDebugContent.visibility = View.GONE
+                        tabHelpContent.visibility = View.GONE
                     }
                     1 -> {
                         tabGeneralContent.visibility = View.GONE
                         tabManeuverContent.visibility = View.VISIBLE
                         tabDebugContent.visibility = View.GONE
+                        tabHelpContent.visibility = View.GONE
                     }
                     2 -> {
                         tabGeneralContent.visibility = View.GONE
                         tabManeuverContent.visibility = View.GONE
                         tabDebugContent.visibility = View.VISIBLE
+                        tabHelpContent.visibility = View.GONE
+                    }
+                    3 -> {
+                        tabGeneralContent.visibility = View.GONE
+                        tabManeuverContent.visibility = View.GONE
+                        tabDebugContent.visibility = View.GONE
+                        tabHelpContent.visibility = View.VISIBLE
                     }
                 }
             }
@@ -153,6 +175,28 @@ class SettingsActivity : ScaledActivity() {
                 val value = s?.toString()?.toIntOrNull() ?: 0
                 val clamped = value.coerceIn(0, OverlayPrefs.TIMEOUT_MAX)
                 OverlayPrefs.setTrafficLightTimeout(this@SettingsActivity, clamped)
+            }
+        })
+
+        roadCameraTimeoutInput.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+            override fun afterTextChanged(s: Editable?) {
+                if (isSyncingUi) return
+                val value = s?.toString()?.toIntOrNull() ?: 0
+                val clamped = value.coerceIn(0, OverlayPrefs.TIMEOUT_MAX)
+                OverlayPrefs.setRoadCameraTimeout(this@SettingsActivity, clamped)
+            }
+        })
+
+        navNotificationEndTimeoutInput.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+            override fun afterTextChanged(s: Editable?) {
+                if (isSyncingUi) return
+                val value = s?.toString()?.toIntOrNull() ?: 0
+                val clamped = value.coerceIn(0, OverlayPrefs.TIMEOUT_MAX)
+                OverlayPrefs.setNavNotificationEndTimeout(this@SettingsActivity, clamped)
             }
         })
 
@@ -223,12 +267,62 @@ class SettingsActivity : ScaledActivity() {
         UiLogStore.registerListener(logListener)
     }
 
+    private fun setupHelpTab() {
+        helpListContainer.removeAllViews()
+        val inflater = LayoutInflater.from(this)
+        val sectionSpacing = dp(16)
+        val itemSpacing = dp(8)
+        for ((sectionIndex, section) in GuideContent.helpSections().withIndex()) {
+            val titleView = TextView(this).apply {
+                setText(section.titleRes)
+                setTextColor(getColor(R.color.white))
+                textSize = 18f
+                setTypeface(typeface, android.graphics.Typeface.BOLD)
+            }
+            val titleParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            )
+            if (sectionIndex > 0) {
+                titleParams.topMargin = sectionSpacing
+            }
+            helpListContainer.addView(titleView, titleParams)
+
+            section.items.forEach { item ->
+                val row = inflater.inflate(R.layout.item_help_entry, helpListContainer, false)
+                row.findViewById<TextView>(R.id.helpItemTitle).setText(item.titleRes)
+                row.findViewById<TextView>(R.id.helpItemBody).setText(item.bodyRes)
+                val rowParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                )
+                rowParams.topMargin = itemSpacing
+                helpListContainer.addView(row, rowParams)
+            }
+        }
+
+        helpStartGuideButton.setOnClickListener {
+            val intent = android.content.Intent(this, MainActivity::class.java).apply {
+                flags = android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP or android.content.Intent.FLAG_ACTIVITY_SINGLE_TOP
+                putExtra(MainActivity.EXTRA_START_GUIDE, true)
+            }
+            startActivity(intent)
+            finish()
+        }
+    }
+
+    private fun dp(value: Int): Int {
+        return (value * resources.displayMetrics.density).roundToInt()
+    }
+
     private fun syncUiFromPrefs() {
         isSyncingUi = true
         try {
             cameraTimeoutNearInput.setText(OverlayPrefs.cameraTimeoutNear(this).toString())
             cameraTimeoutFarInput.setText(OverlayPrefs.cameraTimeoutFar(this).toString())
             trafficLightTimeoutInput.setText(OverlayPrefs.trafficLightTimeout(this).toString())
+            roadCameraTimeoutInput.setText(OverlayPrefs.roadCameraTimeout(this).toString())
+            navNotificationEndTimeoutInput.setText(OverlayPrefs.navNotificationEndTimeout(this).toString())
             val correction = OverlayPrefs.speedCorrection(this)
             speedCorrectionSeek.progress = correction + 10
             speedCorrectionValue.text = getString(R.string.speed_correction_value, correction)

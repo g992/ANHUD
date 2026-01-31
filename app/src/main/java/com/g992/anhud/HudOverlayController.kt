@@ -1,6 +1,8 @@
 package com.g992.anhud
 
 import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.PixelFormat
 import android.graphics.PointF
@@ -37,6 +39,8 @@ class HudOverlayController(private val context: Context) {
         private const val ROAD_CAMERA_TEXT_SIZE_SP = 14f
         private const val NAV_TEXT_SCALE_MIN = 1f
         private const val NAV_TEXT_SCALE_MAX = 3f
+        private const val SPEED_TEXT_SCALE_MIN = 0.5f
+        private const val SPEED_TEXT_SCALE_MAX = 2f
         private const val PREVIEW_HUDSPEED_CAM_TYPE = 1
         private const val HUDSPEED_HIDE_DISTANCE_METERS = 50
     }
@@ -69,6 +73,7 @@ class HudOverlayController(private val context: Context) {
     private var currentDisplayId: Int? = null
     private var lastState: NavigationHudState = NavigationHudState()
     private var lastRenderSignature: RenderSignature? = null
+    private var trafficLightPreviewArrow: Bitmap? = null
     private var containerPositionDp: PointF = OverlayPrefs.containerPositionDp(context)
     private var containerWidthDp: Float = OverlayPrefs.containerSizeDp(context).x
     private var containerHeightDp: Float = OverlayPrefs.containerSizeDp(context).y
@@ -82,6 +87,7 @@ class HudOverlayController(private val context: Context) {
     private var clockPositionDp: PointF = OverlayPrefs.clockPositionDp(context)
     private var navScale: Float = OverlayPrefs.navScale(context)
     private var navTextScale: Float = OverlayPrefs.navTextScale(context)
+    private var speedTextScale: Float = OverlayPrefs.speedTextScale(context)
     private var arrowScale: Float = OverlayPrefs.arrowScale(context)
     private var speedScale: Float = OverlayPrefs.speedScale(context)
     private var hudSpeedScale: Float = OverlayPrefs.hudSpeedScale(context)
@@ -334,6 +340,7 @@ class HudOverlayController(private val context: Context) {
         clockPosition: PointF?,
         navScale: Float?,
         navTextScale: Float?,
+        speedTextScale: Float?,
         arrowScale: Float?,
         speedScale: Float?,
         hudSpeedScale: Float?,
@@ -406,6 +413,9 @@ class HudOverlayController(private val context: Context) {
             if (navTextScale != null) {
                 this.navTextScale = navTextScale.coerceIn(NAV_TEXT_SCALE_MIN, NAV_TEXT_SCALE_MAX)
                 applyNavTextScale()
+            }
+            if (speedTextScale != null) {
+                this.speedTextScale = speedTextScale.coerceIn(SPEED_TEXT_SCALE_MIN, SPEED_TEXT_SCALE_MAX)
             }
             if (arrowScale != null) {
                 this.arrowScale = arrowScale.coerceAtLeast(0f)
@@ -679,7 +689,7 @@ class HudOverlayController(private val context: Context) {
             layoutParams = FrameLayout.LayoutParams(speedSize, speedSize)
             background = ContextCompat.getDrawable(displayContext, R.drawable.bg_speed_limit)
             gravity = Gravity.CENTER
-            setTextColor(Color.WHITE)
+            setTextColor(Color.BLACK)
             setTextSize(TypedValue.COMPLEX_UNIT_SP, SPEED_LIMIT_TEXT_SIZE_SP)
             setTypeface(typeface, Typeface.BOLD)
         }
@@ -1019,17 +1029,20 @@ class HudOverlayController(private val context: Context) {
         }
         val roadCameraHasData = state.roadCameraIcon != null && state.roadCameraDistance?.isNotBlank() == true
         val trafficLights = if (previewTrafficLight) {
-            listOf(
+            val previewCount = trafficLightMaxActive.coerceAtLeast(1)
+            val previewArrow = resolveTrafficLightPreviewArrow()
+            val previewCountdown = context.getString(R.string.preview_traffic_light_countdown)
+            List(previewCount) { index ->
                 TrafficLightInfo(
-                    id = -1,
+                    id = index + 1,
                     color = "GREEN",
-                    countdownText = context.getString(R.string.preview_traffic_light_countdown),
-                    arrowBitmap = null,
-                    arrowDirection = "",
+                    countdownText = previewCountdown,
+                    arrowBitmap = previewArrow,
+                    arrowDirection = "FORWARD",
                     lastUpdated = System.currentTimeMillis(),
                     expiresAt = Long.MAX_VALUE
                 )
-            )
+            }
         } else {
             state.trafficLights
         }
@@ -1255,22 +1268,21 @@ class HudOverlayController(private val context: Context) {
             return
         }
         view.text = text
-        val textSizeSp = if (overspeed) {
+        val baseSizeSp = if (overspeed) {
             SPEED_LIMIT_ALERT_TEXT_SIZE_SP
         } else {
             SPEED_LIMIT_TEXT_SIZE_SP
         }
-        view.setTextSize(TypedValue.COMPLEX_UNIT_SP, textSizeSp)
-        val outlinePx = view.resources.displayMetrics.density * 2f
-        view.strokeEnabled = overspeed
-        view.strokeWidthPx = outlinePx
-        view.strokeColor = Color.BLACK
+        val scaledSizeSp = baseSizeSp * speedTextScale.coerceIn(SPEED_TEXT_SCALE_MIN, SPEED_TEXT_SCALE_MAX)
+        view.setTextSize(TypedValue.COMPLEX_UNIT_SP, scaledSizeSp)
+        view.strokeEnabled = false
         val background = if (overspeed) {
             R.drawable.bg_speed_limit_alert
         } else {
             R.drawable.bg_speed_limit
         }
         view.setBackgroundResource(background)
+        view.setTextColor(Color.BLACK)
         view.visibility = View.VISIBLE
     }
 
@@ -1316,6 +1328,20 @@ class HudOverlayController(private val context: Context) {
         container.visibility = View.VISIBLE
     }
 
+    private fun resolveTrafficLightPreviewArrow(): Bitmap? {
+        trafficLightPreviewArrow?.let { return it }
+        val drawable = ContextCompat.getDrawable(context, R.drawable.context_lane_straightahead_small_24)
+            ?: return null
+        val size = context.resources.getDimensionPixelSize(R.dimen.traffic_light_arrow_size_expanded)
+            .coerceAtLeast(1)
+        val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
+        drawable.setBounds(0, 0, size, size)
+        drawable.draw(canvas)
+        trafficLightPreviewArrow = bitmap
+        return bitmap
+    }
+
     private fun updateTrafficLights(
         lights: List<TrafficLightInfo>,
         allowed: Boolean,
@@ -1350,7 +1376,7 @@ class HudOverlayController(private val context: Context) {
             val backgroundRes = resolveTrafficLightBackground(light.color)
             val countdownText = light.countdownText
 
-            val useExpanded = !preview && light.arrowBitmap != null
+            val useExpanded = light.arrowBitmap != null
             if (useExpanded) {
                 compactView.visibility = View.GONE
                 expandedView.visibility = View.VISIBLE

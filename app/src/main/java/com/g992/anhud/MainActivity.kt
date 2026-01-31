@@ -9,6 +9,7 @@ import android.graphics.PointF
 import android.net.Uri
 import android.os.Bundle
 import android.provider.Settings
+import android.util.TypedValue
 import android.view.MotionEvent
 import android.view.View
 import android.widget.AdapterView
@@ -19,11 +20,13 @@ import android.widget.FrameLayout
 import android.widget.ImageButton
 import android.widget.ImageView
 import android.widget.LinearLayout
+import android.widget.ScrollView
 import android.widget.SeekBar
 import android.widget.Spinner
 import android.widget.TextView
 import android.view.LayoutInflater
 import android.view.WindowManager
+import android.view.ViewGroup
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.widget.SwitchCompat
@@ -37,6 +40,7 @@ import kotlin.math.roundToInt
 class MainActivity : ScaledActivity() {
     companion object {
         private const val CONTAINER_OUTLINE_PREVIEW_MIN_ALPHA = 0.35f
+        const val EXTRA_START_GUIDE = "extra_start_guide"
     }
 
     private var isSyncingUi = false
@@ -51,6 +55,7 @@ class MainActivity : ScaledActivity() {
     private lateinit var permissionStatus: TextView
     private lateinit var requestPermissionButton: Button
     private lateinit var overlaySwitch: SwitchCompat
+    private lateinit var settingsRoot: ScrollView
     private lateinit var displaySpinner: Spinner
     private lateinit var positionContainerCard: View
     private lateinit var positionNavCard: View
@@ -85,12 +90,16 @@ class MainActivity : ScaledActivity() {
     private var displayOptions: List<DisplayOption> = emptyList()
     private var displaySize: Point = Point(1, 1)
     private var displayDensity = 1f
+    private var guideController: GuideOverlayController? = null
+    private var editorGuideController: GuideOverlayController? = null
+    private var pendingGuideAfterDialog: List<GuideContent.GuideItem>? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContentView(R.layout.activity_hud_display_settings)
-        ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.settingsRoot)) { v, insets ->
+        settingsRoot = findViewById(R.id.settingsRoot)
+        ViewCompat.setOnApplyWindowInsetsListener(settingsRoot) { v, insets ->
             val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
             v.setPadding(systemBars.left, systemBars.top, systemBars.right, systemBars.bottom)
             insets
@@ -296,6 +305,7 @@ class MainActivity : ScaledActivity() {
                     threshold
                 )
                 if (fromUser && !isSyncingUi) {
+                    OverlayPrefs.setSpeedLimitAlertThreshold(this@MainActivity, threshold)
                     notifyOverlaySettingsChanged(speedLimitAlertThreshold = threshold)
                 }
             }
@@ -335,6 +345,7 @@ class MainActivity : ScaledActivity() {
                     .coerceIn(trafficLightMaxActiveMin, trafficLightMaxActiveMax)
                 updateTrafficLightMaxActive(resolved)
                 if (fromUser && !isSyncingUi) {
+                    OverlayPrefs.setTrafficLightMaxActive(this@MainActivity, resolved)
                     notifyOverlaySettingsChanged(trafficLightMaxActive = resolved)
                 }
             }
@@ -355,6 +366,13 @@ class MainActivity : ScaledActivity() {
         setupDisplaySpinners()
         updatePermissionStatus()
         startCoreServices()
+        settingsRoot.post { maybeStartGuideFromIntent() }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        settingsRoot.post { maybeStartGuideFromIntent() }
     }
 
     override fun onStart() {
@@ -377,9 +395,131 @@ class MainActivity : ScaledActivity() {
         super.onStop()
     }
 
+    override fun onDestroy() {
+        guideController?.stop()
+        guideController = null
+        editorGuideController?.stop()
+        editorGuideController = null
+        super.onDestroy()
+    }
+
     override fun onResume() {
         super.onResume()
         updatePermissionStatus()
+    }
+
+    private fun maybeStartGuideFromIntent() {
+        val forceStart = intent?.getBooleanExtra(EXTRA_START_GUIDE, false) ?: false
+        if (!forceStart && OverlayPrefs.guideShown(this)) {
+            return
+        }
+        if (guideController != null) {
+            return
+        }
+        intent?.removeExtra(EXTRA_START_GUIDE)
+        startGuide()
+    }
+
+    private fun startGuide() {
+        startMainGuide()
+    }
+
+    private fun startMainGuide() {
+        val steps = GuideContent.mainItems()
+        if (steps.isEmpty()) {
+            OverlayPrefs.setGuideShown(this, true)
+            return
+        }
+        val splitIndex = steps.indexOfFirst { it.targetId == R.id.positionNavCard }
+            .takeIf { it >= 0 } ?: (steps.size - 1)
+        val beforeSteps = steps.subList(0, splitIndex + 1)
+        val afterSteps = steps.subList(splitIndex + 1, steps.size)
+        guideController = GuideOverlayController(
+            activity = this,
+            scrollView = settingsRoot,
+            steps = beforeSteps,
+            onFinish = { reason ->
+                guideController = null
+                if (reason == GuideOverlayController.FinishReason.Skipped) {
+                    OverlayPrefs.setGuideShown(this, true)
+                } else {
+                    startEditorGuide(afterSteps)
+                }
+            }
+        )
+        guideController?.start()
+    }
+
+    private fun startEditorGuide(remainingSteps: List<GuideContent.GuideItem>) {
+        openPositionDialog(
+            OverlayTarget.NAVIGATION,
+            onDialogShown = onDialogShown@{ dialog, dialogView ->
+                val dialogScroll = dialogView as? ScrollView
+                if (dialogScroll == null) {
+                    dialog.dismiss()
+                    OverlayPrefs.setGuideShown(this, true)
+                    return@onDialogShown
+                }
+                val steps = GuideContent.editorDialogItems()
+                if (steps.isEmpty()) {
+                    dialog.dismiss()
+                    OverlayPrefs.setGuideShown(this, true)
+                    return@onDialogShown
+                }
+                val decorView = dialog.window?.decorView as? ViewGroup
+                if (decorView == null) {
+                    dialog.dismiss()
+                    OverlayPrefs.setGuideShown(this, true)
+                    return@onDialogShown
+                }
+                editorGuideController = GuideOverlayController(
+                    activity = this,
+                    scrollView = dialogScroll,
+                    steps = steps,
+                    onFinish = { reason ->
+                        editorGuideController = null
+                        if (reason == GuideOverlayController.FinishReason.Skipped) {
+                            pendingGuideAfterDialog = null
+                            OverlayPrefs.setGuideShown(this, true)
+                        } else {
+                            pendingGuideAfterDialog = remainingSteps
+                        }
+                        dialog.dismiss()
+                    },
+                    overlayRootProvider = { decorView },
+                    viewFinder = { id -> dialogView.findViewById(id) }
+                )
+                editorGuideController?.start()
+            },
+            onDialogDismissed = {
+                editorGuideController?.stop()
+                editorGuideController = null
+                val remaining = pendingGuideAfterDialog
+                pendingGuideAfterDialog = null
+                if (remaining != null) {
+                    startRemainingGuide(remaining)
+                } else {
+                    OverlayPrefs.setGuideShown(this, true)
+                }
+            }
+        )
+    }
+
+    private fun startRemainingGuide(steps: List<GuideContent.GuideItem>) {
+        if (steps.isEmpty()) {
+            OverlayPrefs.setGuideShown(this, true)
+            return
+        }
+        guideController = GuideOverlayController(
+            activity = this,
+            scrollView = settingsRoot,
+            steps = steps,
+            onFinish = { _ ->
+                guideController = null
+                OverlayPrefs.setGuideShown(this, true)
+            }
+        )
+        guideController?.start()
     }
 
     private fun updatePermissionStatus() {
@@ -564,8 +704,10 @@ class MainActivity : ScaledActivity() {
         speedometerPosition: PointF? = null,
         clockPosition: PointF? = null,
         navScale: Float? = null,
+        navTextScale: Float? = null,
         arrowScale: Float? = null,
         speedScale: Float? = null,
+        speedTextScale: Float? = null,
         hudSpeedScale: Float? = null,
         roadCameraScale: Float? = null,
         trafficLightScale: Float? = null,
@@ -643,11 +785,17 @@ class MainActivity : ScaledActivity() {
         if (navScale != null) {
             intent.putExtra(OverlayBroadcasts.EXTRA_NAV_SCALE, navScale)
         }
+        if (navTextScale != null) {
+            intent.putExtra(OverlayBroadcasts.EXTRA_NAV_TEXT_SCALE, navTextScale)
+        }
         if (arrowScale != null) {
             intent.putExtra(OverlayBroadcasts.EXTRA_ARROW_SCALE, arrowScale)
         }
         if (speedScale != null) {
             intent.putExtra(OverlayBroadcasts.EXTRA_SPEED_SCALE, speedScale)
+        }
+        if (speedTextScale != null) {
+            intent.putExtra(OverlayBroadcasts.EXTRA_SPEED_TEXT_SCALE, speedTextScale)
         }
         if (hudSpeedScale != null) {
             intent.putExtra(OverlayBroadcasts.EXTRA_HUDSPEED_SCALE, hudSpeedScale)
@@ -756,14 +904,21 @@ class MainActivity : ScaledActivity() {
         CONTAINER(OverlayBroadcasts.PREVIEW_TARGET_CONTAINER)
     }
 
-    private fun openPositionDialog(target: OverlayTarget) {
+    private fun openPositionDialog(
+        target: OverlayTarget,
+        onDialogShown: ((AlertDialog, View) -> Unit)? = null,
+        onDialogDismissed: (() -> Unit)? = null
+    ) {
         updateDisplayMetrics(OverlayPrefs.displayId(this))
         val dialogView = layoutInflater.inflate(R.layout.dialog_position_editor, null)
         val previewContainer = dialogView.findViewById<FrameLayout>(R.id.dialogPreviewContainer)
         val previewHudContainer = dialogView.findViewById<FrameLayout>(R.id.dialogPreviewHudContainer)
         val previewNavBlock = dialogView.findViewById<View>(R.id.dialogPreviewNavBlock)
+        val previewNavPrimary = dialogView.findViewById<TextView>(R.id.dialogPreviewNavPrimary)
+        val previewNavSecondary = dialogView.findViewById<TextView>(R.id.dialogPreviewNavSecondary)
+        val previewNavTime = dialogView.findViewById<TextView>(R.id.dialogPreviewNavTime)
         val previewArrowBlock = dialogView.findViewById<View>(R.id.dialogPreviewArrowBlock)
-        val previewSpeedLimit = dialogView.findViewById<View>(R.id.dialogPreviewSpeedLimit)
+        val previewSpeedLimit = dialogView.findViewById<TextView>(R.id.dialogPreviewSpeedLimit)
         val previewHudSpeedBlock = dialogView.findViewById<View>(R.id.dialogPreviewHudSpeedBlock)
         val previewRoadCameraBlock = dialogView.findViewById<View>(R.id.dialogPreviewRoadCameraBlock)
         val previewTrafficLightBlock = dialogView.findViewById<LinearLayout>(R.id.dialogPreviewTrafficLightBlock)
@@ -779,6 +934,10 @@ class MainActivity : ScaledActivity() {
         val scaleLabel = dialogView.findViewById<TextView>(R.id.dialogScaleLabel)
         val scaleSeek = dialogView.findViewById<SeekBar>(R.id.dialogScaleSeek)
         val scaleValue = dialogView.findViewById<TextView>(R.id.dialogScaleValue)
+        val navTextScaleLabel = dialogView.findViewById<TextView>(R.id.dialogNavTextScaleLabel)
+        val navTextScaleRow = dialogView.findViewById<View>(R.id.dialogNavTextScaleRow)
+        val navTextScaleSeek = dialogView.findViewById<SeekBar>(R.id.dialogNavTextScaleSeek)
+        val navTextScaleValue = dialogView.findViewById<TextView>(R.id.dialogNavTextScaleValue)
         val brightnessSeek = dialogView.findViewById<SeekBar>(R.id.dialogBrightnessSeek)
         val brightnessValue = dialogView.findViewById<TextView>(R.id.dialogBrightnessValue)
 
@@ -826,6 +985,22 @@ class MainActivity : ScaledActivity() {
             OverlayTarget.CONTAINER -> (OverlayPrefs.containerAlpha(this) * 100).toInt()
         }.coerceIn(0, 100)
 
+        val scaledDensity = resources.displayMetrics.scaledDensity
+        val navPrimaryBaseSp = previewNavPrimary.textSize / scaledDensity
+        val navSecondaryBaseSp = previewNavSecondary.textSize / scaledDensity
+        val navTimeBaseSp = previewNavTime.textSize / scaledDensity
+        val speedLimitBaseSp = previewSpeedLimit.textSize / scaledDensity
+
+        fun applyNavTextScale(scale: Float) {
+            previewNavPrimary.setTextSize(TypedValue.COMPLEX_UNIT_SP, navPrimaryBaseSp * scale)
+            previewNavSecondary.setTextSize(TypedValue.COMPLEX_UNIT_SP, navSecondaryBaseSp * scale)
+            previewNavTime.setTextSize(TypedValue.COMPLEX_UNIT_SP, navTimeBaseSp * scale)
+        }
+
+        fun applySpeedTextScale(scale: Float) {
+            previewSpeedLimit.setTextSize(TypedValue.COMPLEX_UNIT_SP, speedLimitBaseSp * scale)
+        }
+
         val dialogTitle = when (target) {
             OverlayTarget.NAVIGATION -> getString(R.string.position_nav_block_label)
             OverlayTarget.ARROW -> getString(R.string.position_arrow_block_label)
@@ -844,6 +1019,7 @@ class MainActivity : ScaledActivity() {
             .setPositiveButton(android.R.string.ok, null)
             .setOnDismissListener {
                 notifyOverlaySettingsChanged(preview = false, previewTarget = target, previewShowOthers = false)
+                onDialogDismissed?.invoke()
             }
             .create()
 
@@ -851,11 +1027,91 @@ class MainActivity : ScaledActivity() {
             scaleLabel.visibility = View.GONE
             scaleSeek.visibility = View.GONE
             scaleValue.visibility = View.GONE
+            navTextScaleLabel.visibility = View.GONE
+            navTextScaleRow.visibility = View.GONE
         } else {
             containerWidthLabel.visibility = View.GONE
             containerWidthRow.visibility = View.GONE
             containerHeightLabel.visibility = View.GONE
             containerHeightRow.visibility = View.GONE
+        }
+
+        val showTextScale = target == OverlayTarget.NAVIGATION || target == OverlayTarget.SPEED
+        if (!showTextScale) {
+            navTextScaleLabel.visibility = View.GONE
+            navTextScaleRow.visibility = View.GONE
+        } else {
+            navTextScaleLabel.visibility = View.VISIBLE
+            navTextScaleRow.visibility = View.VISIBLE
+            val isNav = target == OverlayTarget.NAVIGATION
+            navTextScaleLabel.setText(
+                if (isNav) R.string.position_nav_text_scale_label else R.string.position_speed_text_scale_label
+            )
+            val minPercent = if (isNav) 100 else 50
+            val maxPercent = if (isNav) 300 else 200
+            val currentScale = if (isNav) {
+                OverlayPrefs.navTextScale(this)
+            } else {
+                OverlayPrefs.speedTextScale(this)
+            }
+            val currentPercent = (currentScale * 100).roundToInt().coerceIn(minPercent, maxPercent)
+            navTextScaleSeek.max = (maxPercent - minPercent).coerceAtLeast(0)
+            navTextScaleSeek.progress = (currentPercent - minPercent).coerceIn(0, navTextScaleSeek.max)
+            navTextScaleValue.text = getString(R.string.scale_percent_format, currentPercent)
+            if (isNav) {
+                applyNavTextScale(currentPercent / 100f)
+            } else {
+                applySpeedTextScale(currentPercent / 100f)
+            }
+            navTextScaleSeek.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                    val percent = (progress + minPercent).coerceIn(minPercent, maxPercent)
+                    val scale = percent / 100f
+                    navTextScaleValue.text = getString(R.string.scale_percent_format, percent)
+                    if (isNav) {
+                        applyNavTextScale(scale)
+                        notifyOverlaySettingsChanged(
+                            navTextScale = scale,
+                            preview = true,
+                            previewTarget = target,
+                            previewShowOthers = showOthersCheck.isChecked
+                        )
+                    } else {
+                        applySpeedTextScale(scale)
+                        notifyOverlaySettingsChanged(
+                            speedTextScale = scale,
+                            preview = true,
+                            previewTarget = target,
+                            previewShowOthers = showOthersCheck.isChecked
+                        )
+                    }
+                }
+
+                override fun onStartTrackingTouch(seekBar: SeekBar?) = Unit
+
+                override fun onStopTrackingTouch(seekBar: SeekBar?) {
+                    val percent = ((seekBar?.progress ?: 0) + minPercent)
+                        .coerceIn(minPercent, maxPercent)
+                    val scale = percent / 100f
+                    if (isNav) {
+                        OverlayPrefs.setNavTextScale(this@MainActivity, scale)
+                        notifyOverlaySettingsChanged(
+                            navTextScale = scale,
+                            preview = true,
+                            previewTarget = target,
+                            previewShowOthers = showOthersCheck.isChecked
+                        )
+                    } else {
+                        OverlayPrefs.setSpeedTextScale(this@MainActivity, scale)
+                        notifyOverlaySettingsChanged(
+                            speedTextScale = scale,
+                            preview = true,
+                            previewTarget = target,
+                            previewShowOthers = showOthersCheck.isChecked
+                        )
+                    }
+                }
+            })
         }
 
         renderTrafficLightPreview(previewTrafficLightBlock, OverlayPrefs.trafficLightMaxActive(this))
@@ -1633,6 +1889,7 @@ class MainActivity : ScaledActivity() {
             previewContainer.post {
                 updateDialogVisibility()
             }
+            onDialogShown?.invoke(dialog, dialogView)
         }
 
         dialog.show()

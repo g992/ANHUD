@@ -345,7 +345,7 @@
                 android:background="@drawable/bg_speed_limit"
                 android:gravity="center"
                 android:text="@string/preview_speed_limit_text"
-                android:textColor="@color/white"
+                android:textColor="@color/black"
                 android:textSize="18sp"
                 android:textStyle="bold" />
 

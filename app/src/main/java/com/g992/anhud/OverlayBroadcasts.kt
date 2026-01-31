@@ -25,6 +25,7 @@ object OverlayBroadcasts {
     const val EXTRA_CONTAINER_HEIGHT_DP = "extra_container_height_dp"
     const val EXTRA_NAV_SCALE = "extra_nav_scale"
     const val EXTRA_NAV_TEXT_SCALE = "extra_nav_text_scale"
+    const val EXTRA_SPEED_TEXT_SCALE = "extra_speed_text_scale"
     const val EXTRA_ARROW_SCALE = "extra_arrow_scale"
     const val EXTRA_SPEED_SCALE = "extra_speed_scale"
     const val EXTRA_HUDSPEED_SCALE = "extra_hudspeed_scale"

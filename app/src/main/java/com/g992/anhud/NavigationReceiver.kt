@@ -207,18 +207,12 @@ class NavigationReceiver : BroadcastReceiver() {
                 if (cameraId.isBlank()) {
                     Log.d(TAG, "Yandex road camera: hidden")
                     UiLogStore.append(LogCategory.NAVIGATION, "яндекс дорожная камера: скрыта")
-                    NavigationHudStore.update { state ->
-                        state.copy(
-                            roadCameraId = null,
-                            roadCameraDistance = null,
-                            roadCameraIcon = null,
-                            lastUpdated = System.currentTimeMillis(),
-                            lastAction = action
-                        )
-                    }
+                    cancelRoadCameraHide()
+                    clearRoadCamera(context, action)
                 } else {
                     Log.d(TAG, "Yandex road camera: id=\"$cameraId\" distance=\"$distance\" icon=$iconSize")
                     UiLogStore.append(LogCategory.NAVIGATION, "яндекс дорожная камера: id=\"$cameraId\" distance=\"$distance\" icon=$iconSize")
+                    roadCameraContext = context.applicationContext
                     NavigationHudStore.update { state ->
                         state.copy(
                             roadCameraId = cameraId,
@@ -229,6 +223,7 @@ class NavigationReceiver : BroadcastReceiver() {
                             lastAction = action
                         )
                     }
+                    scheduleRoadCameraHide(context)
                 }
             }
             ACTION_YANDEX_TRAFFICLIGHT -> {
@@ -345,7 +340,10 @@ class NavigationReceiver : BroadcastReceiver() {
         private var pendingStreetReset: Runnable? = null
         private val trafficLightHandler = android.os.Handler(android.os.Looper.getMainLooper())
         private var pendingTrafficLightCleanup: Runnable? = null
-        private val activeTrafficLights = mutableMapOf<Int, TrafficLightInfo>()
+        private val activeTrafficLights = LinkedHashMap<Int, TrafficLightInfo>()
+        private val roadCameraHandler = android.os.Handler(android.os.Looper.getMainLooper())
+        private var pendingRoadCameraHide: Runnable? = null
+        private var roadCameraContext: Context? = null
         private var trafficLightContext: Context? = null
 
         @Volatile
@@ -662,12 +660,39 @@ class NavigationReceiver : BroadcastReceiver() {
                 val base = timestamp.takeIf { it > 0L } ?: now
                 ((base % Int.MAX_VALUE).toInt().coerceAtLeast(1))
             }
+            val existing = activeTrafficLights[resolvedId]
+            val incomingCountdown = countdown
+            val incomingColor = signalColor
+            val shouldIgnoreCountdown = existing != null &&
+                existing.countdownText.isNotBlank() &&
+                incomingCountdown.isBlank() &&
+                existing.color.equals(incomingColor, ignoreCase = true)
+            val resolvedCountdown = if (shouldIgnoreCountdown) {
+                existing?.countdownText.orEmpty()
+            } else {
+                incomingCountdown
+            }
+            val resolvedColor = if (shouldIgnoreCountdown) {
+                existing?.color.orEmpty()
+            } else {
+                incomingColor
+            }
+            val resolvedArrowBitmap = if (shouldIgnoreCountdown && arrowBitmap == null) {
+                existing?.arrowBitmap
+            } else {
+                arrowBitmap
+            }
+            val resolvedArrowDirection = if (shouldIgnoreCountdown && arrowDirection.isBlank()) {
+                existing?.arrowDirection.orEmpty()
+            } else {
+                arrowDirection
+            }
             activeTrafficLights[resolvedId] = TrafficLightInfo(
                 id = resolvedId,
-                color = signalColor,
-                countdownText = countdown,
-                arrowBitmap = arrowBitmap,
-                arrowDirection = arrowDirection,
+                color = resolvedColor,
+                countdownText = resolvedCountdown,
+                arrowBitmap = resolvedArrowBitmap,
+                arrowDirection = resolvedArrowDirection,
                 lastUpdated = now,
                 expiresAt = expiresAt
             )
@@ -677,7 +702,7 @@ class NavigationReceiver : BroadcastReceiver() {
         private fun updateTrafficLightState(context: Context, action: String, now: Long) {
             val maxActive = OverlayPrefs.trafficLightMaxActive(context).coerceAtLeast(1)
             val resolved = activeTrafficLights.values
-                .sortedWith(compareByDescending<TrafficLightInfo> { it.lastUpdated }.thenBy { it.id })
+                .sortedBy { it.id }
                 .take(maxActive)
             NavigationHudStore.update { state ->
                 state.copy(
@@ -690,6 +715,39 @@ class NavigationReceiver : BroadcastReceiver() {
                 )
             }
             scheduleTrafficLightCleanup()
+        }
+
+        private fun scheduleRoadCameraHide(context: Context) {
+            cancelRoadCameraHide()
+            val seconds = OverlayPrefs.roadCameraTimeout(context)
+            if (seconds <= 0) {
+                return
+            }
+            val delayMs = seconds.toLong() * 1000L
+            val runnable = Runnable {
+                pendingRoadCameraHide = null
+                val ctx = roadCameraContext ?: context.applicationContext
+                clearRoadCamera(ctx, "road_camera_timeout")
+            }
+            pendingRoadCameraHide = runnable
+            roadCameraHandler.postDelayed(runnable, delayMs)
+        }
+
+        private fun cancelRoadCameraHide() {
+            pendingRoadCameraHide?.let { roadCameraHandler.removeCallbacks(it) }
+            pendingRoadCameraHide = null
+        }
+
+        private fun clearRoadCamera(context: Context, action: String) {
+            NavigationHudStore.update { state ->
+                state.copy(
+                    roadCameraId = null,
+                    roadCameraDistance = null,
+                    roadCameraIcon = null,
+                    lastUpdated = System.currentTimeMillis(),
+                    lastAction = action
+                )
+            }
         }
 
         private fun scheduleTrafficLightCleanup() {

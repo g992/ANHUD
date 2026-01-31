@@ -47,6 +47,7 @@
     <string name="projection_toggle_label">Проекция</string>
     <string name="position_scale_label">Масштаб</string>
     <string name="position_nav_text_scale_label">Размер шрифта навигации</string>
+    <string name="position_speed_text_scale_label">Размер шрифта ограничения скорости</string>
     <string name="position_brightness_label">Яркость</string>
     <string name="position_container_width_label">Ширина</string>
     <string name="position_container_height_label">Высота</string>
@@ -73,7 +74,7 @@
     <string name="preview_clock_text">12:34</string>
     <string name="preview_hudspeed_distance">500м</string>
     <string name="preview_road_camera_distance">460м</string>
-    <string name="preview_traffic_light_countdown">30</string>
+    <string name="preview_traffic_light_countdown">11</string>
     <string name="traffic_light_max_active_label">Максимум активных светофоров</string>
     <string name="traffic_light_max_active_value">%1$d</string>
     <string name="display_auto_option">Авто (если доступна презентация)</string>
@@ -82,13 +83,86 @@
     <string name="tab_general_settings">Общие настройки</string>
     <string name="tab_nav_settings">Повороты навигатора</string>
     <string name="tab_debug">Отладка</string>
+    <string name="tab_help">Помощь</string>
 
-    <string name="camera_timeout_near_label">Таймаут камер (расстояние &lt; 50м)</string>
-    <string name="camera_timeout_far_label">Таймаут камер (расстояние ≥ 50м)</string>
+    <string name="camera_timeout_near_label">Таймаут камер (HUD Speed, расстояние &lt; 50м)</string>
+    <string name="camera_timeout_far_label">Таймаут камер (HUD Speed, расстояние ≥ 50м)</string>
     <string name="camera_timeout_hint">0 - отключить таймаут, 1-360 секунд</string>
     <string name="traffic_light_timeout_label">Таймаут светофоров</string>
     <string name="traffic_light_timeout_hint">0 - отключить, 1-360 секунд. Скрывает светофор при отсутствии данных</string>
+    <string name="road_camera_timeout_label">Таймаут для камер (Яндекс)</string>
+    <string name="road_camera_timeout_hint">0 - отключить, 1-360 секунд. Скрывает камеру после последнего обновления</string>
+    <string name="nav_notification_end_timeout_label">Таймаут завершения поездки</string>
+    <string name="nav_notification_end_timeout_hint">0 - сразу, 1-360 секунд. Завершает поездку после пропажи уведомления</string>
     <string name="speed_correction_label">Корректировка скорости спидометра</string>
     <string name="speed_correction_value">%1$+d км/ч</string>
     <string name="timeout_seconds">%1$d сек</string>
+
+    <string name="help_title">Гид по приложению</string>
+    <string name="help_start_guide_button">Запустить гайд на главном экране</string>
+    <string name="help_section_main">Главный экран</string>
+    <string name="help_section_settings">Настройки</string>
+    <string name="help_section_editor">Редактор блоков</string>
+
+    <string name="guide_next">Далее</string>
+    <string name="guide_done">Готово</string>
+    <string name="guide_skip">Пропустить</string>
+    <string name="guide_progress_format">%1$d/%2$d</string>
+
+    <string name="guide_main_permission_title">Разрешение на оверлей</string>
+    <string name="guide_main_permission_body">Нужно для отображения HUD поверх приложений. Если разрешения нет — нажмите кнопку и включите его.</string>
+    <string name="guide_main_overlay_title">Показывать HUD</string>
+    <string name="guide_main_overlay_body">Включает или выключает показ HUD поверх навигации.</string>
+    <string name="guide_main_display_title">Экран отображения</string>
+    <string name="guide_main_display_body">Выберите дисплей для HUD: авто или конкретный экран.</string>
+    <string name="guide_main_container_title">Контейнер HUD</string>
+    <string name="guide_main_container_body">Границы области HUD. Нажмите, чтобы менять размер и позицию.</string>
+    <string name="guide_main_nav_title">Блок навигации</string>
+    <string name="guide_main_nav_body">Манёвр, расстояние и время. Можно отключать проекцию.</string>
+    <string name="guide_main_arrow_title">Блок стрелки</string>
+    <string name="guide_main_arrow_body">Крупная стрелка направления. Настройка «только при отсутствии иконки» находится внутри.</string>
+    <string name="guide_main_speed_title">Ограничитель скорости</string>
+    <string name="guide_main_speed_body">Показывает лимит и предупреждение о превышении.</string>
+    <string name="guide_main_hudspeed_title">Блок HUD Speed</string>
+    <string name="guide_main_hudspeed_body">Данные от HUD Speed: камера, дистанция и лимиты, если они приходят.</string>
+    <string name="guide_main_road_camera_title">Блок камер</string>
+    <string name="guide_main_road_camera_body">Предупреждения о камерах Яндекс Навигатора.</string>
+    <string name="guide_main_traffic_light_title">Блок светофоров</string>
+    <string name="guide_main_traffic_light_body">Показывает счётчики светофоров и их количество.</string>
+    <string name="guide_main_speedometer_title">Спидометр</string>
+    <string name="guide_main_speedometer_body">Текущая скорость для проекции HUD.</string>
+    <string name="guide_main_clock_title">Блок часов</string>
+    <string name="guide_main_clock_body">Текущее время на проекции.</string>
+    <string name="guide_main_settings_title">Настройки</string>
+    <string name="guide_main_settings_body">Открывает расширенные настройки и помощь.</string>
+    <string name="guide_main_donate_title">Поддержка проекта</string>
+    <string name="guide_main_donate_body">Кнопка доната, если хотите поддержать разработку.</string>
+
+    <string name="guide_settings_timeout_near_title">Таймаут камер (близко)</string>
+    <string name="guide_settings_timeout_near_body">Сколько секунд держать предупреждение, если камера ближе 50 м. 0 — выключить.</string>
+    <string name="guide_settings_timeout_far_title">Таймаут камер (далеко)</string>
+    <string name="guide_settings_timeout_far_body">Срабатывает при расстоянии 50 м и далее.</string>
+    <string name="guide_settings_traffic_light_timeout_title">Таймаут светофоров</string>
+    <string name="guide_settings_traffic_light_timeout_body">Скрывает светофор, если нет свежих данных.</string>
+    <string name="guide_settings_road_camera_timeout_title">Таймаут камер (Яндекс)</string>
+    <string name="guide_settings_road_camera_timeout_body">Скрывает предупреждение о камере после последнего обновления.</string>
+    <string name="guide_settings_nav_notification_timeout_title">Таймаут завершения поездки</string>
+    <string name="guide_settings_nav_notification_timeout_body">Задержка перед завершением поездки после пропажи уведомления навигации.</string>
+    <string name="guide_settings_speed_correction_title">Корректировка скорости</string>
+    <string name="guide_settings_speed_correction_body">Сдвигает значение спидометра, если есть расхождение.</string>
+    <string name="guide_settings_maneuver_title">Сопоставление манёвров</string>
+    <string name="guide_settings_maneuver_body">Выбор базовой иконки для каждого типа манёвра.</string>
+    <string name="guide_settings_debug_title">Отладка</string>
+    <string name="guide_settings_debug_body">Логи навигации, датчиков и системы для диагностики.</string>
+
+    <string name="guide_editor_drag_title">Перетаскивание</string>
+    <string name="guide_editor_drag_body">Перемещайте блок внутри области — изменения сохраняются сразу.</string>
+    <string name="guide_editor_scale_title">Масштаб</string>
+    <string name="guide_editor_scale_body">Меняет размер выбранного блока.</string>
+    <string name="guide_editor_brightness_title">Яркость</string>
+    <string name="guide_editor_brightness_body">Регулирует прозрачность блока или контейнера.</string>
+    <string name="guide_editor_container_size_title">Размер контейнера</string>
+    <string name="guide_editor_container_size_body">Доступно для контейнера: ширина и высота проекции.</string>
+    <string name="guide_editor_show_others_title">Показывать остальные блоки</string>
+    <string name="guide_editor_show_others_body">Помогает выравнивать элементы относительно других.</string>
 </resources>

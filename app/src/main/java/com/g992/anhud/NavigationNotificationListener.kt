@@ -114,6 +114,9 @@ class NavigationNotificationListener : NotificationListenerService() {
 
     private fun scheduleNavigationEnd() {
         pendingEnd?.let { handler.removeCallbacks(it) }
+        val delayMs = OverlayPrefs.navNotificationEndTimeout(applicationContext)
+            .toLong()
+            .coerceAtLeast(0L) * 1000L
         val runnable = Runnable {
             pendingEnd = null
             // Double-check notification still gone
@@ -131,7 +134,7 @@ class NavigationNotificationListener : NotificationListenerService() {
             endNavigation()
         }
         pendingEnd = runnable
-        handler.postDelayed(runnable, NAV_NOTIFICATION_END_DELAY_MS)
+        handler.postDelayed(runnable, delayMs)
     }
 
     private fun logTrackedActiveNotifications() {
@@ -185,7 +188,6 @@ class NavigationNotificationListener : NotificationListenerService() {
         private const val TAG = "NavNotifListener"
         private const val ACTION_NAV_NOTIFICATION_ACTIVE = "notification.NAVIGATION_ACTIVE"
         private const val ACTION_NAV_NOTIFICATION_ENDED = "notification.NAVIGATION_ENDED"
-        private const val NAV_NOTIFICATION_END_DELAY_MS = 1500L
         private const val SOURCE_YANDEX = "yandex"
         private const val YANDEX_STATIC_NOTIFICATION_ID = 2
 
