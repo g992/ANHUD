@@ -6,12 +6,13 @@ import android.hardware.display.DisplayManager
 import android.view.Display
 
 object HudDisplayUtils {
-    private const val PREFERRED_DISPLAY_ID = 1
+    const val DEFAULT_DISPLAY_ID = 1
+    private const val PREFERRED_DISPLAY_ID = DEFAULT_DISPLAY_ID
 
-    fun resolveDisplay(context: Context, displayId: Int): Display? {
+    fun resolveDisplay(context: Context, displayId: Int, allowFallback: Boolean = true): Display? {
         val displayManager = context.getSystemService(DisplayManager::class.java)
         val resolved = displayManager.getDisplay(displayId)
-        if (resolved != null) {
+        if (resolved != null || !allowFallback) {
             return resolved
         }
         val fallbackId = preferredDisplayId(context)

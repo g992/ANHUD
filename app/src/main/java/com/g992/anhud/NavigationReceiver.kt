@@ -833,32 +833,39 @@ class NavigationReceiver : BroadcastReceiver() {
 
         private fun parseEtaSeconds(text: String): Int? {
             val normalized = text.lowercase(Locale.getDefault())
+            val days = Regex("(\\d+)\\s*(?:дн\\.?|день|дня|дней|д|day|days)(?!\\p{L})")
+                .find(normalized)
+                ?.groupValues
+                ?.get(1)
+                ?.toIntOrNull()
+                ?: 0
             if (":" in normalized) {
                 val parts = normalized.split(":").map { it.trim() }
                 if (parts.size == 2) {
                     val first = parts[0].toIntOrNull() ?: return null
                     val second = parts[1].toIntOrNull() ?: return null
-                    return if (first >= 1) {
+                    val base = if (first >= 1) {
                         first * 3600 + second * 60
                     } else {
                         first * 60 + second
                     }
+                    return days * 86400 + base
                 }
                 if (parts.size == 3) {
                     val hours = parts[0].toIntOrNull() ?: return null
                     val minutes = parts[1].toIntOrNull() ?: return null
                     val seconds = parts[2].toIntOrNull() ?: return null
-                    return hours * 3600 + minutes * 60 + seconds
+                    return days * 86400 + hours * 3600 + minutes * 60 + seconds
                 }
             }
             val hours = Regex("(\\d+)\\s*ч").find(normalized)?.groupValues?.get(1)?.toIntOrNull() ?: 0
             val minutes = Regex("(\\d+)\\s*мин").find(normalized)?.groupValues?.get(1)?.toIntOrNull() ?: 0
             val seconds = Regex("(\\d+)\\s*сек").find(normalized)?.groupValues?.get(1)?.toIntOrNull() ?: 0
-            if (hours == 0 && minutes == 0 && seconds == 0) {
+            if (days == 0 && hours == 0 && minutes == 0 && seconds == 0) {
                 val fallback = Regex("(\\d+)").find(normalized)?.groupValues?.get(1)?.toIntOrNull()
                 return fallback?.let { it * 60 }
             }
-            return hours * 3600 + minutes * 60 + seconds
+            return days * 86400 + hours * 3600 + minutes * 60 + seconds
         }
 
         private fun predictManeuverType(context: Context, bitmap: Bitmap): String {

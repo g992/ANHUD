@@ -88,12 +88,12 @@ object OverlayPrefs {
     fun displayId(context: Context): Int {
         val prefs = prefs(context)
         val stored = prefs.getInt(KEY_DISPLAY_ID, Int.MIN_VALUE)
-        val preferred = HudDisplayUtils.preferredDisplayId(context)
-        val resolved = if (stored >= 0) stored else preferred
-        if (resolved != stored) {
-            prefs.edit().putInt(KEY_DISPLAY_ID, resolved).apply()
+        if (stored >= 0) {
+            return stored
         }
-        return resolved
+        val initial = HudDisplayUtils.DEFAULT_DISPLAY_ID
+        prefs.edit().putInt(KEY_DISPLAY_ID, initial).apply()
+        return initial
     }
 
     fun setDisplayId(context: Context, displayId: Int) {

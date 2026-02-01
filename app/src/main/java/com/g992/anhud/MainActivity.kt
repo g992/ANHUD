@@ -682,13 +682,11 @@ class MainActivity : ScaledActivity() {
         val preferredDisplayId = HudDisplayUtils.preferredDisplayId(this)
         val savedDisplayId = OverlayPrefs.displayId(this)
         val preferredIndex = displayOptions.indexOfFirst { it.id == preferredDisplayId }.takeIf { it >= 0 } ?: 0
-        val selectedIndex = displayOptions.indexOfFirst { it.id == savedDisplayId }.takeIf { it >= 0 } ?: preferredIndex
+        val savedIndex = displayOptions.indexOfFirst { it.id == savedDisplayId }
+        val selectedIndex = if (savedIndex >= 0) savedIndex else preferredIndex
         val selectedOption = displayOptions.getOrNull(selectedIndex)
         if (selectedOption != null) {
             displaySpinner.setSelection(selectedIndex)
-            if (savedDisplayId != selectedOption.id) {
-                OverlayPrefs.setDisplayId(this, selectedOption.id)
-            }
             displaySpinner.post {
                 updateDisplayMetrics(selectedOption.id)
             }

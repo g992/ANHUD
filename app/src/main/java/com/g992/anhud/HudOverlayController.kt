@@ -7,6 +7,7 @@ import android.graphics.Color
 import android.graphics.PixelFormat
 import android.graphics.PointF
 import android.graphics.Typeface
+import android.hardware.display.DisplayManager
 import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
@@ -51,6 +52,9 @@ class HudOverlayController(private val context: Context) {
     companion object {
         private const val CONTAINER_OUTLINE_PREVIEW_MIN_ALPHA = 0.35f
         private const val CLOCK_TICK_MS = 5_000L
+        private const val DISPLAY_CHANGE_REFRESH_DELAY_MS = 500L
+        private const val DISPLAY_RETRY_DELAY_MS = 2_000L
+        private const val DISPLAY_RETRY_MAX_ATTEMPTS = 100
         private const val SPEED_LIMIT_TEXT_SIZE_SP = 16.8f
         private const val SPEED_LIMIT_ALERT_TEXT_SIZE_SP = 15.5f
         private const val NAV_PRIMARY_TEXT_SIZE_SP = 18f
@@ -71,6 +75,27 @@ class HudOverlayController(private val context: Context) {
         )
     }
     private val handler = Handler(Looper.getMainLooper())
+    private val displayManager = context.getSystemService(DisplayManager::class.java)
+    private var displayChangeRefreshPending = false
+    private val displayChangeRefreshRunnable = Runnable {
+        displayChangeRefreshPending = false
+        refresh()
+    }
+    private var displayRetryAttempt = 0
+    private var displayRetryRunnable: Runnable? = null
+    private val displayListener = object : DisplayManager.DisplayListener {
+        override fun onDisplayAdded(displayId: Int) {
+            requestDisplayChangeRefresh()
+        }
+
+        override fun onDisplayRemoved(displayId: Int) {
+            requestDisplayChangeRefresh()
+        }
+
+        override fun onDisplayChanged(displayId: Int) {
+            requestDisplayChangeRefresh()
+        }
+    }
     private val clockFormatter = SimpleDateFormat("HH:mm", Locale.getDefault())
     private var windowManager: WindowManager? = null
     private var overlayView: FrameLayout? = null
@@ -194,18 +219,25 @@ class HudOverlayController(private val context: Context) {
         }
     }
 
+    init {
+        displayManager?.registerDisplayListener(displayListener, handler)
+    }
+
     fun refresh() {
         handler.post {
             if (!OverlayPrefs.isEnabled(context) || !Settings.canDrawOverlays(context)) {
+                clearDisplayRetry()
                 clearOverlayForDisable()
                 return@post
             }
-            val display = HudDisplayUtils.resolveDisplay(context, OverlayPrefs.displayId(context))
+            val targetDisplayId = OverlayPrefs.displayId(context)
+            val display = HudDisplayUtils.resolveDisplay(context, targetDisplayId, allowFallback = false)
             if (display == null) {
                 removeOverlay()
-                UiLogStore.append(LogCategory.SYSTEM, "Оверлей: экран не найден")
+                scheduleDisplayRetry(targetDisplayId)
                 return@post
             }
+            clearDisplayRetry()
             if (overlayView != null && currentDisplayId == display.displayId) {
                 applyLayout()
                 applyState(lastState)
@@ -593,8 +625,48 @@ class HudOverlayController(private val context: Context) {
 
     fun destroy() {
         handler.post {
+            clearDisplayRetry()
+            handler.removeCallbacks(displayChangeRefreshRunnable)
+            displayChangeRefreshPending = false
+            displayManager?.unregisterDisplayListener(displayListener)
             removeOverlay()
         }
+    }
+
+    private fun requestDisplayChangeRefresh() {
+        if (displayChangeRefreshPending) {
+            return
+        }
+        displayChangeRefreshPending = true
+        handler.postDelayed(displayChangeRefreshRunnable, DISPLAY_CHANGE_REFRESH_DELAY_MS)
+    }
+
+    private fun scheduleDisplayRetry(targetDisplayId: Int) {
+        if (displayRetryRunnable != null) {
+            return
+        }
+        if (displayRetryAttempt >= DISPLAY_RETRY_MAX_ATTEMPTS) {
+            return
+        }
+        displayRetryAttempt += 1
+        val runnable = Runnable {
+            displayRetryRunnable = null
+            refresh()
+        }
+        displayRetryRunnable = runnable
+        handler.postDelayed(runnable, DISPLAY_RETRY_DELAY_MS)
+        if (displayRetryAttempt == 1) {
+            UiLogStore.append(
+                LogCategory.SYSTEM,
+                "Оверлей: экран $targetDisplayId недоступен, повтор через ${DISPLAY_RETRY_DELAY_MS / 1000}s"
+            )
+        }
+    }
+
+    private fun clearDisplayRetry() {
+        displayRetryRunnable?.let { handler.removeCallbacks(it) }
+        displayRetryRunnable = null
+        displayRetryAttempt = 0
     }
 
     private fun createOverlay(display: android.view.Display) {
@@ -1539,7 +1611,7 @@ class HudOverlayController(private val context: Context) {
 
     private fun applyLayoutInternal() {
         val displayId = currentDisplayId ?: return
-        val display = HudDisplayUtils.resolveDisplay(context, displayId) ?: return
+        val display = HudDisplayUtils.resolveDisplay(context, displayId, allowFallback = false) ?: return
         val displayContext = context.createDisplayContext(display)
         val metrics = displayContext.resources.displayMetrics
         val (containerWidthPx, containerHeightPx) = resolveContainerSizePx(metrics)
