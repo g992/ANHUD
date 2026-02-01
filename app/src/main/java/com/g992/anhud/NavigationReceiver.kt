@@ -48,7 +48,9 @@ class NavigationReceiver : BroadcastReceiver() {
                     NavigationHudStore.reset(
                         intent.action.orEmpty(),
                         update.timestamp,
-                        preserveSpeedLimit = true
+                        preserveSpeedLimit = true,
+                        preserveRoadCamera = true,
+                        preserveHudSpeed = true
                     )
                     return
                 }
@@ -595,7 +597,12 @@ class NavigationReceiver : BroadcastReceiver() {
             }
             cancelStreetReset()
             lastNativeNavPayload = null
-            NavigationHudStore.reset(action, preserveSpeedLimit = true)
+            NavigationHudStore.reset(
+                action,
+                preserveSpeedLimit = true,
+                preserveRoadCamera = true,
+                preserveHudSpeed = true
+            )
         }
 
         private fun scheduleStreetReset(context: Context) {

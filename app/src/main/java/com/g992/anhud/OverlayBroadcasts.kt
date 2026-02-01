@@ -54,6 +54,7 @@ object OverlayBroadcasts {
     const val EXTRA_TRAFFIC_LIGHT_MAX_ACTIVE = "extra_traffic_light_max_active"
     const val EXTRA_SPEED_LIMIT_ALERT_ENABLED = "extra_speed_limit_alert_enabled"
     const val EXTRA_SPEED_LIMIT_ALERT_THRESHOLD = "extra_speed_limit_alert_threshold"
+    const val EXTRA_MAP_ENABLED = "extra_map_enabled"
     const val EXTRA_PREVIEW = "extra_preview"
     const val EXTRA_PREVIEW_TARGET = "extra_preview_target"
     const val EXTRA_PREVIEW_SHOW_OTHERS = "extra_preview_show_others"

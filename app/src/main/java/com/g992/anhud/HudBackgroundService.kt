@@ -123,6 +123,11 @@ class HudBackgroundService : Service() {
                 } else {
                     null
                 }
+                val mapEnabled = if (intent.hasExtra(OverlayBroadcasts.EXTRA_MAP_ENABLED)) {
+                    intent.getBooleanExtra(OverlayBroadcasts.EXTRA_MAP_ENABLED, false)
+                } else {
+                    null
+                }
                 val preview = intent.getBooleanExtra(OverlayBroadcasts.EXTRA_PREVIEW, false)
                 val previewTarget = intent.getStringExtra(OverlayBroadcasts.EXTRA_PREVIEW_TARGET)
                 val previewShowOthers = if (intent.hasExtra(OverlayBroadcasts.EXTRA_PREVIEW_SHOW_OTHERS)) {
@@ -240,6 +245,7 @@ class HudBackgroundService : Service() {
                     speedometerEnabled,
                     clockEnabled,
                     trafficLightMaxActive,
+                    mapEnabled,
                     preview,
                     previewTarget,
                     previewShowOthers

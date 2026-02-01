@@ -98,7 +98,9 @@ object NavigationHudStore {
     fun reset(
         lastAction: String,
         timestamp: Long = System.currentTimeMillis(),
-        preserveSpeedLimit: Boolean = false
+        preserveSpeedLimit: Boolean = false,
+        preserveRoadCamera: Boolean = false,
+        preserveHudSpeed: Boolean = false
     ) {
         android.util.Log.d("NavigationHudStore", "reset() called: action=$lastAction")
         update { current ->
@@ -132,15 +134,15 @@ object NavigationHudStore {
                 rawSubtext = "",
                 distanceUnit = "",
                 nativeTurnId = null,
-                hudSpeedHasCamera = false,
-                hudSpeedDistanceMeters = null,
-                hudSpeedCamType = null,
-                hudSpeedCamFlag = null,
-                hudSpeedLimit1 = null,
-                hudSpeedUpdatedAt = 0L,
-                roadCameraId = null,
-                roadCameraDistance = null,
-                roadCameraIcon = null,
+                hudSpeedHasCamera = if (preserveHudSpeed) current.hudSpeedHasCamera else false,
+                hudSpeedDistanceMeters = if (preserveHudSpeed) current.hudSpeedDistanceMeters else null,
+                hudSpeedCamType = if (preserveHudSpeed) current.hudSpeedCamType else null,
+                hudSpeedCamFlag = if (preserveHudSpeed) current.hudSpeedCamFlag else null,
+                hudSpeedLimit1 = if (preserveHudSpeed) current.hudSpeedLimit1 else null,
+                hudSpeedUpdatedAt = if (preserveHudSpeed) current.hudSpeedUpdatedAt else 0L,
+                roadCameraId = if (preserveRoadCamera) current.roadCameraId else null,
+                roadCameraDistance = if (preserveRoadCamera) current.roadCameraDistance else null,
+                roadCameraIcon = if (preserveRoadCamera) current.roadCameraIcon else null,
                 trafficLightColor = "",
                 trafficLightCountdown = "",
                 trafficLights = emptyList()

@@ -56,6 +56,7 @@ class MainActivity : ScaledActivity() {
     private lateinit var requestPermissionButton: Button
     private lateinit var overlaySwitch: SwitchCompat
     private lateinit var nativeNavSwitch: SwitchCompat
+    private var mapToggleSwitch: SwitchCompat? = null
     private lateinit var settingsRoot: ScrollView
     private lateinit var displaySpinner: Spinner
     private lateinit var positionContainerCard: View
@@ -110,6 +111,7 @@ class MainActivity : ScaledActivity() {
         requestPermissionButton = findViewById(R.id.requestPermissionButton)
         overlaySwitch = findViewById(R.id.overlaySwitch)
         nativeNavSwitch = findViewById(R.id.nativeNavSwitch)
+//        mapToggleSwitch = findViewById(R.id.mapToggleSwitch)
         displaySpinner = findViewById(R.id.displaySpinner)
         positionContainerCard = findViewById(R.id.positionContainerCard)
         positionNavCard = findViewById(R.id.positionNavCard)
@@ -179,6 +181,18 @@ class MainActivity : ScaledActivity() {
             if (!isChecked && NativeNavigationController.isActive()) {
                 NativeNavigationController.stopNavigation(this)
             }
+        }
+
+        mapToggleSwitch?.apply {
+            isChecked = OverlayPrefs.mapEnabled(this@MainActivity)
+            setOnCheckedChangeListener { _, isChecked ->
+                if (isSyncingUi) {
+                    return@setOnCheckedChangeListener
+                }
+                OverlayPrefs.setMapEnabled(this@MainActivity, isChecked)
+                notifyOverlaySettingsChanged(mapEnabled = isChecked)
+            }
+            visibility = View.GONE
         }
 
         positionNavCard.setOnClickListener {
@@ -552,6 +566,7 @@ class MainActivity : ScaledActivity() {
         try {
             overlaySwitch.isChecked = OverlayPrefs.isEnabled(this)
             nativeNavSwitch.isChecked = OverlayPrefs.nativeNavEnabled(this)
+            mapToggleSwitch?.isChecked = OverlayPrefs.mapEnabled(this)
             navProjectionSwitch.isChecked = OverlayPrefs.navEnabled(this)
             arrowProjectionSwitch.isChecked = OverlayPrefs.arrowEnabled(this)
             speedProjectionSwitch.isChecked = OverlayPrefs.speedEnabled(this)
@@ -754,6 +769,7 @@ class MainActivity : ScaledActivity() {
         speedometerEnabled: Boolean? = null,
         clockEnabled: Boolean? = null,
         trafficLightMaxActive: Int? = null,
+        mapEnabled: Boolean? = null,
         preview: Boolean = false,
         previewTarget: OverlayTarget? = null,
         previewShowOthers: Boolean? = null
@@ -894,6 +910,9 @@ class MainActivity : ScaledActivity() {
         }
         if (trafficLightMaxActive != null) {
             intent.putExtra(OverlayBroadcasts.EXTRA_TRAFFIC_LIGHT_MAX_ACTIVE, trafficLightMaxActive)
+        }
+        if (mapEnabled != null) {
+            intent.putExtra(OverlayBroadcasts.EXTRA_MAP_ENABLED, mapEnabled)
         }
         intent.putExtra(OverlayBroadcasts.EXTRA_PREVIEW, preview)
         if (previewTarget != null) {

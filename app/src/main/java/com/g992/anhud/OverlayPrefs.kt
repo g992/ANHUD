@@ -62,6 +62,7 @@ object OverlayPrefs {
     private const val KEY_CLOCK_ENABLED = "overlay_clock_enabled"
     private const val KEY_TRAFFIC_LIGHT_MAX_ACTIVE = "overlay_traffic_light_max_active"
     private const val KEY_NATIVE_NAV_ENABLED = "native_nav_enabled"
+    private const val KEY_MAP_ENABLED = "overlay_map_enabled"
     private const val KEY_CAMERA_TIMEOUT_NEAR = "camera_timeout_near"
     private const val KEY_CAMERA_TIMEOUT_FAR = "camera_timeout_far"
     private const val KEY_TRAFFIC_LIGHT_TIMEOUT = "traffic_light_timeout"
@@ -588,6 +589,16 @@ object OverlayPrefs {
     fun setNativeNavEnabled(context: Context, enabled: Boolean) {
         prefs(context).edit()
             .putBoolean(KEY_NATIVE_NAV_ENABLED, enabled)
+            .apply()
+    }
+
+    fun mapEnabled(context: Context): Boolean {
+        return prefs(context).getBoolean(KEY_MAP_ENABLED, false)
+    }
+
+    fun setMapEnabled(context: Context, enabled: Boolean) {
+        prefs(context).edit()
+            .putBoolean(KEY_MAP_ENABLED, enabled)
             .apply()
     }
 

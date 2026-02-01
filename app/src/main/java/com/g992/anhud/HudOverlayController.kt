@@ -21,6 +21,26 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.core.content.ContextCompat
+import com.yandex.mapkit.MapKitFactory
+import com.yandex.mapkit.RequestPoint
+import com.yandex.mapkit.RequestPointType
+import com.yandex.mapkit.directions.driving.DrivingRoute
+import com.yandex.mapkit.directions.driving.DrivingRouterType
+import com.yandex.mapkit.geometry.Point
+import com.yandex.mapkit.location.LocationSettingsFactory
+import com.yandex.mapkit.location.LocationSimulator
+import com.yandex.mapkit.location.LocationSimulatorListener
+import com.yandex.mapkit.location.SimulationSettings
+import com.yandex.mapkit.map.CameraPosition
+import com.yandex.mapkit.map.MapObjectCollection
+import com.yandex.mapkit.map.PolylineMapObject
+import com.yandex.mapkit.mapview.MapView
+import com.yandex.mapkit.navigation.automotive.Navigation
+import com.yandex.mapkit.navigation.automotive.NavigationFactory
+import com.yandex.mapkit.navigation.automotive.NavigationListener
+import com.yandex.mapkit.navigation.automotive.RouteOptions
+import com.yandex.runtime.Error
+import com.yandex.runtime.network.NetworkError
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -43,6 +63,12 @@ class HudOverlayController(private val context: Context) {
         private const val SPEED_TEXT_SCALE_MAX = 2f
         private const val PREVIEW_HUDSPEED_CAM_TYPE = 1
         private const val HUDSPEED_HIDE_DISTANCE_METERS = 50
+        private const val MAP_ROUTE_ZOOM = 12f
+        private const val SIMULATION_SPEED_KMH = 72.0
+        private val MAP_ROUTE_POINTS = listOf(
+            Point(55.757048, 37.615005),
+            Point(55.776384, 37.585504)
+        )
     }
     private val handler = Handler(Looper.getMainLooper())
     private val clockFormatter = SimpleDateFormat("HH:mm", Locale.getDefault())
@@ -70,6 +96,13 @@ class HudOverlayController(private val context: Context) {
     private var roadCameraDistanceView: TextView? = null
     private var trafficLightContainer: LinearLayout? = null
     private var clockView: TextView? = null
+    private var mapView: MapView? = null
+    private var mapRoutesCollection: MapObjectCollection? = null
+    private var navigation: Navigation? = null
+    private var navigationRequested = false
+    private var locationSimulator: LocationSimulator? = null
+    private var locationSimulatorListener: LocationSimulatorListener? = null
+    private var mapStarted = false
     private var currentDisplayId: Int? = null
     private var lastState: NavigationHudState = NavigationHudState()
     private var lastRenderSignature: RenderSignature? = null
@@ -116,6 +149,7 @@ class HudOverlayController(private val context: Context) {
     private var speedLimitAlertThreshold: Int = OverlayPrefs.speedLimitAlertThreshold(context)
     private var speedometerEnabled: Boolean = OverlayPrefs.speedometerEnabled(context)
     private var clockEnabled: Boolean = OverlayPrefs.clockEnabled(context)
+    private var mapEnabled: Boolean = OverlayPrefs.mapEnabled(context)
     private var previewMode: Boolean = false
     private var previewTarget: String? = null
     private var previewShowOthers: Boolean = false
@@ -126,6 +160,37 @@ class HudOverlayController(private val context: Context) {
         override fun run() {
             updateClockText()
             handler.postDelayed(this, CLOCK_TICK_MS)
+        }
+    }
+    private val navigationListener = object : NavigationListener {
+        override fun onRoutesRequestError(error: Error) {
+            navigationRequested = false
+            val message = when (error) {
+                is NetworkError -> "Маршрут: ошибка сети"
+                else -> "Маршрут: ошибка построения"
+            }
+            UiLogStore.append(LogCategory.SYSTEM, message)
+        }
+
+        override fun onRoutesRequested(requestPoints: MutableList<RequestPoint>) = Unit
+
+        override fun onAlternativesRequested(route: DrivingRoute) = Unit
+
+        override fun onUriResolvingRequested(uri: String) = Unit
+
+        override fun onMatchRouteResolvingRequested() = Unit
+
+        override fun onRoutesBuilt() {
+            val navigation = navigation ?: return
+            updateMapRoutes(navigation.routes)
+            val route = navigation.routes.firstOrNull() ?: return
+            navigation.startGuidance(route)
+            startSimulation(route)
+        }
+
+        override fun onResetRoutes() {
+            navigationRequested = false
+            mapRoutesCollection?.clear()
         }
     }
 
@@ -312,12 +377,18 @@ class HudOverlayController(private val context: Context) {
     fun clearNavigation() {
         handler.post {
             val container = overlayView ?: return@post
-            // Hide all navigation elements
+            // Hide navigation-specific elements.
             navContainer?.visibility = View.GONE
             arrowContainer?.visibility = View.GONE
-            roadCameraContainer?.visibility = View.GONE
             trafficLightContainer?.visibility = View.GONE
-            clockView?.visibility = View.VISIBLE // Keep clock visible
+            // Keep clock visible only when enabled in settings.
+            clockView?.visibility = if (clockEnabled) View.VISIBLE else View.GONE
+            if (!roadCameraEnabled) {
+                roadCameraContainer?.visibility = View.GONE
+            }
+            if (!hudSpeedEnabled) {
+                hudSpeedContainer?.visibility = View.GONE
+            }
             // Fill with transparent to clear any remnants
             container.setBackgroundColor(android.graphics.Color.TRANSPARENT)
             container.visibility = View.VISIBLE
@@ -369,6 +440,7 @@ class HudOverlayController(private val context: Context) {
         speedometerEnabled: Boolean?,
         clockEnabled: Boolean?,
         trafficLightMaxActive: Int?,
+        mapEnabled: Boolean?,
         preview: Boolean? = null,
         previewTarget: String? = null,
         previewShowOthers: Boolean? = null
@@ -501,6 +573,9 @@ class HudOverlayController(private val context: Context) {
             }
             if (trafficLightMaxActive != null) {
                 this.trafficLightMaxActive = trafficLightMaxActive.coerceAtLeast(1)
+            }
+            if (mapEnabled != null) {
+                this.mapEnabled = mapEnabled
             }
             if (preview != null) {
                 previewMode = preview
@@ -844,6 +919,7 @@ class HudOverlayController(private val context: Context) {
 
     private fun removeOverlay() {
         cancelHudSpeedHide()
+        removeMapView()
         val wm = windowManager
         val view = overlayView
         if (wm != null && view != null) {
@@ -1464,7 +1540,8 @@ class HudOverlayController(private val context: Context) {
     private fun applyLayoutInternal() {
         val displayId = currentDisplayId ?: return
         val display = HudDisplayUtils.resolveDisplay(context, displayId) ?: return
-        val metrics = context.createDisplayContext(display).resources.displayMetrics
+        val displayContext = context.createDisplayContext(display)
+        val metrics = displayContext.resources.displayMetrics
         val (containerWidthPx, containerHeightPx) = resolveContainerSizePx(metrics)
         val maxHeightPx = metrics.heightPixels.coerceAtLeast(0)
         val resolvedHeightPx = resolveContainerHeightPx(containerWidthPx, containerHeightPx)
@@ -1496,6 +1573,7 @@ class HudOverlayController(private val context: Context) {
         clockView?.let {
             positionView(it, clockPositionDp, clockScale, clockAlpha, metrics.density, containerWidth, containerHeight)
         }
+        updateMapView(displayContext, containerWidthPx, resolvedHeightPx)
     }
 
     private fun updateContainerLayout(
@@ -1533,6 +1611,162 @@ class HudOverlayController(private val context: Context) {
         } else {
             container.background = null
         }
+    }
+
+    private fun updateMapView(displayContext: Context, containerWidthPx: Int, containerHeightPx: Int) {
+        val root = overlayView ?: return
+        if (!mapEnabled) {
+            removeMapView()
+            return
+        }
+        ensureMapView(displayContext, root, containerWidthPx, containerHeightPx)
+        updateMapLayout(containerWidthPx, containerHeightPx)
+        requestNavigationRoutes()
+    }
+
+    private fun ensureMapView(
+        displayContext: Context,
+        root: FrameLayout,
+        containerWidthPx: Int,
+        containerHeightPx: Int
+    ) {
+        if (mapView != null) {
+            return
+        }
+        val mapView = MapView(displayContext)
+        mapView.layoutParams = mapLayoutParams(containerWidthPx, containerHeightPx)
+        root.addView(mapView, 0)
+        this.mapView = mapView
+        mapRoutesCollection = mapView.mapWindow.map.mapObjects.addCollection()
+        mapView.mapWindow.map.move(
+            CameraPosition(
+                MAP_ROUTE_POINTS.first(),
+                MAP_ROUTE_ZOOM,
+                0f,
+                0f
+            )
+        )
+        startMapIfNeeded()
+    }
+
+    private fun updateMapLayout(containerWidthPx: Int, containerHeightPx: Int) {
+        val mapView = mapView ?: return
+        val params = mapView.layoutParams as? FrameLayout.LayoutParams
+            ?: mapLayoutParams(containerWidthPx, containerHeightPx)
+        val desired = mapLayoutParams(containerWidthPx, containerHeightPx)
+        params.width = desired.width
+        params.height = desired.height
+        params.gravity = desired.gravity
+        mapView.layoutParams = params
+    }
+
+    private fun mapLayoutParams(containerWidthPx: Int, containerHeightPx: Int): FrameLayout.LayoutParams {
+        val width = (containerWidthPx / 2f).roundToInt().coerceAtLeast(1)
+        val height = (containerHeightPx / 2f).roundToInt().coerceAtLeast(1)
+        return FrameLayout.LayoutParams(width, height, Gravity.END or Gravity.BOTTOM)
+    }
+
+    private fun requestNavigationRoutes() {
+        if (navigationRequested) {
+            return
+        }
+        val navigation = ensureNavigation()
+        val requestPoints = buildList {
+            add(RequestPoint(MAP_ROUTE_POINTS.first(), RequestPointType.WAYPOINT, null, null, null))
+            add(RequestPoint(MAP_ROUTE_POINTS.last(), RequestPointType.WAYPOINT, null, null, null))
+        }
+        navigation.requestRoutes(
+            requestPoints,
+            RouteOptions().setInitialAzimuth(navigation.guidance.location?.heading)
+        )
+        navigationRequested = true
+    }
+
+    private fun ensureNavigation(): Navigation {
+        val existing = navigation
+        if (existing != null) {
+            return existing
+        }
+        return NavigationFactory.createNavigation(DrivingRouterType.COMBINED).also { created ->
+            created.addListener(navigationListener)
+            created.resume()
+            navigation = created
+        }
+    }
+
+    private fun stopNavigation() {
+        val navigation = navigation ?: return
+        stopSimulation()
+        try {
+            navigation.stopGuidance()
+            navigation.resetRoutes()
+            navigation.suspend()
+            navigation.removeListener(navigationListener)
+        } catch (_: Exception) {
+        }
+        this.navigation = null
+        navigationRequested = false
+    }
+
+    private fun updateMapRoutes(routes: List<DrivingRoute>) {
+        val routesCollection = mapRoutesCollection ?: return
+        routesCollection.clear()
+        if (routes.isEmpty()) return
+        routes.forEachIndexed { index, route ->
+            routesCollection.addPolyline(route.geometry).apply {
+                if (index == 0) styleMainRoute() else styleAlternativeRoute()
+            }
+        }
+    }
+
+    private fun startSimulation(route: DrivingRoute) {
+        if (locationSimulator != null) {
+            return
+        }
+        val simulator = MapKitFactory.getInstance().createLocationSimulator()
+        val listener = LocationSimulatorListener { stopSimulation() }
+        simulator.subscribeForSimulatorEvents(listener)
+        locationSimulator = simulator
+        locationSimulatorListener = listener
+        MapKitFactory.getInstance().setLocationManager(simulator)
+        val locationSettings = LocationSettingsFactory.coarseSettings()
+        locationSettings.setSpeed(SIMULATION_SPEED_KMH / 3.6)
+        simulator.startSimulation(listOf(SimulationSettings(route.geometry, locationSettings)))
+    }
+
+    private fun stopSimulation() {
+        val simulator = locationSimulator ?: return
+        locationSimulatorListener?.let { simulator.unsubscribeFromSimulatorEvents(it) }
+        locationSimulatorListener = null
+        locationSimulator = null
+        MapKitFactory.getInstance().resetLocationManagerToDefault()
+    }
+
+    private fun removeMapView() {
+        val mapView = mapView ?: return
+        mapRoutesCollection = null
+        stopNavigation()
+        overlayView?.removeView(mapView)
+        stopMapIfNeeded()
+        this.mapView = null
+    }
+
+    private fun startMapIfNeeded() {
+        if (mapStarted) {
+            return
+        }
+        MapKitFactory.getInstance().onStart()
+        mapView?.onStart()
+        mapStarted = true
+    }
+
+    private fun stopMapIfNeeded() {
+        if (!mapStarted) {
+            return
+        }
+        mapView?.onStop()
+        MapKitFactory.getInstance().onStop()
+        mapStarted = false
     }
 
     private fun resolveContainerSizePx(metrics: android.util.DisplayMetrics): Pair<Int, Int> {
@@ -1620,6 +1854,26 @@ class HudOverlayController(private val context: Context) {
         primaryView?.setTextSize(TypedValue.COMPLEX_UNIT_SP, NAV_PRIMARY_TEXT_SIZE_SP * scale)
         secondaryView?.setTextSize(TypedValue.COMPLEX_UNIT_SP, NAV_SECONDARY_TEXT_SIZE_SP * scale)
         timeView?.setTextSize(TypedValue.COMPLEX_UNIT_SP, NAV_TIME_TEXT_SIZE_SP * scale)
+    }
+
+    private fun PolylineMapObject.styleMainRoute() {
+        zIndex = 1f
+        setStrokeColor(Color.WHITE)
+        style = style.apply {
+            strokeWidth = 4f
+            outlineColor = Color.BLACK
+            outlineWidth = 2f
+        }
+    }
+
+    private fun PolylineMapObject.styleAlternativeRoute() {
+        zIndex = 0f
+        setStrokeColor(Color.LTGRAY)
+        style = style.apply {
+            strokeWidth = 3f
+            outlineColor = Color.DKGRAY
+            outlineWidth = 1.5f
+        }
     }
 
     private fun updateClockText() {

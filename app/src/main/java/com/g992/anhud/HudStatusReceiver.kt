@@ -157,7 +157,12 @@ class HudStatusReceiver : BroadcastReceiver() {
         }
 
         // Clear navigation HUD store
-        NavigationHudStore.reset("G992.ANHUD.STATUS", preserveSpeedLimit = true)
+        NavigationHudStore.reset(
+            "G992.ANHUD.STATUS",
+            preserveSpeedLimit = true,
+            preserveRoadCamera = true,
+            preserveHudSpeed = true
+        )
         UiLogStore.append(LogCategory.NAVIGATION, "Маршрут завершен через intent")
 
         // Send broadcast to clear overlay display

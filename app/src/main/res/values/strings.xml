@@ -28,6 +28,7 @@
     <string name="overlay_permission_button">Разрешить оверлей</string>
     <string name="overlay_enable_label">Показывать HUD</string>
     <string name="native_nav_enable_label">Использовать штатную навигацию</string>
+    <string name="mapkit_show_map_label">Отобразить карту</string>
     <string name="native_nav_stop_button">Завершить навигацию</string>
     <string name="notification_permission_granted">Доступ к уведомлениям: включен</string>
     <string name="notification_permission_missing">Доступ к уведомлениям нужен для определения конца навигации.</string>

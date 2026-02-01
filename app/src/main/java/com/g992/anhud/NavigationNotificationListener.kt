@@ -172,7 +172,12 @@ class NavigationNotificationListener : NotificationListenerService() {
         if (OverlayPrefs.nativeNavEnabled(applicationContext)) {
             NativeNavigationController.stopNavigation(applicationContext)
         }
-        NavigationHudStore.reset(ACTION_NAV_NOTIFICATION_ENDED, preserveSpeedLimit = true)
+        NavigationHudStore.reset(
+            ACTION_NAV_NOTIFICATION_ENDED,
+            preserveSpeedLimit = true,
+            preserveRoadCamera = true,
+            preserveHudSpeed = true
+        )
 
         // Send broadcast to clear overlay display
         val intent = android.content.Intent(OverlayBroadcasts.ACTION_CLEAR_NAVIGATION)
