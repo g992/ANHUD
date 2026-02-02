@@ -1,10 +1,16 @@
 package com.g992.anhud
 
+import android.Manifest
+import android.content.ContentValues
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
+import android.os.Environment
+import android.provider.MediaStore
 import android.text.Editable
 import android.text.TextWatcher
 import android.view.LayoutInflater
@@ -21,12 +27,18 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import com.google.android.material.tabs.TabLayout
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.File
+import java.io.FileOutputStream
+import java.text.SimpleDateFormat
+import java.util.Date
 import java.util.EnumMap
+import java.util.Locale
 import kotlin.math.roundToInt
 
 class SettingsActivity : ScaledActivity() {
@@ -49,6 +61,16 @@ class SettingsActivity : ScaledActivity() {
     private lateinit var importSettingsButton: View
 
     private var isSyncingUi = false
+
+    private val storagePermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            exportSettingsToDownloads()
+        } else {
+            showToast(R.string.settings_export_failed)
+        }
+    }
 
     private val exportSettingsLauncher = registerForActivityResult(
         ActivityResultContracts.CreateDocument("application/json")
@@ -172,7 +194,11 @@ class SettingsActivity : ScaledActivity() {
 
     private fun setupGeneralSettings() {
         exportSettingsButton.setOnClickListener {
-            exportSettingsLauncher.launch("anhud_settings.json")
+            if (needsStoragePermission()) {
+                requestStoragePermission()
+            } else {
+                exportSettingsToDownloads()
+            }
         }
         importSettingsButton.setOnClickListener {
             importSettingsLauncher.launch(arrayOf("application/json", "*/*"))
@@ -245,6 +271,73 @@ class SettingsActivity : ScaledActivity() {
             override fun onStartTrackingTouch(seekBar: SeekBar?) {}
             override fun onStopTrackingTouch(seekBar: SeekBar?) {}
         })
+    }
+
+    private fun exportSettingsToDownloads() {
+        try {
+            val fileName = generateExportFileName()
+            val payload = buildSettingsPayload()
+            val json = payload.toString(2)
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                // Android 10+ использует MediaStore
+                val contentValues = ContentValues().apply {
+                    put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
+                    put(MediaStore.MediaColumns.MIME_TYPE, "application/json")
+                    put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
+                }
+
+                val uri = contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, contentValues)
+                if (uri != null) {
+                    contentResolver.openOutputStream(uri)?.use { output ->
+                        output.write(json.toByteArray(Charsets.UTF_8))
+                        output.flush()
+                    }
+                    showToast(getString(R.string.settings_export_success, fileName))
+                } else {
+                    showToast(R.string.settings_export_failed)
+                }
+            } else {
+                // Android 9 и ниже - прямое сохранение в Downloads
+                @Suppress("DEPRECATION")
+                val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+                if (!downloadsDir.exists()) {
+                    downloadsDir.mkdirs()
+                }
+                val file = File(downloadsDir, fileName)
+                FileOutputStream(file).use { output ->
+                    output.write(json.toByteArray(Charsets.UTF_8))
+                    output.flush()
+                }
+                showToast(getString(R.string.settings_export_success, fileName))
+            }
+        } catch (e: Exception) {
+            showToast(R.string.settings_export_failed)
+        }
+    }
+
+    private fun generateExportFileName(): String {
+        val dateFormat = SimpleDateFormat("yyyyMMdd_HHmm", Locale.getDefault())
+        val timestamp = dateFormat.format(Date())
+        return "anhud_settings_$timestamp.json"
+    }
+
+    private fun needsStoragePermission(): Boolean {
+        // Android 10+ не требует разрешения для MediaStore
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            return false
+        }
+        // Android 6-9 требует WRITE_EXTERNAL_STORAGE
+        return ContextCompat.checkSelfPermission(
+            this,
+            Manifest.permission.WRITE_EXTERNAL_STORAGE
+        ) != PackageManager.PERMISSION_GRANTED
+    }
+
+    private fun requestStoragePermission() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+            storagePermissionLauncher.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+        }
     }
 
     private fun exportSettings(uri: Uri) {
@@ -442,6 +535,10 @@ class SettingsActivity : ScaledActivity() {
 
     private fun showToast(messageResId: Int) {
         Toast.makeText(this, messageResId, Toast.LENGTH_SHORT).show()
+    }
+
+    private fun showToast(message: String) {
+        Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
     }
 
     private fun setupManeuverTab() {

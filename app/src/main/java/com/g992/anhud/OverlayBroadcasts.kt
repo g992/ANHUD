@@ -5,6 +5,7 @@ object OverlayBroadcasts {
     const val ACTION_CLEAR_NAVIGATION = "com.g992.anhud.ACTION_CLEAR_NAVIGATION"
     const val EXTRA_NAV_X_DP = "extra_nav_x_dp"
     const val EXTRA_NAV_Y_DP = "extra_nav_y_dp"
+    const val EXTRA_NAV_WIDTH_DP = "extra_nav_width_dp"
     const val EXTRA_ARROW_X_DP = "extra_arrow_x_dp"
     const val EXTRA_ARROW_Y_DP = "extra_arrow_y_dp"
     const val EXTRA_SPEED_X_DP = "extra_speed_x_dp"

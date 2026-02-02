@@ -135,7 +135,8 @@ class HudOverlayController(private val context: Context) {
     private var containerPositionDp: PointF = OverlayPrefs.containerPositionDp(context)
     private var containerWidthDp: Float = OverlayPrefs.containerSizeDp(context).x
     private var containerHeightDp: Float = OverlayPrefs.containerSizeDp(context).y
-    private var navPositionDp: PointF = OverlayPrefs.navPositionDp(context).let { PointF(0f, it.y) }
+    private var navPositionDp: PointF = OverlayPrefs.navPositionDp(context)
+    private var navWidthDp: Float = OverlayPrefs.navWidthDp(context)
     private var arrowPositionDp: PointF = OverlayPrefs.arrowPositionDp(context)
     private var speedPositionDp: PointF = OverlayPrefs.speedPositionDp(context)
     private var hudSpeedPositionDp: PointF = OverlayPrefs.hudSpeedPositionDp(context)
@@ -434,6 +435,7 @@ class HudOverlayController(private val context: Context) {
         containerWidthDp: Float?,
         containerHeightDp: Float?,
         navPosition: PointF?,
+        navWidthDp: Float?,
         arrowPosition: PointF?,
         speedPosition: PointF?,
         hudSpeedPosition: PointF?,
@@ -488,7 +490,10 @@ class HudOverlayController(private val context: Context) {
                 this.containerHeightDp = containerHeightDp.coerceAtLeast(0f)
             }
             if (navPosition != null) {
-                navPositionDp = PointF(0f, navPosition.y)
+                navPositionDp = navPosition
+            }
+            if (navWidthDp != null) {
+                this.navWidthDp = navWidthDp.coerceAtLeast(OverlayPrefs.NAV_WIDTH_MIN_DP)
             }
             if (arrowPosition != null) {
                 arrowPositionDp = arrowPosition
@@ -689,11 +694,12 @@ class HudOverlayController(private val context: Context) {
             clipToPadding = false
         }
 
+        val navWidthPx = (navWidthDp * metrics.density).roundToInt()
         val navBlock = LinearLayout(displayContext).apply {
             orientation = LinearLayout.HORIZONTAL
             setPadding(0, 0, 0, 0)
             layoutParams = FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT,
+                navWidthPx,
                 FrameLayout.LayoutParams.WRAP_CONTENT
             )
         }
@@ -1622,6 +1628,15 @@ class HudOverlayController(private val context: Context) {
         val containerWidth = containerWidthPx.toFloat()
         val containerHeight = resolvedHeightPx.toFloat()
         navContainer?.let {
+            val navWidthPx = (navWidthDp * metrics.density).roundToInt()
+            it.layoutParams = (it.layoutParams as? FrameLayout.LayoutParams)?.apply {
+                width = navWidthPx
+            } ?: FrameLayout.LayoutParams(navWidthPx, FrameLayout.LayoutParams.WRAP_CONTENT)
+            if (previewMode && previewTarget == OverlayBroadcasts.PREVIEW_TARGET_NAV) {
+                it.background = ContextCompat.getDrawable(it.context, R.drawable.bg_nav_block_outline)
+            } else {
+                it.background = null
+            }
             positionView(it, navPositionDp, navScale, navAlpha, metrics.density, containerWidth, containerHeight)
         }
         arrowContainer?.let {
@@ -1858,7 +1873,13 @@ class HudOverlayController(private val context: Context) {
         if (navView.visibility != View.VISIBLE) {
             return containerHeightPx
         }
-        val (_, rawHeight) = resolveViewSize(navView, containerWidthPx.toFloat(), true)
+        val params = navView.layoutParams
+        val navWidth = if (params != null && params.width > 0) {
+            params.width.toFloat()
+        } else {
+            containerWidthPx.toFloat()
+        }
+        val (_, rawHeight) = resolveViewSize(navView, navWidth, params?.width != ViewGroup.LayoutParams.MATCH_PARENT)
         val scaledHeight = rawHeight * navScale
         if (scaledHeight <= 0f) {
             return containerHeightPx

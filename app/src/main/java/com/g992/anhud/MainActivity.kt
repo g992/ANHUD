@@ -729,6 +729,7 @@ class MainActivity : ScaledActivity() {
         containerWidthDp: Float? = null,
         containerHeightDp: Float? = null,
         navPosition: PointF? = null,
+        navWidthDp: Float? = null,
         arrowPosition: PointF? = null,
         speedPosition: PointF? = null,
         hudSpeedPosition: PointF? = null,
@@ -787,6 +788,9 @@ class MainActivity : ScaledActivity() {
         if (navPosition != null) {
             intent.putExtra(OverlayBroadcasts.EXTRA_NAV_X_DP, navPosition.x)
             intent.putExtra(OverlayBroadcasts.EXTRA_NAV_Y_DP, navPosition.y)
+        }
+        if (navWidthDp != null) {
+            intent.putExtra(OverlayBroadcasts.EXTRA_NAV_WIDTH_DP, navWidthDp)
         }
         if (arrowPosition != null) {
             intent.putExtra(OverlayBroadcasts.EXTRA_ARROW_X_DP, arrowPosition.x)
@@ -951,6 +955,7 @@ class MainActivity : ScaledActivity() {
         val previewContainer = dialogView.findViewById<FrameLayout>(R.id.dialogPreviewContainer)
         val previewHudContainer = dialogView.findViewById<FrameLayout>(R.id.dialogPreviewHudContainer)
         val previewNavBlock = dialogView.findViewById<View>(R.id.dialogPreviewNavBlock)
+        val previewNavTextColumn = dialogView.findViewById<LinearLayout>(R.id.dialogPreviewNavTextColumn)
         val previewNavPrimary = dialogView.findViewById<TextView>(R.id.dialogPreviewNavPrimary)
         val previewNavSecondary = dialogView.findViewById<TextView>(R.id.dialogPreviewNavSecondary)
         val previewNavTime = dialogView.findViewById<TextView>(R.id.dialogPreviewNavTime)
@@ -975,6 +980,9 @@ class MainActivity : ScaledActivity() {
         val navTextScaleRow = dialogView.findViewById<View>(R.id.dialogNavTextScaleRow)
         val navTextScaleSeek = dialogView.findViewById<SeekBar>(R.id.dialogNavTextScaleSeek)
         val navTextScaleValue = dialogView.findViewById<TextView>(R.id.dialogNavTextScaleValue)
+        val navWidthLabel = dialogView.findViewById<TextView>(R.id.dialogNavWidthLabel)
+        val navWidthRow = dialogView.findViewById<View>(R.id.dialogNavWidthRow)
+        val navWidthSeek = dialogView.findViewById<SeekBar>(R.id.dialogNavWidthSeek)
         val brightnessSeek = dialogView.findViewById<SeekBar>(R.id.dialogBrightnessSeek)
         val brightnessValue = dialogView.findViewById<TextView>(R.id.dialogBrightnessValue)
 
@@ -988,7 +996,7 @@ class MainActivity : ScaledActivity() {
         val clockPosition = OverlayPrefs.clockPositionDp(this)
         val containerPosition = OverlayPrefs.containerPositionDp(this)
         val containerSize = OverlayPrefs.containerSizeDp(this)
-        val navPoint = PointF(0f, navPosition.y)
+        val navPoint = PointF(navPosition.x, navPosition.y)
         val arrowPoint = PointF(arrowPosition.x, arrowPosition.y)
         val speedPoint = PointF(speedPosition.x, speedPosition.y)
         val hudSpeedPoint = PointF(hudSpeedPosition.x, hudSpeedPosition.y)
@@ -999,6 +1007,7 @@ class MainActivity : ScaledActivity() {
         val containerPoint = PointF(containerPosition.x, containerPosition.y)
         var containerWidthDp = containerSize.x
         var containerHeightDp = containerSize.y
+        var navWidthDp = OverlayPrefs.navWidthDp(this)
         val scalePercent = when (target) {
             OverlayTarget.NAVIGATION -> (OverlayPrefs.navScale(this) * 100).toInt()
             OverlayTarget.ARROW -> (OverlayPrefs.arrowScale(this) * 100).toInt()
@@ -1066,11 +1075,21 @@ class MainActivity : ScaledActivity() {
             scaleValue.visibility = View.GONE
             navTextScaleLabel.visibility = View.GONE
             navTextScaleRow.visibility = View.GONE
+            navWidthLabel.visibility = View.GONE
+            navWidthRow.visibility = View.GONE
         } else {
             containerWidthLabel.visibility = View.GONE
             containerWidthRow.visibility = View.GONE
             containerHeightLabel.visibility = View.GONE
             containerHeightRow.visibility = View.GONE
+        }
+
+        if (target != OverlayTarget.NAVIGATION) {
+            navWidthLabel.visibility = View.GONE
+            navWidthRow.visibility = View.GONE
+        } else {
+            navWidthLabel.visibility = View.VISIBLE
+            navWidthRow.visibility = View.VISIBLE
         }
 
         val showTextScale = target == OverlayTarget.NAVIGATION || target == OverlayTarget.SPEED
@@ -1166,15 +1185,10 @@ class MainActivity : ScaledActivity() {
             containerHeightDp = containerHeightDp.coerceIn(minContainerSizeDp, maxHeightDp)
         }
 
-        clampContainerSize()
-        containerWidthSeek.max = (maxWidthInt - minSizeInt).coerceAtLeast(0)
-        containerHeightSeek.max = (maxHeightInt - minSizeInt).coerceAtLeast(0)
-        containerWidthSeek.progress = (containerWidthDp.roundToInt() - minSizeInt)
-            .coerceIn(0, containerWidthSeek.max)
-        containerHeightSeek.progress = (containerHeightDp.roundToInt() - minSizeInt)
-            .coerceIn(0, containerHeightSeek.max)
-
         fun updateDialogVisibility() {
+            if (target == OverlayTarget.NAVIGATION) {
+                navWidthDp = navWidthDp.coerceIn(OverlayPrefs.NAV_WIDTH_MIN_DP, containerWidthDp)
+            }
             val showNav = target == OverlayTarget.NAVIGATION
             val showArrow = target == OverlayTarget.ARROW
             val showSpeed = target == OverlayTarget.SPEED
@@ -1210,6 +1224,24 @@ class MainActivity : ScaledActivity() {
             val containerWidthPx = containerWidthDp * density
             val containerHeightPx = containerHeightDp * density
             if (showNav) {
+                val navWidthPx = navWidthDp * density
+                val iconSizePx = (48 * density).roundToInt()
+                val iconMarginPx = (8 * density).roundToInt()
+                val textColumnWidthPx = (navWidthPx.roundToInt() - iconSizePx - iconMarginPx).coerceAtLeast(0)
+
+                previewNavBlock.layoutParams = (previewNavBlock.layoutParams as? FrameLayout.LayoutParams)?.apply {
+                    width = navWidthPx.roundToInt()
+                } ?: FrameLayout.LayoutParams(navWidthPx.roundToInt(), FrameLayout.LayoutParams.WRAP_CONTENT)
+
+                previewNavTextColumn.layoutParams = (previewNavTextColumn.layoutParams as? LinearLayout.LayoutParams)?.apply {
+                    width = textColumnWidthPx
+                } ?: LinearLayout.LayoutParams(textColumnWidthPx, LinearLayout.LayoutParams.WRAP_CONTENT)
+
+                if (target == OverlayTarget.NAVIGATION) {
+                    previewNavBlock.background = ContextCompat.getDrawable(this@MainActivity, R.drawable.bg_nav_block_outline)
+                } else {
+                    previewNavBlock.background = null
+                }
                 positionPreviewView(
                     previewHudContainer,
                     previewNavBlock,
@@ -1358,8 +1390,7 @@ class MainActivity : ScaledActivity() {
             } else {
                 previewHudContainer
             }
-            val (dpXRaw, dpY) = positionDpFromPreview(dragContainer, view, previewX, previewY, boundsWidth, boundsHeight)
-            val dpX = if (target == OverlayTarget.NAVIGATION) 0f else dpXRaw
+            val (dpX, dpY) = positionDpFromPreview(dragContainer, view, previewX, previewY, boundsWidth, boundsHeight)
             val point = PointF(dpX, dpY)
             when (target) {
                 OverlayTarget.NAVIGATION -> {
@@ -1482,6 +1513,54 @@ class MainActivity : ScaledActivity() {
             }
         }
 
+        if (target == OverlayTarget.NAVIGATION) {
+            val minNavWidthDp = OverlayPrefs.NAV_WIDTH_MIN_DP
+            val maxNavWidthDp = containerWidthDp.coerceAtLeast(minNavWidthDp)
+            val minNavWidthInt = minNavWidthDp.roundToInt()
+            val maxNavWidthInt = maxNavWidthDp.roundToInt()
+            navWidthSeek.max = (maxNavWidthInt - minNavWidthInt).coerceAtLeast(0)
+            navWidthSeek.progress = (navWidthDp.roundToInt() - minNavWidthInt)
+                .coerceIn(0, navWidthSeek.max)
+            navWidthSeek.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                    val widthInt = (progress + minNavWidthInt).coerceIn(minNavWidthInt, maxNavWidthInt)
+                    navWidthDp = widthInt.toFloat()
+                    updateDialogVisibility()
+                    notifyOverlaySettingsChanged(
+                        navWidthDp = navWidthDp,
+                        preview = true,
+                        previewTarget = target,
+                        previewShowOthers = showOthersCheck.isChecked
+                    )
+                }
+
+                override fun onStartTrackingTouch(seekBar: SeekBar?) = Unit
+
+                override fun onStopTrackingTouch(seekBar: SeekBar?) {
+                    val widthInt = ((seekBar?.progress ?: 0) + minNavWidthInt)
+                        .coerceIn(minNavWidthInt, maxNavWidthInt)
+                    navWidthDp = widthInt.toFloat()
+                    OverlayPrefs.setNavWidthDp(this@MainActivity, navWidthDp)
+                    updateDialogVisibility()
+                    notifyOverlaySettingsChanged(
+                        navWidthDp = navWidthDp,
+                        preview = true,
+                        previewTarget = target,
+                        previewShowOthers = showOthersCheck.isChecked
+                    )
+                }
+            })
+        }
+
+        clampContainerSize()
+        containerWidthSeek.max = (maxWidthInt - minSizeInt).coerceAtLeast(0)
+        containerHeightSeek.max = (maxHeightInt - minSizeInt).coerceAtLeast(0)
+        containerWidthSeek.progress = (containerWidthDp.roundToInt() - minSizeInt)
+            .coerceIn(0, containerWidthSeek.max)
+        containerHeightSeek.progress = (containerHeightDp.roundToInt() - minSizeInt)
+            .coerceIn(0, containerHeightSeek.max)
+
+
         setupDialogDrag(
             if (target == OverlayTarget.CONTAINER) previewContainer else previewHudContainer,
             when (target) {
@@ -1495,7 +1574,7 @@ class MainActivity : ScaledActivity() {
                 OverlayTarget.CLOCK -> previewClock
                 OverlayTarget.CONTAINER -> previewHudContainer
             },
-            lockX = target == OverlayTarget.NAVIGATION
+            lockX = false
         ) { previewX, previewY, persist ->
             updateOverlayPosition(previewX, previewY, persist)
         }
@@ -1938,20 +2017,31 @@ class MainActivity : ScaledActivity() {
         container: FrameLayout,
         view: View,
         lockX: Boolean = false,
+        scrollParent: ViewGroup? = null,
         onDrag: (Float, Float, Boolean) -> Unit
     ) {
         var dragOffsetX = 0f
         var dragOffsetY = 0f
+
         view.setOnTouchListener { v, event ->
             val containerLocation = IntArray(2)
             container.getLocationOnScreen(containerLocation)
+
             when (event.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
+                    // Запрещаем ScrollView перехватывать вертикальные движения
+                    scrollParent?.requestDisallowInterceptTouchEvent(true)
+                    v.parent?.requestDisallowInterceptTouchEvent(true)
+
                     dragOffsetX = event.rawX - (containerLocation[0] + v.x)
                     dragOffsetY = event.rawY - (containerLocation[1] + v.y)
                     true
                 }
+
                 MotionEvent.ACTION_MOVE -> {
+                    scrollParent?.requestDisallowInterceptTouchEvent(true)
+                    v.parent?.requestDisallowInterceptTouchEvent(true)
+
                     val maxX = maxPreviewX(container, v)
                     val maxY = maxPreviewY(container, v)
                     val newX = event.rawX - containerLocation[0] - dragOffsetX
@@ -1961,10 +2051,16 @@ class MainActivity : ScaledActivity() {
                     onDrag(v.x, v.y, false)
                     true
                 }
+
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    scrollParent?.requestDisallowInterceptTouchEvent(false)
+                    v.parent?.requestDisallowInterceptTouchEvent(false)
+
                     onDrag(v.x, v.y, true)
+                    v.performClick()
                     true
                 }
+
                 else -> false
             }
         }

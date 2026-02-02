@@ -52,6 +52,7 @@
     <string name="position_brightness_label">Яркость</string>
     <string name="position_container_width_label">Ширина</string>
     <string name="position_container_height_label">Высота</string>
+    <string name="position_nav_width_label">Ширина блока навигации</string>
     <string name="position_show_others">Отображать другие элементы на проекции</string>
     <string name="position_dialog_hint">Перетаскивайте блок в окне, изменения сохраняются сразу.</string>
     <string name="overlay_preview_label">HUD</string>
@@ -99,7 +100,7 @@
     <string name="timeout_seconds">%1$d сек</string>
     <string name="settings_export_button">Экспорт настроек</string>
     <string name="settings_import_button">Импорт настроек</string>
-    <string name="settings_export_success">Настройки экспортированы</string>
+    <string name="settings_export_success">Настройки экспортированы в Downloads/%1$s</string>
     <string name="settings_export_failed">Не удалось экспортировать настройки</string>
     <string name="settings_import_success">Настройки импортированы</string>
     <string name="settings_import_failed">Не удалось импортировать настройки</string>

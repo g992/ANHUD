@@ -70,7 +70,10 @@ object OverlayPrefs {
     private const val KEY_ROAD_CAMERA_TIMEOUT = "road_camera_timeout"
     private const val KEY_SPEED_CORRECTION = "speed_correction"
     private const val KEY_GUIDE_SHOWN = "guide_shown"
+    private const val KEY_NAV_WIDTH_DP = "overlay_nav_width_dp"
 
+    const val ICON_SIZE_DP = 48f
+    const val NAV_WIDTH_MIN_DP = ICON_SIZE_DP * 2
     const val CONTAINER_MIN_SIZE_PX = 150f
     const val SPEED_LIMIT_ALERT_THRESHOLD_MAX = 20
     const val TIMEOUT_MAX = 360
@@ -133,6 +136,20 @@ object OverlayPrefs {
         prefs(context).edit()
             .putFloat(KEY_NAV_X_DP, xDp)
             .putFloat(KEY_NAV_Y_DP, yDp)
+            .apply()
+    }
+
+    fun navWidthDp(context: Context): Float {
+        val prefs = prefs(context)
+        val containerWidth = containerSizeDp(context).x
+        val defaultWidth = containerWidth.coerceAtLeast(NAV_WIDTH_MIN_DP)
+        return prefs.getFloat(KEY_NAV_WIDTH_DP, defaultWidth)
+            .coerceIn(NAV_WIDTH_MIN_DP, containerWidth)
+    }
+
+    fun setNavWidthDp(context: Context, widthDp: Float) {
+        prefs(context).edit()
+            .putFloat(KEY_NAV_WIDTH_DP, widthDp)
             .apply()
     }
 

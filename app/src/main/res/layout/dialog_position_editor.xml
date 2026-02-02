@@ -25,7 +25,7 @@
 
             <LinearLayout
                 android:id="@+id/dialogPreviewNavBlock"
-                android:layout_width="match_parent"
+                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:background="@android:color/transparent"
                 android:orientation="horizontal"
@@ -47,10 +47,10 @@
                 </FrameLayout>
 
                 <LinearLayout
-                    android:layout_width="0dp"
+                    android:id="@+id/dialogPreviewNavTextColumn"
+                    android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginStart="8dp"
-                    android:layout_weight="1"
                     android:orientation="vertical">
 
                     <TextView
@@ -299,6 +299,29 @@
             android:text="@string/scale_percent_default"
             android:textColor="@color/white"
             android:textSize="14sp" />
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/dialogNavWidthLabel"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:text="@string/position_nav_width_label"
+        android:textColor="@color/white"
+        android:textSize="16sp" />
+
+    <LinearLayout
+        android:id="@+id/dialogNavWidthRow"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <SeekBar
+            android:id="@+id/dialogNavWidthSeek"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content" />
     </LinearLayout>
 
     <TextView

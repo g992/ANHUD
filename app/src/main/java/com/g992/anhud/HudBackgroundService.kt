@@ -26,6 +26,7 @@ class HudBackgroundService : Service() {
                 OverlayBroadcasts.ACTION_OVERLAY_SETTINGS_CHANGED -> {
                 val navX = intent.getFloatExtra(OverlayBroadcasts.EXTRA_NAV_X_DP, Float.NaN)
                 val navY = intent.getFloatExtra(OverlayBroadcasts.EXTRA_NAV_Y_DP, Float.NaN)
+                val navWidth = intent.getFloatExtra(OverlayBroadcasts.EXTRA_NAV_WIDTH_DP, Float.NaN)
                 val arrowX = intent.getFloatExtra(OverlayBroadcasts.EXTRA_ARROW_X_DP, Float.NaN)
                 val arrowY = intent.getFloatExtra(OverlayBroadcasts.EXTRA_ARROW_Y_DP, Float.NaN)
                 val speedX = intent.getFloatExtra(OverlayBroadcasts.EXTRA_SPEED_X_DP, Float.NaN)
@@ -183,6 +184,7 @@ class HudBackgroundService : Service() {
                 }
                 val containerWidthValue = containerWidth.takeIf { !it.isNaN() }
                 val containerHeightValue = containerHeight.takeIf { !it.isNaN() }
+                val navWidthValue = navWidth.takeIf { !it.isNaN() }
                 val navScaleValue = navScale.takeIf { !it.isNaN() }
                 val navTextScaleValue = navTextScale.takeIf { !it.isNaN() }
                 val speedTextScaleValue = speedTextScale.takeIf { !it.isNaN() }
@@ -207,6 +209,7 @@ class HudBackgroundService : Service() {
                     containerWidthValue,
                     containerHeightValue,
                     navPosition,
+                    navWidthValue,
                     arrowPosition,
                     speedPosition,
                     hudSpeedPosition,

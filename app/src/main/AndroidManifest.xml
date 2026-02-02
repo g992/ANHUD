@@ -59,6 +59,14 @@
             android:name=".SensorsActivity"
             android:exported="false"
             android:label="@string/sensors_title" />
+        <activity
+            android:name=".EndNavigationActivity"
+            android:exported="true"
+            android:theme="@style/Theme.ANHUD.Transparent"
+            android:label="Завершить навигацию"
+            android:icon="@drawable/ic_end_navigation"
+            android:excludeFromRecents="true"
+            android:noHistory="true" />
         <service
             android:name=".HomeMirrorAccessibilityService"
             android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
