@@ -89,6 +89,23 @@ class HudBackgroundService : Service() {
                 } else {
                     null
                 }
+                val hudSpeedLimitEnabled = if (intent.hasExtra(OverlayBroadcasts.EXTRA_HUDSPEED_LIMIT_ENABLED)) {
+                    intent.getBooleanExtra(OverlayBroadcasts.EXTRA_HUDSPEED_LIMIT_ENABLED, false)
+                } else {
+                    null
+                }
+                val hudSpeedLimitAlertEnabled =
+                    if (intent.hasExtra(OverlayBroadcasts.EXTRA_HUDSPEED_LIMIT_ALERT_ENABLED)) {
+                        intent.getBooleanExtra(OverlayBroadcasts.EXTRA_HUDSPEED_LIMIT_ALERT_ENABLED, false)
+                    } else {
+                        null
+                    }
+                val hudSpeedLimitAlertThreshold =
+                    if (intent.hasExtra(OverlayBroadcasts.EXTRA_HUDSPEED_LIMIT_ALERT_THRESHOLD)) {
+                        intent.getIntExtra(OverlayBroadcasts.EXTRA_HUDSPEED_LIMIT_ALERT_THRESHOLD, 0)
+                    } else {
+                        null
+                    }
                 val roadCameraEnabled = if (intent.hasExtra(OverlayBroadcasts.EXTRA_ROAD_CAMERA_ENABLED)) {
                     intent.getBooleanExtra(OverlayBroadcasts.EXTRA_ROAD_CAMERA_ENABLED, true)
                 } else {
@@ -241,6 +258,9 @@ class HudBackgroundService : Service() {
                     arrowOnlyWhenNoIcon,
                     speedEnabled,
                     hudSpeedEnabled,
+                    hudSpeedLimitEnabled,
+                    hudSpeedLimitAlertEnabled,
+                    hudSpeedLimitAlertThreshold,
                     roadCameraEnabled,
                     trafficLightEnabled,
                     speedLimitAlertEnabled,

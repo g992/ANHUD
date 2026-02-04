@@ -54,6 +54,9 @@ object OverlayPrefs {
     private const val KEY_SPEED_ENABLED = "overlay_speed_enabled"
     private const val KEY_SPEED_LIMIT_FROM_HUDSPEED = "overlay_speed_limit_from_hudspeed"
     private const val KEY_HUDSPEED_ENABLED = "overlay_hudspeed_enabled"
+    private const val KEY_HUDSPEED_LIMIT_ENABLED = "overlay_hudspeed_limit_enabled"
+    private const val KEY_HUDSPEED_LIMIT_ALERT_ENABLED = "overlay_hudspeed_limit_alert_enabled"
+    private const val KEY_HUDSPEED_LIMIT_ALERT_THRESHOLD = "overlay_hudspeed_limit_alert_threshold"
     private const val KEY_ROAD_CAMERA_ENABLED = "overlay_road_camera_enabled"
     private const val KEY_TRAFFIC_LIGHT_ENABLED = "overlay_traffic_light_enabled"
     private const val KEY_SPEED_LIMIT_ALERT_ENABLED = "overlay_speed_limit_alert_enabled"
@@ -576,6 +579,37 @@ object OverlayPrefs {
     fun setSpeedLimitAlertThreshold(context: Context, threshold: Int) {
         prefs(context).edit()
             .putInt(KEY_SPEED_LIMIT_ALERT_THRESHOLD, threshold.coerceIn(0, SPEED_LIMIT_ALERT_THRESHOLD_MAX))
+            .apply()
+    }
+
+    fun hudSpeedLimitEnabled(context: Context): Boolean {
+        return prefs(context).getBoolean(KEY_HUDSPEED_LIMIT_ENABLED, false)
+    }
+
+    fun setHudSpeedLimitEnabled(context: Context, enabled: Boolean) {
+        prefs(context).edit()
+            .putBoolean(KEY_HUDSPEED_LIMIT_ENABLED, enabled)
+            .apply()
+    }
+
+    fun hudSpeedLimitAlertEnabled(context: Context): Boolean {
+        return prefs(context).getBoolean(KEY_HUDSPEED_LIMIT_ALERT_ENABLED, false)
+    }
+
+    fun setHudSpeedLimitAlertEnabled(context: Context, enabled: Boolean) {
+        prefs(context).edit()
+            .putBoolean(KEY_HUDSPEED_LIMIT_ALERT_ENABLED, enabled)
+            .apply()
+    }
+
+    fun hudSpeedLimitAlertThreshold(context: Context): Int {
+        return prefs(context).getInt(KEY_HUDSPEED_LIMIT_ALERT_THRESHOLD, 0)
+            .coerceIn(0, SPEED_LIMIT_ALERT_THRESHOLD_MAX)
+    }
+
+    fun setHudSpeedLimitAlertThreshold(context: Context, threshold: Int) {
+        prefs(context).edit()
+            .putInt(KEY_HUDSPEED_LIMIT_ALERT_THRESHOLD, threshold.coerceIn(0, SPEED_LIMIT_ALERT_THRESHOLD_MAX))
             .apply()
     }
 

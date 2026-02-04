@@ -10,6 +10,7 @@ import android.graphics.Typeface
 import android.hardware.display.DisplayManager
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import android.provider.Settings
 import android.util.TypedValue
 import android.view.Gravity
@@ -66,7 +67,11 @@ class HudOverlayController(private val context: Context) {
         private const val SPEED_TEXT_SCALE_MIN = 0.5f
         private const val SPEED_TEXT_SCALE_MAX = 2f
         private const val PREVIEW_HUDSPEED_CAM_TYPE = 1
+        private const val PREVIEW_HUDSPEED_LIMIT_VALUE = 100
+        private const val PREVIEW_HUDSPEED_CAM_FLAG = 3
         private const val HUDSPEED_HIDE_DISTANCE_METERS = 50
+        private const val HUDSPEED_OVERSPEED_PADDING_DP = 4f
+        private const val PREVIEW_SPEED_LIMIT_TEXT_SCALE = 1.3f
         private const val MAP_ROUTE_ZOOM = 12f
         private const val SIMULATION_SPEED_KMH = 72.0
         private val MAP_ROUTE_POINTS = listOf(
@@ -116,6 +121,7 @@ class HudOverlayController(private val context: Context) {
     private var hudSpeedIcon: ImageView? = null
     private var hudSpeedDirectionView: ImageView? = null
     private var hudSpeedDistanceView: TextView? = null
+    private var hudSpeedLimitView: TextView? = null
     private var roadCameraContainer: LinearLayout? = null
     private var roadCameraIconView: ImageView? = null
     private var roadCameraDistanceView: TextView? = null
@@ -168,6 +174,9 @@ class HudOverlayController(private val context: Context) {
     private var arrowOnlyWhenNoIcon: Boolean = OverlayPrefs.arrowOnlyWhenNoIcon(context)
     private var speedEnabled: Boolean = OverlayPrefs.speedEnabled(context)
     private var hudSpeedEnabled: Boolean = OverlayPrefs.hudSpeedEnabled(context)
+    private var hudSpeedLimitEnabled: Boolean = OverlayPrefs.hudSpeedLimitEnabled(context)
+    private var hudSpeedLimitAlertEnabled: Boolean = OverlayPrefs.hudSpeedLimitAlertEnabled(context)
+    private var hudSpeedLimitAlertThreshold: Int = OverlayPrefs.hudSpeedLimitAlertThreshold(context)
     private var roadCameraEnabled: Boolean = OverlayPrefs.roadCameraEnabled(context)
     private var trafficLightEnabled: Boolean = OverlayPrefs.trafficLightEnabled(context)
     private var speedLimitAlertEnabled: Boolean = OverlayPrefs.speedLimitAlertEnabled(context)
@@ -363,6 +372,7 @@ class HudOverlayController(private val context: Context) {
             hudSpeedDistanceMeters = state.hudSpeedDistanceMeters,
             hudSpeedCamType = state.hudSpeedCamType,
             hudSpeedCamFlag = state.hudSpeedCamFlag,
+            hudSpeedLimit1 = state.hudSpeedLimit1,
             hudSpeedUpdatedAt = state.hudSpeedUpdatedAt,
             previewHudSpeed = previewHudSpeed,
             previewTrafficLight = previewTrafficLight,
@@ -392,6 +402,7 @@ class HudOverlayController(private val context: Context) {
         val hudSpeedDistanceMeters: Int?,
         val hudSpeedCamType: Int?,
         val hudSpeedCamFlag: Int?,
+        val hudSpeedLimit1: Int?,
         val hudSpeedUpdatedAt: Long,
         val previewHudSpeed: Boolean,
         val previewTrafficLight: Boolean,
@@ -467,6 +478,9 @@ class HudOverlayController(private val context: Context) {
         arrowOnlyWhenNoIcon: Boolean?,
         speedEnabled: Boolean?,
         hudSpeedEnabled: Boolean?,
+        hudSpeedLimitEnabled: Boolean?,
+        hudSpeedLimitAlertEnabled: Boolean?,
+        hudSpeedLimitAlertThreshold: Int?,
         roadCameraEnabled: Boolean?,
         trafficLightEnabled: Boolean?,
         speedLimitAlertEnabled: Boolean?,
@@ -589,6 +603,16 @@ class HudOverlayController(private val context: Context) {
             if (hudSpeedEnabled != null) {
                 this.hudSpeedEnabled = hudSpeedEnabled
             }
+            if (hudSpeedLimitEnabled != null) {
+                this.hudSpeedLimitEnabled = hudSpeedLimitEnabled
+            }
+            if (hudSpeedLimitAlertEnabled != null) {
+                this.hudSpeedLimitAlertEnabled = hudSpeedLimitAlertEnabled
+            }
+            if (hudSpeedLimitAlertThreshold != null) {
+                this.hudSpeedLimitAlertThreshold = hudSpeedLimitAlertThreshold
+                    .coerceIn(0, OverlayPrefs.SPEED_LIMIT_ALERT_THRESHOLD_MAX)
+            }
             if (roadCameraEnabled != null) {
                 this.roadCameraEnabled = roadCameraEnabled
             }
@@ -702,6 +726,8 @@ class HudOverlayController(private val context: Context) {
                 navWidthPx,
                 FrameLayout.LayoutParams.WRAP_CONTENT
             )
+            pivotX = 0f
+            pivotY = 0f
         }
 
         val maneuverBox = FrameLayout(displayContext).apply {
@@ -872,6 +898,29 @@ class HudOverlayController(private val context: Context) {
             setImageResource(R.drawable.cam_type_1)
         }
 
+        val hudSpeedLimitText = TextView(displayContext).apply {
+            layoutParams = LinearLayout.LayoutParams(iconSize, iconSize).apply {
+                marginStart = (6 * metrics.density).roundToInt()
+            }
+            background = ContextCompat.getDrawable(displayContext, R.drawable.bg_hudspeed_limit)
+            gravity = Gravity.CENTER
+            setTextColor(Color.BLACK)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, SPEED_LIMIT_TEXT_SIZE_SP)
+            setTypeface(typeface, Typeface.BOLD)
+            visibility = View.GONE
+        }
+
+        val hudSpeedTopRow = LinearLayout(displayContext).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            )
+            gravity = Gravity.CENTER_VERTICAL
+            orientation = LinearLayout.HORIZONTAL
+        }
+        hudSpeedTopRow.addView(hudSpeedIconView)
+        hudSpeedTopRow.addView(hudSpeedLimitText)
+
         val hudSpeedDistanceText = TextView(displayContext).apply {
             layoutParams = LinearLayout.LayoutParams(iconSize, LinearLayout.LayoutParams.WRAP_CONTENT)
             gravity = Gravity.CENTER
@@ -881,7 +930,7 @@ class HudOverlayController(private val context: Context) {
             setTypeface(typeface, Typeface.BOLD)
         }
 
-        hudSpeedBlock.addView(hudSpeedIconView)
+        hudSpeedBlock.addView(hudSpeedTopRow)
         val hudSpeedDirectionIcon = ImageView(displayContext).apply {
             layoutParams = LinearLayout.LayoutParams(iconSize, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
                 topMargin = (4 * metrics.density).roundToInt()
@@ -955,6 +1004,7 @@ class HudOverlayController(private val context: Context) {
             hudSpeedIcon = hudSpeedIconView
             hudSpeedDirectionView = hudSpeedDirectionIcon
             hudSpeedDistanceView = hudSpeedDistanceText
+            hudSpeedLimitView = hudSpeedLimitText
             roadCameraContainer = roadCameraBlock
             roadCameraIconView = roadCameraIcon
             roadCameraDistanceView = roadCameraDistanceText
@@ -984,6 +1034,7 @@ class HudOverlayController(private val context: Context) {
             hudSpeedIcon = null
             hudSpeedDirectionView = null
             hudSpeedDistanceView = null
+            hudSpeedLimitView = null
             roadCameraContainer = null
             roadCameraIconView = null
             roadCameraDistanceView = null
@@ -1025,6 +1076,7 @@ class HudOverlayController(private val context: Context) {
         hudSpeedIcon = null
         hudSpeedDirectionView = null
         hudSpeedDistanceView = null
+        hudSpeedLimitView = null
         roadCameraContainer = null
         roadCameraIconView = null
         roadCameraDistanceView = null
@@ -1166,8 +1218,32 @@ class HudOverlayController(private val context: Context) {
         } else {
             formatHudSpeedDistance(state.hudSpeedDistanceMeters)
         }
+        val hudSpeedLimitValue = if (previewHudSpeed) {
+            PREVIEW_HUDSPEED_LIMIT_VALUE
+        } else {
+            state.hudSpeedLimit1
+        }
+        val hudSpeedLimitText = hudSpeedLimitValue
+            ?.takeIf { it > 0 }
+            ?.toString()
+            .orEmpty()
+        val hudSpeedLimitOverspeed = if (previewHudSpeed) {
+            hudSpeedLimitEnabled && hudSpeedLimitValue != null
+        } else {
+            hudSpeedLimitEnabled &&
+                hudSpeedLimitAlertEnabled &&
+                speedValue != null &&
+                hudSpeedLimitValue != null &&
+                speedValue > hudSpeedLimitValue + hudSpeedLimitAlertThreshold
+        }
+        if (hudSpeedLimitOverspeed) {
+            Log.d(
+                "HudOverlayController",
+                "HUD Speed overspeed: speed=$speedValue limit=$hudSpeedLimitValue threshold=$hudSpeedLimitAlertThreshold"
+            )
+        }
         val hudSpeedDirectionIcon = if (previewHudSpeed) {
-            null
+            resolveHudSpeedDirectionIcon(PREVIEW_HUDSPEED_CAM_FLAG)
         } else {
             resolveHudSpeedDirectionIcon(state.hudSpeedCamFlag)
         }
@@ -1206,7 +1282,16 @@ class HudOverlayController(private val context: Context) {
         setTextOrHide(time, timeText)
         updateSpeedLimit(speedLimitText, previewSpeed, overspeed)
         speedometer?.let { setTextOrHide(it, speedometerText) }
-        updateHudSpeed(hudSpeedCamType, hudSpeedDirectionIcon, hudSpeedDistanceText)
+        val hudSpeedLimitTextScale = if (previewHudSpeed) PREVIEW_SPEED_LIMIT_TEXT_SCALE else 1f
+        updateHudSpeed(
+            hudSpeedCamType,
+            hudSpeedDirectionIcon,
+            hudSpeedDistanceText,
+            hudSpeedLimitText,
+            hudSpeedLimitEnabled,
+            hudSpeedLimitTextScale
+        )
+        updateHudSpeedOverspeed(hudSpeedLimitOverspeed)
         updateRoadCamera(state.roadCameraIcon, roadCameraDistanceText, roadCameraAllowed, previewRoadCamera)
         updateTrafficLights(trafficLights, trafficLightAllowed, previewTrafficLight)
         updateManeuver(state.maneuverBitmap, previewNav)
@@ -1427,7 +1512,9 @@ class HudOverlayController(private val context: Context) {
         } else {
             SPEED_LIMIT_TEXT_SIZE_SP
         }
-        val scaledSizeSp = baseSizeSp * speedTextScale.coerceIn(SPEED_TEXT_SCALE_MIN, SPEED_TEXT_SCALE_MAX)
+        val previewScale = if (preview) PREVIEW_SPEED_LIMIT_TEXT_SCALE else 1f
+        val scaledSizeSp =
+            baseSizeSp * speedTextScale.coerceIn(SPEED_TEXT_SCALE_MIN, SPEED_TEXT_SCALE_MAX) * previewScale
         view.setTextSize(TypedValue.COMPLEX_UNIT_SP, scaledSizeSp)
         view.strokeEnabled = false
         val background = if (overspeed) {
@@ -1440,12 +1527,34 @@ class HudOverlayController(private val context: Context) {
         view.visibility = View.VISIBLE
     }
 
-    private fun updateHudSpeed(camType: Int?, directionIcon: Int?, distanceText: String) {
+    private fun updateHudSpeed(
+        camType: Int?,
+        directionIcon: Int?,
+        distanceText: String,
+        limitText: String,
+        showLimit: Boolean,
+        limitTextScale: Float
+    ) {
         val container = hudSpeedContainer ?: return
         val icon = hudSpeedIcon ?: return
         val direction = hudSpeedDirectionView ?: return
         val distance = hudSpeedDistanceView ?: return
+        val limit = hudSpeedLimitView
         icon.setImageResource(resolveHudSpeedCamIcon(camType))
+        if (limit != null) {
+            if (showLimit && limitText.isNotBlank()) {
+                val scaledSizeSp =
+                    SPEED_LIMIT_TEXT_SIZE_SP *
+                        speedTextScale.coerceIn(SPEED_TEXT_SCALE_MIN, SPEED_TEXT_SCALE_MAX) *
+                        limitTextScale
+                limit.setTextSize(TypedValue.COMPLEX_UNIT_SP, scaledSizeSp)
+                limit.text = limitText
+                limit.setBackgroundResource(R.drawable.bg_hudspeed_limit)
+                limit.visibility = View.VISIBLE
+            } else {
+                limit.visibility = View.GONE
+            }
+        }
         if (directionIcon == null || distanceText.isBlank()) {
             direction.setImageDrawable(null)
             direction.visibility = View.GONE
@@ -1456,6 +1565,18 @@ class HudOverlayController(private val context: Context) {
         distance.text = distanceText
         if (distanceText.isBlank()) {
             container.visibility = View.GONE
+        }
+    }
+
+    private fun updateHudSpeedOverspeed(overspeed: Boolean) {
+        val container = hudSpeedContainer ?: return
+        val paddingPx = (HUDSPEED_OVERSPEED_PADDING_DP * container.resources.displayMetrics.density).roundToInt()
+        if (overspeed) {
+            container.setBackgroundResource(R.drawable.bg_hudspeed_overspeed)
+            container.setPadding(paddingPx, paddingPx, paddingPx, paddingPx)
+        } else {
+            container.background = null
+            container.setPadding(0, 0, 0, 0)
         }
     }
 
@@ -1917,9 +2038,16 @@ class HudOverlayController(private val context: Context) {
     }
 
     private fun resolveViewSize(view: View, maxWidthPx: Float, exactWidth: Boolean): Pair<Float, Float> {
-        val widthSpec = if (maxWidthPx > 0f) {
+        val params = view.layoutParams
+        val exactWidthPx = if (exactWidth && params != null && params.width > 0) {
+            params.width.toFloat()
+        } else {
+            null
+        }
+        val widthSpec = if ((exactWidthPx ?: maxWidthPx) > 0f) {
+            val width = (exactWidthPx ?: maxWidthPx).roundToInt()
             val mode = if (exactWidth) View.MeasureSpec.EXACTLY else View.MeasureSpec.AT_MOST
-            View.MeasureSpec.makeMeasureSpec(maxWidthPx.roundToInt(), mode)
+            View.MeasureSpec.makeMeasureSpec(width, mode)
         } else {
             View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
         }
@@ -1939,7 +2067,7 @@ class HudOverlayController(private val context: Context) {
 
     private fun shouldMeasureExactWidth(view: View): Boolean {
         val params = view.layoutParams ?: return false
-        return params.width == ViewGroup.LayoutParams.MATCH_PARENT
+        return params.width == ViewGroup.LayoutParams.MATCH_PARENT || params.width > 0
     }
 
     private fun applyNavTextScale() {

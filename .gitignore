@@ -52,3 +52,11 @@ captures/
 /app/release/
 /.kotlin/
 /mapkit/
+
+YN_Patch/*
+YN_Patch
+/YN_Patch/
+/YN_src_decompiled/
+/YN_src_extracted/
+/YM_src
+/YN_src

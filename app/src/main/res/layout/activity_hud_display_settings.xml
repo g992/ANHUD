@@ -49,6 +49,37 @@
         </LinearLayout>
 
         <TextView
+            android:id="@+id/presetLabel"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="@string/preset_label"
+            android:textColor="@color/white"
+            android:textSize="18sp" />
+
+        <Spinner
+            android:id="@+id/presetSpinner"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp" />
+
+        <Button
+            android:id="@+id/savePresetButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="@string/preset_save_button"
+            android:visibility="gone" />
+
+        <TextView
+            android:id="@+id/presetFolderHint"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:textColor="@color/white"
+            android:textSize="12sp" />
+
+        <TextView
             android:id="@+id/permissionStatus"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -388,7 +419,7 @@
                 android:gravity="center"
                 android:text="@string/preview_speed_limit_text"
                 android:textColor="@color/black"
-                android:textSize="18sp"
+                android:textSize="20sp"
                 android:textStyle="bold" />
 
             <CheckBox
@@ -487,15 +518,43 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
+                android:background="@drawable/bg_hudspeed_overspeed"
+                android:padding="4dp"
                 android:gravity="center_horizontal"
                 android:orientation="vertical">
 
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <ImageView
+                        android:layout_width="48dp"
+                        android:layout_height="48dp"
+                        android:contentDescription="@string/preview_direction_label"
+                        android:scaleType="fitCenter"
+                        android:src="@drawable/cam_type_1" />
+
+                    <TextView
+                        android:layout_width="48dp"
+                        android:layout_height="48dp"
+                        android:layout_marginStart="6dp"
+                        android:background="@drawable/bg_hudspeed_limit"
+                        android:gravity="center"
+                        android:text="@string/preview_speed_limit_text"
+                        android:textColor="@color/black"
+                        android:textSize="16sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
+
                 <ImageView
                     android:layout_width="48dp"
-                    android:layout_height="48dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
                     android:contentDescription="@string/preview_direction_label"
                     android:scaleType="fitCenter"
-                    android:src="@drawable/cam_type_1" />
+                    android:src="@drawable/cam_dirtype_3_hud" />
 
                 <TextView
                     android:layout_width="wrap_content"
@@ -506,6 +565,62 @@
                     android:textColor="@color/white"
                     android:textSize="14sp"
                     android:textStyle="bold" />
+            </LinearLayout>
+
+            <CheckBox
+                android:id="@+id/hudSpeedLimitCheck"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:text="@string/hudspeed_limit_show_label"
+                android:textColor="@color/white"
+                android:textSize="14sp" />
+
+            <CheckBox
+                android:id="@+id/hudSpeedLimitAlertCheck"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="@string/speed_limit_alert_enable"
+                android:textColor="@color/white"
+                android:textSize="14sp" />
+
+            <LinearLayout
+                android:id="@+id/hudSpeedLimitAlertThresholdRow"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:orientation="vertical"
+                android:visibility="gone">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="@string/speed_limit_alert_threshold_label"
+                        android:textColor="@color/white"
+                        android:textSize="14sp" />
+
+                    <TextView
+                        android:id="@+id/hudSpeedLimitAlertThresholdValue"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/speed_limit_alert_threshold_default"
+                        android:textColor="@color/white"
+                        android:textSize="14sp" />
+                </LinearLayout>
+
+                <SeekBar
+                    android:id="@+id/hudSpeedLimitAlertThresholdSeek"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:max="20" />
             </LinearLayout>
         </LinearLayout>
 

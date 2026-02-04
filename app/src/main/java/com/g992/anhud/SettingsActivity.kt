@@ -31,7 +31,6 @@ import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import com.google.android.material.tabs.TabLayout
-import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 import java.io.FileOutputStream
@@ -276,7 +275,7 @@ class SettingsActivity : ScaledActivity() {
     private fun exportSettingsToDownloads() {
         try {
             val fileName = generateExportFileName()
-            val payload = buildSettingsPayload()
+            val payload = PrefsJson.buildPayload(this)
             val json = payload.toString(2)
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -342,7 +341,7 @@ class SettingsActivity : ScaledActivity() {
 
     private fun exportSettings(uri: Uri) {
         try {
-            val payload = buildSettingsPayload()
+            val payload = PrefsJson.buildPayload(this)
             val json = payload.toString(2)
             contentResolver.openOutputStream(uri)?.use { output ->
                 output.write(json.toByteArray(Charsets.UTF_8))
@@ -365,14 +364,8 @@ class SettingsActivity : ScaledActivity() {
                     return
                 }
             val payload = JSONObject(json)
-            val prefsObject = payload.optJSONObject("prefs")
-                ?: run {
-                    showToast(R.string.settings_import_failed)
-                    return
-                }
-            val overlayApplied = applyPrefsFromJson(OVERLAY_PREFS_NAME, prefsObject.optJSONArray(OVERLAY_PREFS_NAME))
-            val maneuverApplied = applyPrefsFromJson(MANEUVER_PREFS_NAME, prefsObject.optJSONArray(MANEUVER_PREFS_NAME))
-            if (!overlayApplied && !maneuverApplied) {
+            val applied = PrefsJson.applyPayload(this, payload)
+            if (!applied) {
                 showToast(R.string.settings_import_failed)
                 return
             }
@@ -382,88 +375,6 @@ class SettingsActivity : ScaledActivity() {
         } catch (_: Exception) {
             showToast(R.string.settings_import_failed)
         }
-    }
-
-    private fun buildSettingsPayload(): JSONObject {
-        val payload = JSONObject()
-        payload.put("version", 1)
-        val prefsObject = JSONObject()
-        prefsObject.put(OVERLAY_PREFS_NAME, serializePrefs(getSharedPreferences(OVERLAY_PREFS_NAME, MODE_PRIVATE)))
-        prefsObject.put(MANEUVER_PREFS_NAME, serializePrefs(getSharedPreferences(MANEUVER_PREFS_NAME, MODE_PRIVATE)))
-        payload.put("prefs", prefsObject)
-        return payload
-    }
-
-    private fun serializePrefs(prefs: android.content.SharedPreferences): JSONArray {
-        val items = JSONArray()
-        for ((key, value) in prefs.all) {
-            val entry = JSONObject()
-            entry.put("k", key)
-            when (value) {
-                is Boolean -> {
-                    entry.put("t", "b")
-                    entry.put("v", value)
-                }
-                is Float -> {
-                    entry.put("t", "f")
-                    entry.put("v", value.toDouble())
-                }
-                is Int -> {
-                    entry.put("t", "i")
-                    entry.put("v", value)
-                }
-                is Long -> {
-                    entry.put("t", "l")
-                    entry.put("v", value)
-                }
-                is String -> {
-                    entry.put("t", "s")
-                    entry.put("v", value)
-                }
-                is Set<*> -> {
-                    val array = JSONArray()
-                    value.filterIsInstance<String>().forEach { array.put(it) }
-                    entry.put("t", "ss")
-                    entry.put("v", array)
-                }
-                else -> continue
-            }
-            items.put(entry)
-        }
-        return items
-    }
-
-    private fun applyPrefsFromJson(prefName: String, entries: JSONArray?): Boolean {
-        if (entries == null) {
-            return false
-        }
-        val prefs = getSharedPreferences(prefName, MODE_PRIVATE)
-        val editor = prefs.edit()
-        for (index in 0 until entries.length()) {
-            val entry = entries.optJSONObject(index) ?: continue
-            val key = entry.optString("k", "")
-            val type = entry.optString("t", "")
-            if (key.isBlank()) continue
-            when (type) {
-                "b" -> editor.putBoolean(key, entry.optBoolean("v"))
-                "f" -> editor.putFloat(key, entry.optDouble("v").toFloat())
-                "i" -> editor.putInt(key, entry.optInt("v"))
-                "l" -> editor.putLong(key, entry.optLong("v"))
-                "s" -> editor.putString(key, entry.optString("v", ""))
-                "ss" -> {
-                    val array = entry.optJSONArray("v")
-                    val set = mutableSetOf<String>()
-                    if (array != null) {
-                        for (i in 0 until array.length()) {
-                            set.add(array.optString(i))
-                        }
-                    }
-                    editor.putStringSet(key, set)
-                }
-            }
-        }
-        editor.apply()
-        return true
     }
 
     private fun broadcastOverlayPrefs() {
@@ -530,6 +441,12 @@ class SettingsActivity : ScaledActivity() {
         intent.putExtra(OverlayBroadcasts.EXTRA_TRAFFIC_LIGHT_MAX_ACTIVE, OverlayPrefs.trafficLightMaxActive(this))
         intent.putExtra(OverlayBroadcasts.EXTRA_SPEED_LIMIT_ALERT_ENABLED, OverlayPrefs.speedLimitAlertEnabled(this))
         intent.putExtra(OverlayBroadcasts.EXTRA_SPEED_LIMIT_ALERT_THRESHOLD, OverlayPrefs.speedLimitAlertThreshold(this))
+        intent.putExtra(OverlayBroadcasts.EXTRA_HUDSPEED_LIMIT_ENABLED, OverlayPrefs.hudSpeedLimitEnabled(this))
+        intent.putExtra(OverlayBroadcasts.EXTRA_HUDSPEED_LIMIT_ALERT_ENABLED, OverlayPrefs.hudSpeedLimitAlertEnabled(this))
+        intent.putExtra(
+            OverlayBroadcasts.EXTRA_HUDSPEED_LIMIT_ALERT_THRESHOLD,
+            OverlayPrefs.hudSpeedLimitAlertThreshold(this)
+        )
         sendBroadcast(intent)
     }
 
@@ -775,7 +692,6 @@ class SettingsActivity : ScaledActivity() {
 
     companion object {
         private const val DEFAULT_BASIC_ICON_ID = "101"
-        private const val OVERLAY_PREFS_NAME = "hud_overlay_prefs"
         private const val MANEUVER_PREFS_NAME = "maneuver_match_prefs"
         private const val DEFAULTS_ASSET = "maneuver_match_defaults.properties"
     }

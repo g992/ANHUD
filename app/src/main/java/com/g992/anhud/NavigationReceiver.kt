@@ -83,6 +83,7 @@ class NavigationReceiver : BroadcastReceiver() {
                     predictManeuverType(context, it)
                 }.orEmpty()
                 val maneuverType = if (useExtraType) maneuverTypeFromExtra else maneuverTypePredicted
+                val now = System.currentTimeMillis()
                 Log.d(TAG, "Yandex maneuver bitmap: $size typeFromExtra=\"$maneuverTypeFromExtra\" typePredicted=\"$maneuverTypePredicted\" final=\"$maneuverType\"")
                 UiLogStore.append(LogCategory.NAVIGATION, "яндекс маневр bitmap=$size typeExtra=\"$maneuverTypeFromExtra\" typePredicted=\"$maneuverTypePredicted\" final=\"$maneuverType\"")
                 var updated: NavigationHudState? = null
@@ -91,7 +92,7 @@ class NavigationReceiver : BroadcastReceiver() {
                         maneuverBitmap = bitmap ?: state.maneuverBitmap,
                         maneuverType = maneuverType.ifBlank { state.maneuverType },
                         source = SOURCE_YANDEX,
-                        lastUpdated = System.currentTimeMillis(),
+                        lastUpdated = now,
                         lastAction = action
                     )
                     updated = next
@@ -300,9 +301,21 @@ class NavigationReceiver : BroadcastReceiver() {
                 val resolvedCamType = camType.takeIf { hasCamera && it >= 0 }
                 val resolvedCamFlag = camFlag.takeIf { hasCamera && it >= 0 }
                 val resolvedLimit1 = limit1.takeIf { hasCamera && it > 0 }
-                val hudSpeedUpdatedAt = if (hasCamera) System.currentTimeMillis() else 0L
                 NavigationHudStore.update { state ->
-                    val useHudSpeedLimit = OverlayPrefs.speedLimitFromHudSpeed(context) && resolvedLimit1 != null
+                    val now = System.currentTimeMillis()
+                    val hudSpeedDataChanged = hasCamera != state.hudSpeedHasCamera ||
+                        resolvedDistance != state.hudSpeedDistanceMeters ||
+                        resolvedCamType != state.hudSpeedCamType ||
+                        resolvedCamFlag != state.hudSpeedCamFlag ||
+                        resolvedLimit1 != state.hudSpeedLimit1
+                    val hudSpeedUpdatedAt = when {
+                        !hasCamera -> 0L
+                        hudSpeedDataChanged || state.hudSpeedUpdatedAt <= 0L -> now
+                        else -> state.hudSpeedUpdatedAt
+                    }
+                    val preferHudSpeedLimit = OverlayPrefs.speedLimitFromHudSpeed(context)
+                    val useHudSpeedLimit = preferHudSpeedLimit && resolvedLimit1 != null
+                    val clearHudSpeedLimit = preferHudSpeedLimit && !hasCamera
                     state.copy(
                         hudSpeedHasCamera = hasCamera,
                         hudSpeedDistanceMeters = resolvedDistance,
@@ -310,8 +323,16 @@ class NavigationReceiver : BroadcastReceiver() {
                         hudSpeedCamFlag = resolvedCamFlag,
                         hudSpeedLimit1 = resolvedLimit1,
                         hudSpeedUpdatedAt = hudSpeedUpdatedAt,
-                        speedLimit = if (useHudSpeedLimit) resolvedLimit1.toString() else state.speedLimit,
-                        rawSpeedLimit = if (useHudSpeedLimit) resolvedLimit1.toString() else state.rawSpeedLimit,
+                        speedLimit = when {
+                            useHudSpeedLimit -> resolvedLimit1.toString()
+                            clearHudSpeedLimit -> ""
+                            else -> state.speedLimit
+                        },
+                        rawSpeedLimit = when {
+                            useHudSpeedLimit -> resolvedLimit1.toString()
+                            clearHudSpeedLimit -> ""
+                            else -> state.rawSpeedLimit
+                        },
                         source = SOURCE_HUDSPEED,
                         lastUpdated = System.currentTimeMillis(),
                         lastAction = action

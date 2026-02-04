@@ -1,0 +1,844 @@
+{
+  "version": 1,
+  "prefs": {
+    "hud_overlay_prefs": [
+      {
+        "k": "overlay_speedometer_y_dp",
+        "t": "f",
+        "v": 153.28570556640625
+      },
+      {
+        "k": "overlay_nav_y_dp",
+        "t": "f",
+        "v": 10.811351776123047
+      },
+      {
+        "k": "overlay_traffic_light_scale",
+        "t": "f",
+        "v": 0.5
+      },
+      {
+        "k": "overlay_arrow_scale",
+        "t": "f",
+        "v": 0.699999988079071
+      },
+      {
+        "k": "overlay_traffic_light_y_dp",
+        "t": "f",
+        "v": 5.1460347175598145
+      },
+      {
+        "k": "overlay_arrow_y_dp",
+        "t": "f",
+        "v": 12.024181365966797
+      },
+      {
+        "k": "camera_timeout_far",
+        "t": "i",
+        "v": 5
+      },
+      {
+        "k": "overlay_clock_enabled",
+        "t": "b",
+        "v": true
+      },
+      {
+        "k": "overlay_speed_limit_alert_enabled",
+        "t": "b",
+        "v": true
+      },
+      {
+        "k": "camera_timeout_near",
+        "t": "i",
+        "v": 5
+      },
+      {
+        "k": "overlay_road_camera_scale",
+        "t": "f",
+        "v": 0.699999988079071
+      },
+      {
+        "k": "guide_shown",
+        "t": "b",
+        "v": true
+      },
+      {
+        "k": "overlay_enabled",
+        "t": "b",
+        "v": true
+      },
+      {
+        "k": "overlay_container_y_dp",
+        "t": "f",
+        "v": 87.71688079833984
+      },
+      {
+        "k": "overlay_clock_y_dp",
+        "t": "f",
+        "v": 57.57061004638672
+      },
+      {
+        "k": "overlay_speed_scale",
+        "t": "f",
+        "v": 0.550000011920929
+      },
+      {
+        "k": "overlay_speed_enabled",
+        "t": "b",
+        "v": true
+      },
+      {
+        "k": "overlay_arrow_enabled",
+        "t": "b",
+        "v": false
+      },
+      {
+        "k": "overlay_arrow_x_dp",
+        "t": "f",
+        "v": 34.16267013549805
+      },
+      {
+        "k": "native_nav_enabled",
+        "t": "b",
+        "v": false
+      },
+      {
+        "k": "overlay_road_camera_enabled",
+        "t": "b",
+        "v": true
+      },
+      {
+        "k": "nav_notification_end_timeout",
+        "t": "i",
+        "v": 0
+      },
+      {
+        "k": "overlay_speed_text_scale",
+        "t": "f",
+        "v": 1
+      },
+      {
+        "k": "overlay_clock_x_dp",
+        "t": "f",
+        "v": 26.7574462890625
+      },
+      {
+        "k": "overlay_nav_width_dp",
+        "t": "f",
+        "v": 235
+      },
+      {
+        "k": "overlay_container_width_dp",
+        "t": "f",
+        "v": 393
+      },
+      {
+        "k": "overlay_road_camera_x_dp",
+        "t": "f",
+        "v": 306.1431579589844
+      },
+      {
+        "k": "overlay_hudspeed_x_dp",
+        "t": "f",
+        "v": 348.1986083984375
+      },
+      {
+        "k": "overlay_speed_y_dp",
+        "t": "f",
+        "v": 43.384918212890625
+      },
+      {
+        "k": "overlay_nav_text_scale",
+        "t": "f",
+        "v": 1
+      },
+      {
+        "k": "overlay_arrow_only_when_no_icon",
+        "t": "b",
+        "v": true
+      },
+      {
+        "k": "overlay_speed_limit_alert_threshold",
+        "t": "i",
+        "v": 17
+      },
+      {
+        "k": "overlay_display_id",
+        "t": "i",
+        "v": 1
+      },
+      {
+        "k": "overlay_speedometer_x_dp",
+        "t": "f",
+        "v": 175.83692932128906
+      },
+      {
+        "k": "overlay_nav_scale",
+        "t": "f",
+        "v": 0.699999988079071
+      },
+      {
+        "k": "overlay_nav_x_dp",
+        "t": "f",
+        "v": 0
+      },
+      {
+        "k": "overlay_hudspeed_scale",
+        "t": "f",
+        "v": 0.699999988079071
+      },
+      {
+        "k": "overlay_road_camera_y_dp",
+        "t": "f",
+        "v": 6.739649295806885
+      },
+      {
+        "k": "overlay_container_height_dp",
+        "t": "f",
+        "v": 78
+      },
+      {
+        "k": "overlay_hudspeed_y_dp",
+        "t": "f",
+        "v": 6.64816427230835
+      },
+      {
+        "k": "overlay_speedometer_enabled",
+        "t": "b",
+        "v": false
+      },
+      {
+        "k": "overlay_traffic_light_x_dp",
+        "t": "f",
+        "v": 171.33724975585938
+      },
+      {
+        "k": "overlay_speed_x_dp",
+        "t": "f",
+        "v": 185.70945739746094
+      },
+      {
+        "k": "overlay_traffic_light_max_active",
+        "t": "i",
+        "v": 1
+      },
+      {
+        "k": "overlay_hudspeed_alpha",
+        "t": "f",
+        "v": 1
+      },
+      {
+        "k": "overlay_nav_enabled",
+        "t": "b",
+        "v": true
+      },
+      {
+        "k": "overlay_speed_limit_from_hudspeed",
+        "t": "b",
+        "v": false
+      },
+      {
+        "k": "overlay_traffic_light_alpha",
+        "t": "f",
+        "v": 1
+      },
+      {
+        "k": "overlay_clock_scale",
+        "t": "f",
+        "v": 0.6700000166893005
+      },
+      {
+        "k": "overlay_container_x_dp",
+        "t": "f",
+        "v": 1.5571489334106445
+      },
+      {
+        "k": "overlay_x_dp",
+        "t": "f",
+        "v": 16.0
+      },
+      {
+        "k": "overlay_y_dp",
+        "t": "f",
+        "v": 16.0
+      },
+      {
+        "k": "overlay_speedometer_scale",
+        "t": "f",
+        "v": 1.0
+      },
+      {
+        "k": "overlay_nav_alpha",
+        "t": "f",
+        "v": 1.0
+      },
+      {
+        "k": "overlay_arrow_alpha",
+        "t": "f",
+        "v": 1.0
+      },
+      {
+        "k": "overlay_speed_alpha",
+        "t": "f",
+        "v": 1.0
+      },
+      {
+        "k": "overlay_road_camera_alpha",
+        "t": "f",
+        "v": 1.0
+      },
+      {
+        "k": "overlay_speedometer_alpha",
+        "t": "f",
+        "v": 1.0
+      },
+      {
+        "k": "overlay_clock_alpha",
+        "t": "f",
+        "v": 1.0
+      },
+      {
+        "k": "overlay_container_alpha",
+        "t": "f",
+        "v": 1.0
+      },
+      {
+        "k": "overlay_map_enabled",
+        "t": "b",
+        "v": false
+      },
+      {
+        "k": "overlay_hudspeed_enabled",
+        "t": "b",
+        "v": true
+      },
+      {
+        "k": "overlay_hudspeed_limit_enabled",
+        "t": "b",
+        "v": false
+      },
+      {
+        "k": "overlay_hudspeed_limit_alert_enabled",
+        "t": "b",
+        "v": false
+      },
+      {
+        "k": "overlay_hudspeed_limit_alert_threshold",
+        "t": "i",
+        "v": 0
+      },
+      {
+        "k": "traffic_light_timeout",
+        "t": "i",
+        "v": 2
+      },
+      {
+        "k": "road_camera_timeout",
+        "t": "i",
+        "v": 2
+      },
+      {
+        "k": "speed_correction",
+        "t": "i",
+        "v": 0
+      },
+      {
+        "k": "overlay_traffic_light_enabled",
+        "t": "b",
+        "v": true
+      }
+    ],
+    "maneuver_match_prefs": [
+      {
+        "k": "mapping_context_lane_bike_icon_template",
+        "t": "s",
+        "v": "101"
+      },
+      {
+        "k": "mapping_context_lane_left45_small_24",
+        "t": "s",
+        "v": "104"
+      },
+      {
+        "k": "mapping_context_ra_hard_turn_left",
+        "t": "s",
+        "v": "106"
+      },
+      {
+        "k": "mapping_context_lane_right90_large_24",
+        "t": "s",
+        "v": "103"
+      },
+      {
+        "k": "mapping_context_lane_left180_small_24",
+        "t": "s",
+        "v": "108"
+      },
+      {
+        "k": "mapping_context_lane_right180_large",
+        "t": "s",
+        "v": "119"
+      },
+      {
+        "k": "mapping_context_lane_tram_icon_large",
+        "t": "s",
+        "v": "101"
+      },
+      {
+        "k": "mapping_context_lane_rightshift_small_24",
+        "t": "s",
+        "v": "101"
+      },
+      {
+        "k": "mapping_context_lane_taxi",
+        "t": "s",
+        "v": "101"
+      },
+      {
+        "k": "mapping_context_lane_rightshift_large",
+        "t": "s",
+        "v": "101"
+      },
+      {
+        "k": "mapping_context_lane_tram_letter_small",
+        "t": "s",
+        "v": "101"
+      },
+      {
+        "k": "mapping_context_lane_bus_icon_small",
+        "t": "s",
+        "v": "101"
+      },
+      {
+        "k": "mapping_context_lane_left45_large",
+        "t": "s",
+        "v": "104"
+      },
+      {
+        "k": "mapping_context_lane_leftshift_large_24",
+        "t": "s",
+        "v": "101"
+      },
+      {
+        "k": "mapping_context_lane_right135_small_24",
+        "t": "s",
+        "v": "107"
+      },
+      {
+        "k": "mapping_context_lane_bus_letter_ru_small",
+        "t": "s",
+        "v": "101"
+      },
+      {
+        "k": "mapping_context_lane_straightahead_large",
+        "t": "s",
+        "v": "109"
+      },
+      {
+        "k": "mapping_context_lane_bike_icon_small",
+        "t": "s",
+        "v": "101"
+      },
+      {
+        "k": "mapping_context_lane_right45_small",
+        "t": "s",
+        "v": "105"
+      },
+      {
+        "k": "mapping_context_lane_bus_letter_en_large",
+        "t": "s",
+        "v": "101"
+      },
+      {
+        "k": "mapping_context_ra_in_circular_movement",
+        "t": "s",
+        "v": "121"
+      },
+      {
+        "k": "mapping_context_ra_turn_back_right",
+        "t": "s",
+        "v": "119"
+      },
+      {
+        "k": "mapping_context_ra_forward",
+        "t": "s",
+        "v": "109"
+      },
+      {
+        "k": "mapping_context_menu_background_futuris",
+        "t": "s",
+        "v": "101"
+      },
+      {
+        "k": "mapping_context_menu_item_ripple",
+        "t": "s",
+        "v": "101"
+      },
+      {
+        "k": "mapping_context_lane_left135_small_24",
+        "t": "s",
+        "v": "106"
+      },
+      {
+        "k": "mapping_context_lane_left90_large",
+        "t": "s",
+        "v": "102"
+      },
+      {
+        "k": "mapping_context_lane_left90_small_24",
+        "t": "s",
+        "v": "102"
+      },
+      {
+        "k": "mapping_context_ra_via",
+        "t": "s",
+        "v": "101"
+      },
+      {
+        "k": "mapping_context_lane_bus_icon_template",
+        "t": "s",
+        "v": "101"
+      },
+      {
+        "k": "mapping_context_lane_bike_icon_large",
+        "t": "s",
+        "v": "101"
+      },
+      {
+        "k": "mapping_context_lane_bike",
+        "t": "s",
+        "v": "101"
+      },
+      {
+        "k": "mapping_context_lane_bus_template_en",
+        "t": "s",
+        "v": "101"
+      },
+      {
+        "k": "mapping_context_lane_right135_large_24",
+        "t": "s",
+        "v": "107"
+      },
+      {
+        "k": "mapping_context_lane_left180_large",
+        "t": "s",
+        "v": "108"
+      },
+      {
+        "k": "mapping_context_menu_background_alice_v2",
+        "t": "s",
+        "v": "101"
+      },
+      {
+        "k": "mapping_context_lane_rightfromleft_small",
+        "t": "s",
+        "v": "101"
+      },
+      {
+        "k": "mapping_context_lane_tram_icon_template",
+        "t": "s",
+        "v": "101"
+      },
+      {
+        "k": "mapping_context_lane_left90_small",
+        "t": "s",
+        "v": "102"
+      },
+      {
+        "k": "mapping_context_lane_left135_large_24",
+        "t": "s",
+        "v": "106"
+      },
+      {
+        "k": "mapping_context_ra_turn_left",
+        "t": "s",
+        "v": "102"
+      },
+      {
+        "k": "mapping_context_lane_left90_large_24",
+        "t": "s",
+        "v": "102"
+      },
+      {
+        "k": "mapping_context_lane_leftfromright_small_24",
+        "t": "s",
+        "v": "101"
+      },
+      {
+        "k": "mapping_context_ra_turn_back_left",
+        "t": "s",
+        "v": "108"
+      },
+      {
+        "k": "mapping_context_lane_leftfromright_large_24",
+        "t": "s",
+        "v": "130"
+      },
+      {
+        "k": "mapping_context_lane_right90_large",
+        "t": "s",
+        "v": "103"
+      },
+      {
+        "k": "mapping_context_ra_hard_turn_right",
+        "t": "s",
+        "v": "107"
+      },
+      {
+        "k": "mapping_context_lane_right45_large",
+        "t": "s",
+        "v": "105"
+      },
+      {
+        "k": "mapping_context_lane_straightahead_small",
+        "t": "s",
+        "v": "109"
+      },
+      {
+        "k": "mapping_context_lane_right180_small_24",
+        "t": "s",
+        "v": "119"
+      },
+      {
+        "k": "mapping_context_lane_left135_large",
+        "t": "s",
+        "v": "106"
+      },
+      {
+        "k": "mapping_context_ra_take_left",
+        "t": "s",
+        "v": "104"
+      },
+      {
+        "k": "mapping_context_lane_left45_small",
+        "t": "s",
+        "v": "104"
+      },
+      {
+        "k": "mapping_context_lane_rightfromleft_large",
+        "t": "s",
+        "v": "101"
+      },
+      {
+        "k": "mapping_context_lane_tram_icon_small",
+        "t": "s",
+        "v": "101"
+      },
+      {
+        "k": "mapping_context_lane_right180_large_24",
+        "t": "s",
+        "v": "119"
+      },
+      {
+        "k": "mapping_context_lane_left180_small",
+        "t": "s",
+        "v": "108"
+      },
+      {
+        "k": "mapping_context_lane_bus_letter_ru_large",
+        "t": "s",
+        "v": "101"
+      },
+      {
+        "k": "mapping_context_lane_rightshift_small",
+        "t": "s",
+        "v": "101"
+      },
+      {
+        "k": "mapping_context_lane_bus_icon_large",
+        "t": "s",
+        "v": "101"
+      },
+      {
+        "k": "mapping_context_lane_bus_ru",
+        "t": "s",
+        "v": "101"
+      },
+      {
+        "k": "mapping_context_lane_right180_small",
+        "t": "s",
+        "v": "119"
+      },
+      {
+        "k": "mapping_context_lane_bus_letter_en_template",
+        "t": "s",
+        "v": "101"
+      },
+      {
+        "k": "mapping_context_lane_bus_letter_ru_template",
+        "t": "s",
+        "v": "101"
+      },
+      {
+        "k": "mapping_context_lane_right90_small",
+        "t": "s",
+        "v": "103"
+      },
+      {
+        "k": "mapping_context_lane_rightshift_large_24",
+        "t": "s",
+        "v": "101"
+      },
+      {
+        "k": "mapping_context_ra_exit_left",
+        "t": "s",
+        "v": "104"
+      },
+      {
+        "k": "mapping_context_lane_left135_small",
+        "t": "s",
+        "v": "106"
+      },
+      {
+        "k": "mapping_context_lane_unknowndirection_large",
+        "t": "s",
+        "v": "101"
+      },
+      {
+        "k": "mapping_context_lane_left45_large_24",
+        "t": "s",
+        "v": "104"
+      },
+      {
+        "k": "mapping_context_lane_left180_large_24",
+        "t": "s",
+        "v": "108"
+      },
+      {
+        "k": "mapping_context_lane_leftfromright_large",
+        "t": "s",
+        "v": "101"
+      },
+      {
+        "k": "mapping_context_lane_leftshift_small_24",
+        "t": "s",
+        "v": "101"
+      },
+      {
+        "k": "mapping_context_lane_taxi_template",
+        "t": "s",
+        "v": "101"
+      },
+      {
+        "k": "mapping_context_lane_tram_letter_template",
+        "t": "s",
+        "v": "101"
+      },
+      {
+        "k": "mapping_context_lane_right45_small_24",
+        "t": "s",
+        "v": "105"
+      },
+      {
+        "k": "mapping_context_lane_tram_letter_large",
+        "t": "s",
+        "v": "101"
+      },
+      {
+        "k": "mapping_context_ra_finish",
+        "t": "s",
+        "v": "115"
+      },
+      {
+        "k": "mapping_context_lane_leftshift_small",
+        "t": "s",
+        "v": "101"
+      },
+      {
+        "k": "mapping_context_lane_rightfromleft_large_24",
+        "t": "s",
+        "v": "101"
+      },
+      {
+        "k": "mapping_context_lane_right45_large_24",
+        "t": "s",
+        "v": "105"
+      },
+      {
+        "k": "mapping_context_lane_right135_small",
+        "t": "s",
+        "v": "107"
+      },
+      {
+        "k": "mapping_context_ra_turn_right",
+        "t": "s",
+        "v": "103"
+      },
+      {
+        "k": "mapping_context_lane_right135_large",
+        "t": "s",
+        "v": "107"
+      },
+      {
+        "k": "mapping_context_lane_rightfromleft_small_24",
+        "t": "s",
+        "v": "101"
+      },
+      {
+        "k": "mapping_context_ra_exit_right",
+        "t": "s",
+        "v": "105"
+      },
+      {
+        "k": "mapping_context_lane_leftfromright_small",
+        "t": "s",
+        "v": "101"
+      },
+      {
+        "k": "mapping_context_ra_take_right",
+        "t": "s",
+        "v": "105"
+      },
+      {
+        "k": "mapping_context_ra_boardferry",
+        "t": "s",
+        "v": "184"
+      },
+      {
+        "k": "mapping_context_lane_straightahead_large_24",
+        "t": "s",
+        "v": "109"
+      },
+      {
+        "k": "mapping_context_lane_bus_template_ru",
+        "t": "s",
+        "v": "101"
+      },
+      {
+        "k": "mapping_context_lane_leftshift_large",
+        "t": "s",
+        "v": "101"
+      },
+      {
+        "k": "mapping_context_lane_straightahead_small_24",
+        "t": "s",
+        "v": "109"
+      },
+      {
+        "k": "mapping_context_lane_right90_small_24",
+        "t": "s",
+        "v": "103"
+      },
+      {
+        "k": "mapping_context_lane_bike_template",
+        "t": "s",
+        "v": "101"
+      },
+      {
+        "k": "mapping_context_lane_bus_en",
+        "t": "s",
+        "v": "101"
+      },
+      {
+        "k": "mapping_context_lane_bus_letter_en_small",
+        "t": "s",
+        "v": "101"
+      },
+      {
+        "k": "mapping_context_ra_out_circular_movement",
+        "t": "s",
+        "v": "111"
+      }
+    ]
+  }
+}
