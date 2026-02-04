@@ -102,13 +102,19 @@ jobs:
             -PVERSION_CODE=${{ steps.version.outputs.version_code }} \
             -PVERSION_NAME=${{ steps.version.outputs.version_name }}
 
+      - name: Rename artifacts
+        run: |
+          version="${{ steps.version.outputs.version_name }}"
+          mv app/build/outputs/apk/release/app-release.apk "app/build/outputs/apk/release/ANHUD-${version}.apk"
+          mv app/build/outputs/bundle/release/app-release.aab "app/build/outputs/bundle/release/ANHUD-${version}.aab"
+
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: app-release-${{ steps.version.outputs.version_name }}
           path: |
-            app/build/outputs/apk/release/app-release.apk
-            app/build/outputs/bundle/release/app-release.aab
+            app/build/outputs/apk/release/ANHUD-${{ steps.version.outputs.version_name }}.apk
+            app/build/outputs/bundle/release/ANHUD-${{ steps.version.outputs.version_name }}.aab
 
       - name: Create draft release
         uses: softprops/action-gh-release@v2
@@ -118,7 +124,7 @@ jobs:
           name: v${{ steps.version.outputs.version_name }}
           body_path: release_notes.txt
           files: |
-            app/build/outputs/apk/release/app-release.apk
-            app/build/outputs/bundle/release/app-release.aab
+            app/build/outputs/apk/release/ANHUD-${{ steps.version.outputs.version_name }}.apk
+            app/build/outputs/bundle/release/ANHUD-${{ steps.version.outputs.version_name }}.aab
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
