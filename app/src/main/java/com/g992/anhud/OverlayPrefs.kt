@@ -145,9 +145,11 @@ object OverlayPrefs {
     fun navWidthDp(context: Context): Float {
         val prefs = prefs(context)
         val containerWidth = containerSizeDp(context).x
-        val defaultWidth = containerWidth.coerceAtLeast(NAV_WIDTH_MIN_DP)
+        val maxWidth = containerWidth.coerceAtLeast(0f)
+        val minWidth = NAV_WIDTH_MIN_DP.coerceAtMost(maxWidth)
+        val defaultWidth = containerWidth.coerceAtLeast(minWidth)
         return prefs.getFloat(KEY_NAV_WIDTH_DP, defaultWidth)
-            .coerceIn(NAV_WIDTH_MIN_DP, containerWidth)
+            .coerceIn(minWidth, maxWidth)
     }
 
     fun setNavWidthDp(context: Context, widthDp: Float) {
