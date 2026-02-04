@@ -77,7 +77,7 @@ object OverlayPrefs {
 
     const val ICON_SIZE_DP = 48f
     const val NAV_WIDTH_MIN_DP = ICON_SIZE_DP * 2
-    const val CONTAINER_MIN_SIZE_PX = 150f
+    const val CONTAINER_MIN_SIZE_PX = 100f
     const val SPEED_LIMIT_ALERT_THRESHOLD_MAX = 20
     const val TIMEOUT_MAX = 360
     const val SPEED_CORRECTION_MIN = -10

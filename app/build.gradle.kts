@@ -12,6 +12,28 @@ val localProperties = Properties().apply {
     }
 }
 val mapkitApiKey = localProperties.getProperty("MAPKIT_API_KEY", "")
+    .ifBlank { System.getenv("MAPKIT_API_KEY") ?: "" }
+
+val versionCodeProp = (project.findProperty("VERSION_CODE") as String?)
+    ?.toIntOrNull()
+    ?: System.getenv("VERSION_CODE")?.toIntOrNull()
+    ?: 1
+val versionNameProp = (project.findProperty("VERSION_NAME") as String?)
+    ?: System.getenv("VERSION_NAME")
+    ?: "1.0"
+
+val signingStoreFilePath = System.getenv("SIGNING_STORE_FILE")
+    ?: localProperties.getProperty("SIGNING_STORE_FILE")
+val signingStorePassword = System.getenv("SIGNING_STORE_PASSWORD")
+    ?: localProperties.getProperty("SIGNING_STORE_PASSWORD")
+val signingKeyAlias = System.getenv("SIGNING_KEY_ALIAS")
+    ?: localProperties.getProperty("SIGNING_KEY_ALIAS")
+val signingKeyPassword = System.getenv("SIGNING_KEY_PASSWORD")
+    ?: localProperties.getProperty("SIGNING_KEY_PASSWORD")
+val hasSigning = !signingStoreFilePath.isNullOrBlank() &&
+    !signingStorePassword.isNullOrBlank() &&
+    !signingKeyAlias.isNullOrBlank() &&
+    !signingKeyPassword.isNullOrBlank()
 
 android {
     namespace = "com.g992.anhud"
@@ -21,11 +43,22 @@ android {
         applicationId = "com.g992.anhud"
         minSdk = 30
         targetSdk = 36
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = versionCodeProp
+        versionName = versionNameProp
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "MAPKIT_API_KEY", "\"$mapkitApiKey\"")
+    }
+
+    val releaseSigning = if (hasSigning) {
+        signingConfigs.create("release") {
+            storeFile = file(signingStoreFilePath!!)
+            storePassword = signingStorePassword
+            keyAlias = signingKeyAlias
+            keyPassword = signingKeyPassword
+        }
+    } else {
+        null
     }
 
     buildTypes {
@@ -35,6 +68,9 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            if (releaseSigning != null) {
+                signingConfig = releaseSigning
+            }
         }
     }
     buildFeatures {

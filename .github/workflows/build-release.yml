@@ -1,0 +1,124 @@
+name: Build & Draft Release
+
+on:
+  push:
+    branches: ["master"]
+  workflow_dispatch:
+    inputs:
+      version_name:
+        description: "Override versionName (SemVer, e.g. 1.2.3)"
+        required: false
+      version_code:
+        description: "Override versionCode (integer)"
+        required: false
+
+permissions:
+  contents: write
+
+jobs:
+  build-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+
+      - name: Validate signing secrets
+        env:
+          SIGNING_STORE_FILE_B64: ${{ secrets.SIGNING_STORE_FILE_B64 }}
+          SIGNING_STORE_PASSWORD: ${{ secrets.SIGNING_STORE_PASSWORD }}
+          SIGNING_KEY_ALIAS: ${{ secrets.SIGNING_KEY_ALIAS }}
+          SIGNING_KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
+        run: |
+          missing=0
+          for v in SIGNING_STORE_FILE_B64 SIGNING_STORE_PASSWORD SIGNING_KEY_ALIAS SIGNING_KEY_PASSWORD; do
+            if [ -z "${!v}" ]; then
+              echo "Missing $v" >> "$GITHUB_STEP_SUMMARY"
+              missing=1
+            fi
+          done
+          if [ "$missing" -ne 0 ]; then
+            exit 1
+          fi
+
+      - name: Prepare keystore
+        env:
+          SIGNING_STORE_FILE_B64: ${{ secrets.SIGNING_STORE_FILE_B64 }}
+        run: |
+          echo "$SIGNING_STORE_FILE_B64" | base64 --decode > "$GITHUB_WORKSPACE/keystore.jks"
+          echo "SIGNING_STORE_FILE=$GITHUB_WORKSPACE/keystore.jks" >> "$GITHUB_ENV"
+
+      - name: Compute version
+        id: version
+        env:
+          INPUT_VERSION_NAME: ${{ inputs.version_name }}
+          INPUT_VERSION_CODE: ${{ inputs.version_code }}
+        run: |
+          version_code="$INPUT_VERSION_CODE"
+          version_name="$INPUT_VERSION_NAME"
+          if [ -z "$version_code" ]; then
+            version_code="$GITHUB_RUN_NUMBER"
+          fi
+          if [ -z "$version_name" ]; then
+            version_name="0.1.$GITHUB_RUN_NUMBER"
+          fi
+          echo "version_code=$version_code" >> "$GITHUB_OUTPUT"
+          echo "version_name=$version_name" >> "$GITHUB_OUTPUT"
+
+      - name: Generate release notes
+        env:
+          VERSION_NAME: ${{ steps.version.outputs.version_name }}
+        run: |
+          last_tag="$(git describe --tags --abbrev=0 2>/dev/null || true)"
+          {
+            echo "Release $VERSION_NAME"
+            echo ""
+            if [ -n "$last_tag" ]; then
+              echo "Changes since $last_tag:"
+              git log "$last_tag..HEAD" --pretty=format:"- %s (%h) - %an"
+            else
+              echo "Recent changes:"
+              git log -n 50 --pretty=format:"- %s (%h) - %an"
+            fi
+          } > release_notes.txt
+
+      - name: Build release artifacts
+        env:
+          MAPKIT_API_KEY: ${{ secrets.MAPKIT_API_KEY }}
+          SIGNING_STORE_PASSWORD: ${{ secrets.SIGNING_STORE_PASSWORD }}
+          SIGNING_KEY_ALIAS: ${{ secrets.SIGNING_KEY_ALIAS }}
+          SIGNING_KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
+        run: |
+          chmod +x ./gradlew
+          ./gradlew :app:assembleRelease :app:bundleRelease \
+            -PVERSION_CODE=${{ steps.version.outputs.version_code }} \
+            -PVERSION_NAME=${{ steps.version.outputs.version_name }}
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-release-${{ steps.version.outputs.version_name }}
+          path: |
+            app/build/outputs/apk/release/app-release.apk
+            app/build/outputs/bundle/release/app-release.aab
+
+      - name: Create draft release
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          tag_name: v${{ steps.version.outputs.version_name }}
+          name: v${{ steps.version.outputs.version_name }}
+          body_path: release_notes.txt
+          files: |
+            app/build/outputs/apk/release/app-release.apk
+            app/build/outputs/bundle/release/app-release.aab
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
