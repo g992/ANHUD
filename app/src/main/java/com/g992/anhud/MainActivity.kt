@@ -43,6 +43,14 @@ class MainActivity : ScaledActivity() {
             syncUiFromPrefs()
         }
     }
+    private val updateReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            if (intent.action != UpdateBroadcasts.ACTION_UPDATE_STATUS_CHANGED) {
+                return
+            }
+            updateSettingsBadge()
+        }
+    }
     internal lateinit var permissionStatus: TextView
     internal lateinit var requestPermissionButton: Button
     internal lateinit var overlaySwitch: SwitchCompat
@@ -87,6 +95,7 @@ class MainActivity : ScaledActivity() {
     internal lateinit var trafficLightPreviewContainer: LinearLayout
     private lateinit var donateButton: ImageButton
     private lateinit var settingsButton: ImageButton
+    private lateinit var settingsBadge: View
 
     internal var displayOptions: List<DisplayOption> = emptyList()
     internal var displaySize: Point = Point(1, 1)
@@ -160,6 +169,7 @@ class MainActivity : ScaledActivity() {
         trafficLightPreviewContainer = findViewById(R.id.trafficLightPreviewContainer)
         donateButton = findViewById(R.id.btnDonate)
         settingsButton = findViewById(R.id.btnSettings)
+        settingsBadge = findViewById(R.id.settingsBadge)
 
         donateButton.setOnClickListener {
             showDonateDialog()
@@ -167,6 +177,7 @@ class MainActivity : ScaledActivity() {
         settingsButton.setOnClickListener {
             startActivity(Intent(this, SettingsActivity::class.java))
         }
+        updateSettingsBadge()
 
         requestPermissionButton.setOnClickListener {
             openOverlaySettings()
@@ -469,6 +480,7 @@ class MainActivity : ScaledActivity() {
         setupDisplaySpinners()
         updatePermissionStatus()
         startCoreServices()
+        UpdateManager.checkForUpdates(this)
         settingsRoot.post { maybeStartGuideFromIntent() }
     }
 
@@ -487,6 +499,12 @@ class MainActivity : ScaledActivity() {
             filter,
             ContextCompat.RECEIVER_NOT_EXPORTED
         )
+        ContextCompat.registerReceiver(
+            this,
+            updateReceiver,
+            IntentFilter(UpdateBroadcasts.ACTION_UPDATE_STATUS_CHANGED),
+            ContextCompat.RECEIVER_NOT_EXPORTED
+        )
         getSharedPreferences(PrefsJson.OVERLAY_PREFS_NAME, MODE_PRIVATE)
             .registerOnSharedPreferenceChangeListener(presetPrefsListener)
         getSharedPreferences(PrefsJson.MANEUVER_PREFS_NAME, MODE_PRIVATE)
@@ -498,6 +516,10 @@ class MainActivity : ScaledActivity() {
     override fun onStop() {
         try {
             unregisterReceiver(settingsChangedReceiver)
+        } catch (_: Exception) {
+        }
+        try {
+            unregisterReceiver(updateReceiver)
         } catch (_: Exception) {
         }
         getSharedPreferences(PrefsJson.OVERLAY_PREFS_NAME, MODE_PRIVATE)
@@ -519,6 +541,14 @@ class MainActivity : ScaledActivity() {
         super.onResume()
         updatePermissionStatus()
         refreshPresets(keepSelection = true)
+    }
+
+    private fun updateSettingsBadge() {
+        settingsBadge.visibility = if (UpdatePrefs.isUpdateAvailable(this)) {
+            View.VISIBLE
+        } else {
+            View.GONE
+        }
     }
 
     private fun maybeStartGuideFromIntent() {

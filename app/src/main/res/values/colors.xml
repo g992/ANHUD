@@ -12,6 +12,7 @@
     <color name="traffic_light_green_primary">#2ECC71</color>
     <color name="traffic_light_yellow_primary">#F1C40F</color>
     <color name="traffic_light_red_primary">#FF4433</color>
+    <color name="update_badge_red">#FF3B30</color>
     <color name="seekbar_track_bg">#404040</color>
     <color name="seekbar_track_secondary">#606060</color>
 </resources>

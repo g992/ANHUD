@@ -1,8 +1,12 @@
 package com.g992.anhud
 
 import android.Manifest
+import android.app.DownloadManager
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.ContentValues
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
@@ -10,7 +14,10 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Environment
+import android.os.Handler
+import android.os.Looper
 import android.provider.MediaStore
+import android.provider.Settings
 import android.text.Editable
 import android.text.TextWatcher
 import android.view.LayoutInflater
@@ -20,6 +27,7 @@ import android.widget.BaseAdapter
 import android.widget.EditText
 import android.widget.ImageView
 import android.widget.LinearLayout
+import android.widget.ProgressBar
 import android.widget.ScrollView
 import android.widget.SeekBar
 import android.widget.Spinner
@@ -28,6 +36,7 @@ import android.widget.Toast
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
+import androidx.core.content.FileProvider
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import com.google.android.material.tabs.TabLayout
@@ -44,6 +53,7 @@ class SettingsActivity : ScaledActivity() {
     private lateinit var tabLayout: TabLayout
     private lateinit var tabGeneralContent: View
     private lateinit var tabManeuverContent: View
+    private lateinit var tabUpdatesContent: View
     private lateinit var tabDebugContent: View
     private lateinit var tabHelpContent: View
     private lateinit var cameraTimeoutNearInput: EditText
@@ -58,6 +68,20 @@ class SettingsActivity : ScaledActivity() {
     private lateinit var helpStartGuideButton: View
     private lateinit var exportSettingsButton: View
     private lateinit var importSettingsButton: View
+    private lateinit var updateStatusText: TextView
+    private lateinit var updateCurrentVersion: TextView
+    private lateinit var updateLatestVersion: TextView
+    private lateinit var updateReleaseNotes: TextView
+    private lateinit var updateCheckButton: View
+    private lateinit var updateInstallButton: View
+    private lateinit var updateProgressBar: ProgressBar
+    private lateinit var updateProgressText: TextView
+
+    private var updateDownloadId: Long = -1L
+    private var updatesTabIndex: Int = -1
+    private val progressHandler = Handler(Looper.getMainLooper())
+    private var progressRunnable: Runnable? = null
+    private var isCheckingUpdates = false
 
     private var isSyncingUi = false
 
@@ -105,6 +129,30 @@ class SettingsActivity : ScaledActivity() {
         }
     }
 
+    private val updateReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            if (intent.action != UpdateBroadcasts.ACTION_UPDATE_STATUS_CHANGED) {
+                return
+            }
+            refreshUpdateUi()
+        }
+    }
+
+    private val downloadReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            if (intent.action != DownloadManager.ACTION_DOWNLOAD_COMPLETE) {
+                return
+            }
+            val downloadId = intent.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1L)
+            val expectedId = UpdatePrefs.getDownloadId(context)
+            if (downloadId == -1L || expectedId == -1L || downloadId != expectedId) {
+                return
+            }
+            UpdatePrefs.clearDownloadId(context)
+            handleDownloadComplete(downloadId)
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -122,6 +170,7 @@ class SettingsActivity : ScaledActivity() {
         tabLayout = findViewById(R.id.tabLayout)
         tabGeneralContent = findViewById(R.id.tabGeneralContent)
         tabManeuverContent = findViewById(R.id.tabManeuverContent)
+        tabUpdatesContent = findViewById(R.id.tabUpdatesContent)
         tabDebugContent = findViewById(R.id.tabDebugContent)
         tabHelpContent = findViewById(R.id.tabHelpContent)
         cameraTimeoutNearInput = findViewById(R.id.cameraTimeoutNearInput)
@@ -136,10 +185,19 @@ class SettingsActivity : ScaledActivity() {
         helpStartGuideButton = findViewById(R.id.helpStartGuideButton)
         exportSettingsButton = findViewById(R.id.exportSettingsButton)
         importSettingsButton = findViewById(R.id.importSettingsButton)
+        updateStatusText = findViewById(R.id.updateStatusText)
+        updateCurrentVersion = findViewById(R.id.updateCurrentVersion)
+        updateLatestVersion = findViewById(R.id.updateLatestVersion)
+        updateReleaseNotes = findViewById(R.id.updateReleaseNotes)
+        updateCheckButton = findViewById(R.id.updateCheckButton)
+        updateInstallButton = findViewById(R.id.updateInstallButton)
+        updateProgressBar = findViewById(R.id.updateProgressBar)
+        updateProgressText = findViewById(R.id.updateProgressText)
 
         setupTabs()
         setupGeneralSettings()
         setupManeuverTab()
+        setupUpdatesTab()
         setupDebugTab()
         setupHelpTab()
         syncUiFromPrefs()
@@ -150,11 +208,49 @@ class SettingsActivity : ScaledActivity() {
         super.onDestroy()
     }
 
+    override fun onStart() {
+        super.onStart()
+        ContextCompat.registerReceiver(
+            this,
+            updateReceiver,
+            IntentFilter(UpdateBroadcasts.ACTION_UPDATE_STATUS_CHANGED),
+            ContextCompat.RECEIVER_NOT_EXPORTED
+        )
+        ContextCompat.registerReceiver(
+            this,
+            downloadReceiver,
+            IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE),
+            ContextCompat.RECEIVER_EXPORTED
+        )
+        refreshUpdateUi()
+    }
+
+    override fun onStop() {
+        try {
+            unregisterReceiver(updateReceiver)
+        } catch (_: Exception) {
+        }
+        try {
+            unregisterReceiver(downloadReceiver)
+        } catch (_: Exception) {
+        }
+        stopProgressPolling()
+        super.onStop()
+    }
+
     private fun setupTabs() {
         tabLayout.addTab(tabLayout.newTab().setText(R.string.tab_general_settings))
         tabLayout.addTab(tabLayout.newTab().setText(R.string.tab_nav_settings))
+        tabLayout.addTab(tabLayout.newTab().setText(R.string.tab_updates))
         tabLayout.addTab(tabLayout.newTab().setText(R.string.tab_debug))
         tabLayout.addTab(tabLayout.newTab().setText(R.string.tab_help))
+
+        updatesTabIndex = 2
+        val badge = tabLayout.getTabAt(updatesTabIndex)?.orCreateBadge
+        badge?.setBackgroundColor(ContextCompat.getColor(this@SettingsActivity, R.color.update_badge_red))
+        badge?.setVisible(false)
+        badge?.setHorizontalOffset(dp(-2))
+        badge?.setVerticalOffset(dp(1))
 
         tabLayout.addOnTabSelectedListener(object : TabLayout.OnTabSelectedListener {
             override fun onTabSelected(tab: TabLayout.Tab) {
@@ -162,24 +258,35 @@ class SettingsActivity : ScaledActivity() {
                     0 -> {
                         tabGeneralContent.visibility = View.VISIBLE
                         tabManeuverContent.visibility = View.GONE
+                        tabUpdatesContent.visibility = View.GONE
                         tabDebugContent.visibility = View.GONE
                         tabHelpContent.visibility = View.GONE
                     }
                     1 -> {
                         tabGeneralContent.visibility = View.GONE
                         tabManeuverContent.visibility = View.VISIBLE
+                        tabUpdatesContent.visibility = View.GONE
                         tabDebugContent.visibility = View.GONE
                         tabHelpContent.visibility = View.GONE
                     }
                     2 -> {
                         tabGeneralContent.visibility = View.GONE
                         tabManeuverContent.visibility = View.GONE
-                        tabDebugContent.visibility = View.VISIBLE
+                        tabUpdatesContent.visibility = View.VISIBLE
+                        tabDebugContent.visibility = View.GONE
                         tabHelpContent.visibility = View.GONE
                     }
                     3 -> {
                         tabGeneralContent.visibility = View.GONE
                         tabManeuverContent.visibility = View.GONE
+                        tabUpdatesContent.visibility = View.GONE
+                        tabDebugContent.visibility = View.VISIBLE
+                        tabHelpContent.visibility = View.GONE
+                    }
+                    4 -> {
+                        tabGeneralContent.visibility = View.GONE
+                        tabManeuverContent.visibility = View.GONE
+                        tabUpdatesContent.visibility = View.GONE
                         tabDebugContent.visibility = View.GONE
                         tabHelpContent.visibility = View.VISIBLE
                     }
@@ -495,6 +602,22 @@ class SettingsActivity : ScaledActivity() {
         }
     }
 
+    private fun setupUpdatesTab() {
+        updateCheckButton.setOnClickListener {
+            isCheckingUpdates = true
+            setUpdateLoading(true)
+            UpdateManager.checkForUpdates(this, force = true) { _, _ ->
+                isCheckingUpdates = false
+                setUpdateLoading(false)
+                refreshUpdateUi()
+            }
+        }
+        updateInstallButton.setOnClickListener {
+            startUpdateDownload()
+        }
+        refreshUpdateUi()
+    }
+
     private fun setupDebugTab() {
         logSections[LogCategory.NAVIGATION] = LogSection(
             findViewById(R.id.navScroll),
@@ -553,6 +676,267 @@ class SettingsActivity : ScaledActivity() {
             startActivity(intent)
             finish()
         }
+    }
+
+    private fun refreshUpdateUi() {
+        val currentVersion = BuildConfig.VERSION_NAME
+        val latestVersion = UpdatePrefs.getLatestVersion(this)
+        val notes = UpdatePrefs.getReleaseNotes(this)
+        val available = UpdatePrefs.isUpdateAvailable(this)
+        val downloading = UpdatePrefs.getDownloadId(this) != -1L
+
+        updateCurrentVersion.text = getString(R.string.update_current_version, currentVersion)
+        updateLatestVersion.text = if (latestVersion.isNotBlank()) {
+            getString(R.string.update_latest_version, latestVersion)
+        } else {
+            getString(R.string.update_latest_version_unknown)
+        }
+        updateReleaseNotes.text = if (notes.isNotBlank()) {
+            notes
+        } else {
+            getString(R.string.update_no_release_notes)
+        }
+
+        updateStatusText.text = when {
+            downloading -> getString(R.string.update_status_downloading)
+            available && latestVersion.isNotBlank() -> getString(R.string.update_status_available, latestVersion)
+            latestVersion.isNotBlank() -> getString(R.string.update_status_none)
+            else -> getString(R.string.update_status_unknown)
+        }
+
+        val canInstall = available && UpdatePrefs.getApkUrl(this).isNotBlank() && !downloading && !isCheckingUpdates
+        updateInstallButton.isEnabled = canInstall
+        updateInstallButton.alpha = if (canInstall) 1f else 0.5f
+        val canCheck = !downloading && !isCheckingUpdates
+        updateCheckButton.isEnabled = canCheck
+        updateCheckButton.alpha = if (canCheck) 1f else 0.5f
+        if (downloading) {
+            startProgressPolling(UpdatePrefs.getDownloadId(this))
+        } else {
+            stopProgressPolling()
+            hideDownloadProgress()
+        }
+
+        setUpdatesBadgeVisible(available)
+    }
+
+    private fun setUpdateLoading(loading: Boolean) {
+        if (loading) {
+            updateProgressBar.isIndeterminate = true
+            updateProgressBar.progress = 0
+            updateProgressBar.visibility = View.VISIBLE
+            updateProgressText.visibility = View.GONE
+        } else if (!isDownloadInProgress()) {
+            updateProgressBar.visibility = View.GONE
+            updateProgressText.visibility = View.GONE
+        }
+        updateCheckButton.isEnabled = !loading
+        updateCheckButton.alpha = if (!loading) 1f else 0.5f
+        if (loading) {
+            updateInstallButton.isEnabled = false
+            updateInstallButton.alpha = 0.5f
+        }
+        if (loading) {
+            updateStatusText.text = getString(R.string.update_status_checking)
+        }
+    }
+
+    private fun setUpdatesBadgeVisible(visible: Boolean) {
+        if (updatesTabIndex < 0) return
+        val tab = tabLayout.getTabAt(updatesTabIndex) ?: return
+        val badge = if (visible) tab.orCreateBadge else tab.badge
+        badge?.setVisible(visible)
+    }
+
+    private fun startUpdateDownload() {
+        val apkUrl = UpdatePrefs.getApkUrl(this)
+        if (apkUrl.isBlank()) {
+            showToast(R.string.update_download_missing)
+            return
+        }
+        if (!ensureInstallPermission()) {
+            return
+        }
+        val version = UpdatePrefs.getLatestVersion(this).ifBlank { BuildConfig.VERSION_NAME }
+        val fileName = "ANHUD-$version.apk"
+        val request = DownloadManager.Request(Uri.parse(apkUrl))
+            .setTitle(getString(R.string.update_download_title, version))
+            .setDescription(getString(R.string.update_download_desc))
+            .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+            .setDestinationInExternalFilesDir(this, Environment.DIRECTORY_DOWNLOADS, fileName)
+            .setAllowedOverMetered(true)
+            .setAllowedOverRoaming(true)
+
+        val downloadManager = getSystemService(DownloadManager::class.java)
+        updateDownloadId = downloadManager.enqueue(request)
+        UpdatePrefs.setDownloadId(this, updateDownloadId)
+        updateCheckButton.isEnabled = false
+        updateCheckButton.alpha = 0.5f
+        updateInstallButton.isEnabled = false
+        updateInstallButton.alpha = 0.5f
+        startProgressPolling(updateDownloadId)
+        updateStatusText.text = getString(R.string.update_status_downloading)
+    }
+
+    private fun handleDownloadComplete(downloadId: Long) {
+        val downloadManager = getSystemService(DownloadManager::class.java)
+        val query = DownloadManager.Query().setFilterById(downloadId)
+        val cursor = downloadManager.query(query)
+        cursor.use {
+            if (!it.moveToFirst()) {
+                showToast(R.string.update_download_failed)
+                refreshUpdateUi()
+                return
+            }
+            val status = it.getInt(it.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS))
+            if (status != DownloadManager.STATUS_SUCCESSFUL) {
+                showToast(R.string.update_download_failed)
+                refreshUpdateUi()
+                return
+            }
+            val localUri = it.getString(it.getColumnIndexOrThrow(DownloadManager.COLUMN_LOCAL_URI))
+            if (localUri.isNullOrBlank()) {
+                showToast(R.string.update_download_failed)
+                refreshUpdateUi()
+                return
+            }
+            installApk(localUri)
+        }
+        stopProgressPolling()
+        refreshUpdateUi()
+    }
+
+    private fun installApk(localUri: String) {
+        val fileUri = Uri.parse(localUri)
+        val path = fileUri.path
+        if (path.isNullOrBlank()) {
+            showToast(R.string.update_install_failed)
+            return
+        }
+        val apkFile = File(path)
+        if (!apkFile.exists()) {
+            showToast(R.string.update_install_failed)
+            return
+        }
+        val contentUri = FileProvider.getUriForFile(this, "$packageName.fileprovider", apkFile)
+        val intent = Intent(Intent.ACTION_VIEW).apply {
+            setDataAndType(contentUri, "application/vnd.android.package-archive")
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        runCatching {
+            startActivity(intent)
+        }.onFailure {
+            showToast(R.string.update_install_failed)
+        }
+    }
+
+    private fun startProgressPolling(downloadId: Long) {
+        if (downloadId <= 0L) {
+            return
+        }
+        progressRunnable?.let { progressHandler.removeCallbacks(it) }
+        val runnable = object : Runnable {
+            override fun run() {
+                val info = queryDownload(downloadId)
+                if (info == null) {
+                    hideDownloadProgress()
+                    return
+                }
+                when (info.status) {
+                    DownloadManager.STATUS_FAILED -> {
+                        hideDownloadProgress()
+                        refreshUpdateUi()
+                        return
+                    }
+                    DownloadManager.STATUS_SUCCESSFUL -> {
+                        hideDownloadProgress()
+                        return
+                    }
+                    else -> {
+                        updateDownloadProgress(info.downloaded, info.total)
+                    }
+                }
+                progressHandler.postDelayed(this, 1000L)
+            }
+        }
+        progressRunnable = runnable
+        progressHandler.post(runnable)
+    }
+
+    private fun stopProgressPolling() {
+        progressRunnable?.let { progressHandler.removeCallbacks(it) }
+        progressRunnable = null
+    }
+
+    private data class DownloadInfo(
+        val status: Int,
+        val downloaded: Long,
+        val total: Long
+    )
+
+    private fun queryDownload(downloadId: Long): DownloadInfo? {
+        val downloadManager = getSystemService(DownloadManager::class.java)
+        val query = DownloadManager.Query().setFilterById(downloadId)
+        val cursor = downloadManager.query(query)
+        cursor.use {
+            if (!it.moveToFirst()) {
+                return null
+            }
+            val status = it.getInt(it.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS))
+            val downloaded = it.getLong(it.getColumnIndexOrThrow(DownloadManager.COLUMN_BYTES_DOWNLOADED_SO_FAR))
+            val total = it.getLong(it.getColumnIndexOrThrow(DownloadManager.COLUMN_TOTAL_SIZE_BYTES))
+            return DownloadInfo(status, downloaded, total)
+        }
+    }
+
+    private fun updateDownloadProgress(downloaded: Long, total: Long) {
+        updateProgressBar.visibility = View.VISIBLE
+        updateProgressText.visibility = View.VISIBLE
+        if (total > 0) {
+            updateProgressBar.isIndeterminate = false
+            val percent = (downloaded * 100 / total).toInt().coerceIn(0, 100)
+            updateProgressBar.progress = percent
+            updateProgressText.text = "${formatBytes(downloaded)} / ${formatBytes(total)} ($percent%)"
+        } else {
+            updateProgressBar.isIndeterminate = true
+            updateProgressText.text = formatBytes(downloaded)
+        }
+    }
+
+    private fun hideDownloadProgress() {
+        updateProgressBar.visibility = View.GONE
+        updateProgressText.visibility = View.GONE
+    }
+
+    private fun isDownloadInProgress(): Boolean = UpdatePrefs.getDownloadId(this) != -1L
+
+    private fun formatBytes(bytes: Long): String {
+        if (bytes <= 0L) return "0 B"
+        val kb = 1024.0
+        val mb = kb * 1024.0
+        val gb = mb * 1024.0
+        return when {
+            bytes >= gb -> String.format(Locale.getDefault(), "%.2f GB", bytes / gb)
+            bytes >= mb -> String.format(Locale.getDefault(), "%.2f MB", bytes / mb)
+            bytes >= kb -> String.format(Locale.getDefault(), "%.1f KB", bytes / kb)
+            else -> "$bytes B"
+        }
+    }
+
+    private fun ensureInstallPermission(): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+            return true
+        }
+        if (packageManager.canRequestPackageInstalls()) {
+            return true
+        }
+        val intent = Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply {
+            data = Uri.parse("package:$packageName")
+        }
+        startActivity(intent)
+        showToast(R.string.update_install_permission)
+        return false
     }
 
     private fun dp(value: Int): Int {

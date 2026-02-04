@@ -37,15 +37,30 @@
                 android:src="@drawable/ic_currency_ruble_24"
                 android:tint="@color/white" />
 
-            <ImageButton
-                android:id="@+id/btnSettings"
+            <FrameLayout
                 android:layout_width="40dp"
                 android:layout_height="40dp"
-                android:layout_marginStart="8dp"
-                android:background="?attr/selectableItemBackgroundBorderless"
-                android:contentDescription="@string/settings_button_content_desc"
-                android:src="@drawable/ic_settings_24"
-                android:tint="@color/white" />
+                android:layout_marginStart="8dp">
+
+                <ImageButton
+                    android:id="@+id/btnSettings"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="@string/settings_button_content_desc"
+                    android:src="@drawable/ic_settings_24"
+                    android:tint="@color/white" />
+
+                <View
+                    android:id="@+id/settingsBadge"
+                    android:layout_width="8dp"
+                    android:layout_height="8dp"
+                    android:layout_gravity="top|end"
+                    android:layout_marginTop="4dp"
+                    android:layout_marginEnd="4dp"
+                    android:background="@drawable/bg_update_badge"
+                    android:visibility="gone" />
+            </FrameLayout>
         </LinearLayout>
 
         <TextView

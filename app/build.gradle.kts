@@ -20,7 +20,7 @@ val versionCodeProp = (project.findProperty("VERSION_CODE") as String?)
     ?: 1
 val versionNameProp = (project.findProperty("VERSION_NAME") as String?)
     ?: System.getenv("VERSION_NAME")
-    ?: "1.0"
+    ?: "0.1.0"
 
 val signingStoreFilePath = System.getenv("SIGNING_STORE_FILE")
     ?: localProperties.getProperty("SIGNING_STORE_FILE")

@@ -95,6 +95,7 @@
 
     <string name="tab_general_settings">Общие настройки</string>
     <string name="tab_nav_settings">Повороты навигатора</string>
+    <string name="tab_updates">Обновления</string>
     <string name="tab_debug">Отладка</string>
     <string name="tab_help">Помощь</string>
 
@@ -116,6 +117,26 @@
     <string name="settings_export_failed">Не удалось экспортировать настройки</string>
     <string name="settings_import_success">Настройки импортированы</string>
     <string name="settings_import_failed">Не удалось импортировать настройки</string>
+
+    <string name="update_title">Обновления</string>
+    <string name="update_status_checking">Проверяем обновления…</string>
+    <string name="update_status_available">Доступна версия %1$s</string>
+    <string name="update_status_none">Обновлений нет</string>
+    <string name="update_status_unknown">Статус неизвестен</string>
+    <string name="update_status_downloading">Скачивание обновления…</string>
+    <string name="update_current_version">Текущая версия: %1$s</string>
+    <string name="update_latest_version">Последняя версия: %1$s</string>
+    <string name="update_latest_version_unknown">Последняя версия: неизвестна</string>
+    <string name="update_release_notes_title">Список изменений</string>
+    <string name="update_no_release_notes">Описание релиза отсутствует.</string>
+    <string name="update_check_button">Проверить обновления</string>
+    <string name="update_install_button">Обновить</string>
+    <string name="update_download_title">Скачивание ANHUD %1$s</string>
+    <string name="update_download_desc">Скачиваем обновление</string>
+    <string name="update_download_missing">Ссылка на APK не найдена.</string>
+    <string name="update_download_failed">Не удалось скачать обновление.</string>
+    <string name="update_install_permission">Разрешите установку из неизвестных источников для ANHUD.</string>
+    <string name="update_install_failed">Не удалось открыть установщик.</string>
 
     <string name="help_title">Гид по приложению</string>
     <string name="help_start_guide_button">Запустить гайд на главном экране</string>
