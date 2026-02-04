@@ -8,6 +8,7 @@ import android.content.SharedPreferences
 import android.graphics.Point
 import android.graphics.PointF
 import android.os.Bundle
+import android.os.Build
 import android.provider.Settings
 import android.view.View
 import android.widget.Button
@@ -19,6 +20,7 @@ import android.widget.SeekBar
 import android.widget.Spinner
 import android.widget.TextView
 import android.view.ViewGroup
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.widget.SwitchCompat
 import androidx.core.content.ContextCompat
@@ -51,8 +53,19 @@ class MainActivity : ScaledActivity() {
             updateSettingsBadge()
         }
     }
+    private val storagePermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) {
+        updatePermissionStatus()
+    }
     internal lateinit var permissionStatus: TextView
     internal lateinit var requestPermissionButton: Button
+    internal lateinit var notificationPermissionStatus: TextView
+    internal lateinit var requestNotificationPermissionButton: Button
+    internal lateinit var storagePermissionStatus: TextView
+    internal lateinit var requestStoragePermissionButton: Button
+    internal lateinit var installPermissionStatus: TextView
+    internal lateinit var requestInstallPermissionButton: Button
     internal lateinit var overlaySwitch: SwitchCompat
     internal lateinit var nativeNavSwitch: SwitchCompat
     internal var mapToggleSwitch: SwitchCompat? = null
@@ -128,6 +141,12 @@ class MainActivity : ScaledActivity() {
 
         permissionStatus = findViewById(R.id.permissionStatus)
         requestPermissionButton = findViewById(R.id.requestPermissionButton)
+        notificationPermissionStatus = findViewById(R.id.notificationPermissionStatus)
+        requestNotificationPermissionButton = findViewById(R.id.requestNotificationPermissionButton)
+        storagePermissionStatus = findViewById(R.id.storagePermissionStatus)
+        requestStoragePermissionButton = findViewById(R.id.requestStoragePermissionButton)
+        installPermissionStatus = findViewById(R.id.installPermissionStatus)
+        requestInstallPermissionButton = findViewById(R.id.requestInstallPermissionButton)
         overlaySwitch = findViewById(R.id.overlaySwitch)
         nativeNavSwitch = findViewById(R.id.nativeNavSwitch)
 //        mapToggleSwitch = findViewById(R.id.mapToggleSwitch)
@@ -181,6 +200,15 @@ class MainActivity : ScaledActivity() {
 
         requestPermissionButton.setOnClickListener {
             openOverlaySettings()
+        }
+        requestNotificationPermissionButton.setOnClickListener {
+            openNotificationListenerSettings()
+        }
+        requestStoragePermissionButton.setOnClickListener {
+            requestStoragePermission()
+        }
+        requestInstallPermissionButton.setOnClickListener {
+            openUnknownSourcesSettings()
         }
 
         overlaySwitch.isChecked = OverlayPrefs.isEnabled(this)
@@ -548,6 +576,12 @@ class MainActivity : ScaledActivity() {
             View.VISIBLE
         } else {
             View.GONE
+        }
+    }
+
+    private fun requestStoragePermission() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+            storagePermissionLauncher.launch(android.Manifest.permission.WRITE_EXTERNAL_STORAGE)
         }
     }
 

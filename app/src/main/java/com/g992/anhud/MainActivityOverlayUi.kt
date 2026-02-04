@@ -1,7 +1,11 @@
 package com.g992.anhud
 
 import android.content.Intent
+import android.content.ComponentName
+import android.content.Context
+import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import android.provider.Settings
 import android.view.LayoutInflater
 import android.view.View
@@ -10,18 +14,41 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
+import androidx.core.content.ContextCompat
 import kotlin.math.roundToInt
 
 internal fun MainActivity.updatePermissionStatus() {
-    val granted = Settings.canDrawOverlays(this)
-    permissionStatus.text = if (granted) {
+    val overlayGranted = Settings.canDrawOverlays(this)
+    permissionStatus.text = if (overlayGranted) {
         getString(R.string.overlay_permission_granted)
     } else {
         getString(R.string.overlay_permission_missing)
     }
-    val visibility = if (granted) View.GONE else View.VISIBLE
-    permissionStatus.visibility = visibility
-    requestPermissionButton.visibility = visibility
+    val overlayVisibility = if (overlayGranted) View.GONE else View.VISIBLE
+    permissionStatus.visibility = overlayVisibility
+    requestPermissionButton.visibility = overlayVisibility
+
+    val notificationMissing = !isNotificationAccessGranted(this)
+    val notificationVisibility = if (notificationMissing) View.VISIBLE else View.GONE
+    notificationPermissionStatus.text = if (notificationMissing) {
+        getString(R.string.notification_permission_missing)
+    } else {
+        getString(R.string.notification_permission_granted)
+    }
+    notificationPermissionStatus.visibility = notificationVisibility
+    requestNotificationPermissionButton.visibility = notificationVisibility
+
+    val storageMissing = isStoragePermissionMissing(this)
+    val storageVisibility = if (storageMissing) View.VISIBLE else View.GONE
+    storagePermissionStatus.text = getString(R.string.storage_permission_missing)
+    storagePermissionStatus.visibility = storageVisibility
+    requestStoragePermissionButton.visibility = storageVisibility
+
+    val installMissing = isInstallPermissionMissing(this)
+    val installVisibility = if (installMissing) View.VISIBLE else View.GONE
+    installPermissionStatus.text = getString(R.string.install_permission_missing)
+    installPermissionStatus.visibility = installVisibility
+    requestInstallPermissionButton.visibility = installVisibility
 }
 
 internal fun MainActivity.syncUiFromPrefs() {
@@ -86,6 +113,49 @@ internal fun MainActivity.openOverlaySettings() {
         data = Uri.parse("package:$packageName")
     }
     startActivity(intent)
+}
+
+internal fun MainActivity.openNotificationListenerSettings() {
+    startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+}
+
+internal fun MainActivity.openUnknownSourcesSettings() {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+    val intent = Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply {
+        data = Uri.parse("package:$packageName")
+    }
+    startActivity(intent)
+}
+
+private const val NOTIFICATION_LISTENERS_SETTING = "enabled_notification_listeners"
+
+private fun isNotificationAccessGranted(context: Context): Boolean {
+    val enabled = Settings.Secure.getString(
+        context.contentResolver,
+        NOTIFICATION_LISTENERS_SETTING
+    ).orEmpty()
+    if (enabled.isBlank()) return false
+    val component = ComponentName(context, NavigationNotificationListener::class.java)
+    return enabled.split(':')
+        .mapNotNull { ComponentName.unflattenFromString(it) }
+        .any { it == component }
+}
+
+private fun isStoragePermissionMissing(context: Context): Boolean {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+        return false
+    }
+    return ContextCompat.checkSelfPermission(
+        context,
+        android.Manifest.permission.WRITE_EXTERNAL_STORAGE
+    ) != PackageManager.PERMISSION_GRANTED
+}
+
+private fun isInstallPermissionMissing(context: Context): Boolean {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+        return false
+    }
+    return !context.packageManager.canRequestPackageInstalls()
 }
 
 internal fun MainActivity.renderTrafficLightPreview(container: LinearLayout, count: Int) {

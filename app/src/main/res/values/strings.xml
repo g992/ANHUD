@@ -44,6 +44,10 @@
     <string name="notification_permission_granted">Доступ к уведомлениям: включен</string>
     <string name="notification_permission_missing">Доступ к уведомлениям нужен для определения конца навигации.</string>
     <string name="notification_permission_button">Разрешить доступ к уведомлениям</string>
+    <string name="storage_permission_missing">Доступ к файлам нужен для экспорта и импорта настроек.</string>
+    <string name="storage_permission_button">Разрешить доступ к файлам</string>
+    <string name="install_permission_missing">Разрешение на установку из неизвестных источников нужно для обновлений.</string>
+    <string name="install_permission_button">Разрешить установку</string>
     <string name="overlay_display_label">Экран отображения</string>
     <string name="overlay_position_label">Позиции HUD</string>
     <string name="position_blocks_hint">Нажмите блок, чтобы открыть настройку положения.</string>
