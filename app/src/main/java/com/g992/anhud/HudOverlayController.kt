@@ -70,7 +70,7 @@ class HudOverlayController(private val context: Context) {
         private const val PREVIEW_HUDSPEED_LIMIT_VALUE = 100
         private const val PREVIEW_HUDSPEED_CAM_FLAG = 3
         private const val HUDSPEED_HIDE_DISTANCE_METERS = 50
-        private const val HUDSPEED_OVERSPEED_PADDING_DP = 4f
+    private const val HUDSPEED_OVERSPEED_PADDING_DP = 8f
         private const val PREVIEW_SPEED_LIMIT_TEXT_SCALE = 1.3f
         private const val MAP_ROUTE_ZOOM = 12f
         private const val SIMULATION_SPEED_KMH = 72.0
@@ -117,7 +117,9 @@ class HudOverlayController(private val context: Context) {
     private var timeView: TextView? = null
     private var speedLimitView: OutlinedTextView? = null
     private var speedometerView: TextView? = null
-    private var hudSpeedContainer: LinearLayout? = null
+    private var hudSpeedContainer: FrameLayout? = null
+    private var hudSpeedContent: LinearLayout? = null
+    private var hudSpeedOverspeedView: View? = null
     private var hudSpeedLeftColumn: LinearLayout? = null
     private var hudSpeedRightColumn: LinearLayout? = null
     private var hudSpeedIcon: ImageView? = null
@@ -875,7 +877,25 @@ class HudOverlayController(private val context: Context) {
             setTypeface(typeface, Typeface.BOLD)
         }
 
-        val hudSpeedBlock = LinearLayout(displayContext).apply {
+        val hudSpeedBlock = FrameLayout(displayContext).apply {
+            clipChildren = false
+            clipToPadding = false
+            layoutParams = FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                FrameLayout.LayoutParams.WRAP_CONTENT
+            )
+        }
+
+        val hudSpeedOverspeedViewLocal = View(displayContext).apply {
+            visibility = View.GONE
+            setBackgroundResource(R.drawable.bg_hudspeed_overspeed)
+            layoutParams = FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                FrameLayout.LayoutParams.WRAP_CONTENT
+            )
+        }
+
+        val hudSpeedContentView = LinearLayout(displayContext).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.TOP
             clipChildren = false
@@ -956,8 +976,11 @@ class HudOverlayController(private val context: Context) {
         hudSpeedRightColumnView.addView(hudSpeedLimitText)
         hudSpeedRightColumnView.addView(hudSpeedDistanceText)
 
-        hudSpeedBlock.addView(hudSpeedLeftColumnView)
-        hudSpeedBlock.addView(hudSpeedRightColumnView)
+        hudSpeedContentView.addView(hudSpeedLeftColumnView)
+        hudSpeedContentView.addView(hudSpeedRightColumnView)
+
+        hudSpeedBlock.addView(hudSpeedOverspeedViewLocal)
+        hudSpeedBlock.addView(hudSpeedContentView)
 
         val speedometerText = TextView(displayContext).apply {
             layoutParams = FrameLayout.LayoutParams(
@@ -1018,6 +1041,8 @@ class HudOverlayController(private val context: Context) {
             timeView = timeText
             speedLimitView = speedText
             hudSpeedContainer = hudSpeedBlock
+            hudSpeedContent = hudSpeedContentView
+            hudSpeedOverspeedView = hudSpeedOverspeedViewLocal
             hudSpeedLeftColumn = hudSpeedLeftColumnView
             hudSpeedRightColumn = hudSpeedRightColumnView
             hudSpeedIcon = hudSpeedIconView
@@ -1050,6 +1075,8 @@ class HudOverlayController(private val context: Context) {
             timeView = null
             speedLimitView = null
             hudSpeedContainer = null
+            hudSpeedContent = null
+            hudSpeedOverspeedView = null
             hudSpeedLeftColumn = null
             hudSpeedRightColumn = null
             hudSpeedIcon = null
@@ -1094,6 +1121,8 @@ class HudOverlayController(private val context: Context) {
         timeView = null
         speedLimitView = null
         hudSpeedContainer = null
+        hudSpeedContent = null
+        hudSpeedOverspeedView = null
         hudSpeedLeftColumn = null
         hudSpeedRightColumn = null
         hudSpeedIcon = null
@@ -1558,7 +1587,6 @@ class HudOverlayController(private val context: Context) {
         showLimit: Boolean,
         limitTextScale: Float
     ) {
-        val container = hudSpeedContainer ?: return
         val leftColumn = hudSpeedLeftColumn
         val rightColumn = hudSpeedRightColumn
         val icon = hudSpeedIcon ?: return
@@ -1606,22 +1634,45 @@ class HudOverlayController(private val context: Context) {
             rightColumn.visibility = if (limitVisible || targetColumn == rightColumn) View.VISIBLE else View.GONE
         }
         if (!distanceVisible) {
-            container.visibility = View.GONE
+            hudSpeedContainer?.visibility = View.GONE
         } else {
-            container.visibility = View.VISIBLE
+            hudSpeedContainer?.visibility = View.VISIBLE
         }
     }
 
     private fun updateHudSpeedOverspeed(overspeed: Boolean) {
-        val container = hudSpeedContainer ?: return
-        val paddingPx = (HUDSPEED_OVERSPEED_PADDING_DP * container.resources.displayMetrics.density).roundToInt()
-        if (overspeed) {
-            container.setBackgroundResource(R.drawable.bg_hudspeed_overspeed)
-            container.setPadding(paddingPx, paddingPx, paddingPx, paddingPx)
-        } else {
-            container.background = null
-            container.setPadding(0, 0, 0, 0)
+        val content = hudSpeedContent ?: return
+        val background = hudSpeedOverspeedView ?: return
+        if (!overspeed) {
+            background.visibility = View.GONE
+            return
         }
+        val density = content.resources.displayMetrics.density
+        val paddingPx = (HUDSPEED_OVERSPEED_PADDING_DP * density).roundToInt().coerceAtLeast(0)
+        val measuredWidth = content.measuredWidth.takeIf { it > 0 } ?: run {
+            content.measure(
+                View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
+                View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
+            )
+            content.measuredWidth
+        }
+        val measuredHeight = content.measuredHeight.takeIf { it > 0 } ?: content.height
+        if (measuredWidth <= 0 || measuredHeight <= 0) {
+            background.visibility = View.GONE
+            return
+        }
+        val width = measuredWidth + paddingPx * 2
+        val height = measuredHeight + paddingPx * 2
+        val params = (background.layoutParams as? FrameLayout.LayoutParams)
+            ?: FrameLayout.LayoutParams(width, height)
+        params.width = width
+        params.height = height
+        params.leftMargin = -paddingPx
+        params.topMargin = -paddingPx
+        params.rightMargin = -paddingPx
+        params.bottomMargin = -paddingPx
+        background.layoutParams = params
+        background.visibility = View.VISIBLE
     }
 
     private fun updateRoadCamera(

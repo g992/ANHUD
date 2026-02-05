@@ -585,7 +585,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
                 android:background="@drawable/bg_hudspeed_overspeed"
-                android:padding="4dp"
+                android:padding="8dp"
                 android:gravity="top"
                 android:orientation="horizontal">
 
