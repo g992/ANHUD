@@ -18,7 +18,6 @@ import kotlin.math.roundToInt
 
 internal fun MainActivity.setupPresetSelector() {
     val presetsDir = PresetManager.userPresetDir(this)
-    presetFolderHint.text = getString(R.string.preset_folder_hint, presetsDir.absolutePath)
 
     savePresetButton.setOnClickListener {
         saveActivePreset()
@@ -117,12 +116,12 @@ private fun MainActivity.saveActivePreset() {
         return
     }
     val payload = PrefsJson.buildPayload(this)
-    val file = PresetManager.saveUserPreset(this, preset.name, payload)
-    if (file == null) {
+    val savedPresetId = PresetManager.saveUserPreset(this, preset.name, payload)
+    if (savedPresetId == null) {
         showToast(R.string.preset_save_failed)
         return
     }
-    PresetPrefs.setActivePresetId(this, PresetManager.presetIdForFile(file))
+    PresetPrefs.setActivePresetId(this, savedPresetId)
     refreshPresets(keepSelection = true)
     showToast(R.string.preset_save_success)
 }
@@ -154,12 +153,12 @@ private fun MainActivity.showSavePresetDialog() {
                 return@setPositiveButton
             }
             val payload = PrefsJson.buildPayload(this)
-            val file = PresetManager.saveUserPreset(this, name, payload)
-            if (file == null) {
+            val presetId = PresetManager.saveUserPreset(this, name, payload)
+            if (presetId == null) {
                 showToast(R.string.preset_save_failed)
                 return@setPositiveButton
             }
-            PresetPrefs.setActivePresetId(this, PresetManager.presetIdForFile(file))
+            PresetPrefs.setActivePresetId(this, presetId)
             refreshPresets(keepSelection = true)
             showToast(R.string.preset_save_success)
         }

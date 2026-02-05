@@ -72,7 +72,6 @@ class MainActivity : ScaledActivity() {
     private lateinit var settingsRoot: ScrollView
     internal lateinit var presetSpinner: Spinner
     internal lateinit var savePresetButton: Button
-    internal lateinit var presetFolderHint: TextView
     internal lateinit var displaySpinner: Spinner
     private lateinit var positionContainerCard: View
     private lateinit var positionNavCard: View
@@ -103,6 +102,8 @@ class MainActivity : ScaledActivity() {
     internal lateinit var hudSpeedLimitAlertThresholdRow: View
     internal lateinit var hudSpeedLimitAlertThresholdSeek: SeekBar
     internal lateinit var hudSpeedLimitAlertThresholdValue: TextView
+    private lateinit var hudSpeedPreviewFull: View
+    private lateinit var hudSpeedPreviewCompact: View
     internal lateinit var trafficLightMaxActiveSeek: SeekBar
     internal lateinit var trafficLightMaxActiveValue: TextView
     internal lateinit var trafficLightPreviewContainer: LinearLayout
@@ -152,7 +153,6 @@ class MainActivity : ScaledActivity() {
 //        mapToggleSwitch = findViewById(R.id.mapToggleSwitch)
         presetSpinner = findViewById(R.id.presetSpinner)
         savePresetButton = findViewById(R.id.savePresetButton)
-        presetFolderHint = findViewById(R.id.presetFolderHint)
         displaySpinner = findViewById(R.id.displaySpinner)
         positionContainerCard = findViewById(R.id.positionContainerCard)
         positionNavCard = findViewById(R.id.positionNavCard)
@@ -183,6 +183,8 @@ class MainActivity : ScaledActivity() {
         hudSpeedLimitAlertThresholdRow = findViewById(R.id.hudSpeedLimitAlertThresholdRow)
         hudSpeedLimitAlertThresholdSeek = findViewById(R.id.hudSpeedLimitAlertThresholdSeek)
         hudSpeedLimitAlertThresholdValue = findViewById(R.id.hudSpeedLimitAlertThresholdValue)
+        hudSpeedPreviewFull = findViewById(R.id.hudSpeedPreviewFull)
+        hudSpeedPreviewCompact = findViewById(R.id.hudSpeedPreviewCompact)
         trafficLightMaxActiveSeek = findViewById(R.id.trafficLightMaxActiveSeek)
         trafficLightMaxActiveValue = findViewById(R.id.trafficLightMaxActiveValue)
         trafficLightPreviewContainer = findViewById(R.id.trafficLightPreviewContainer)
@@ -425,6 +427,7 @@ class MainActivity : ScaledActivity() {
                 return@setOnCheckedChangeListener
             }
             OverlayPrefs.setHudSpeedLimitEnabled(this, isChecked)
+            updateHudSpeedPreviewLayout(isChecked)
             notifyOverlaySettingsChanged(hudSpeedLimitEnabled = isChecked)
         }
         hudSpeedLimitAlertCheck.setOnCheckedChangeListener { _, isChecked ->
@@ -918,6 +921,11 @@ class MainActivity : ScaledActivity() {
         startService(Intent(this, NavigationService::class.java))
         startService(Intent(this, SensorDataService::class.java))
         ContextCompat.startForegroundService(this, Intent(this, HudBackgroundService::class.java))
+    }
+
+    internal fun updateHudSpeedPreviewLayout(showLimit: Boolean) {
+        hudSpeedPreviewFull.visibility = if (showLimit) View.VISIBLE else View.GONE
+        hudSpeedPreviewCompact.visibility = if (showLimit) View.GONE else View.VISIBLE
     }
 
 

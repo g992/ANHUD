@@ -83,6 +83,7 @@ internal fun MainActivity.syncUiFromPrefs() {
         val hudSpeedLimitAlertEnabled = OverlayPrefs.hudSpeedLimitAlertEnabled(this)
         val hudSpeedLimitAlertThreshold = OverlayPrefs.hudSpeedLimitAlertThreshold(this)
         hudSpeedLimitCheck.isChecked = hudSpeedLimitEnabled
+        updateHudSpeedPreviewLayout(hudSpeedLimitEnabled)
         hudSpeedLimitAlertCheck.isChecked = hudSpeedLimitAlertEnabled
         hudSpeedLimitAlertThresholdRow.visibility =
             if (hudSpeedLimitAlertEnabled) View.VISIBLE else View.GONE

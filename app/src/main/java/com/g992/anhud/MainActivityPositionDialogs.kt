@@ -47,6 +47,8 @@ internal fun MainActivity.openPositionDialog(
     val previewArrowBlock = dialogView.findViewById<View>(R.id.dialogPreviewArrowBlock)
     val previewSpeedLimit = dialogView.findViewById<TextView>(R.id.dialogPreviewSpeedLimit)
     val previewHudSpeedBlock = dialogView.findViewById<View>(R.id.dialogPreviewHudSpeedBlock)
+    val previewHudSpeedFull = dialogView.findViewById<View>(R.id.dialogPreviewHudSpeedFull)
+    val previewHudSpeedCompact = dialogView.findViewById<View>(R.id.dialogPreviewHudSpeedCompact)
     val previewRoadCameraBlock = dialogView.findViewById<View>(R.id.dialogPreviewRoadCameraBlock)
     val previewTrafficLightBlock = dialogView.findViewById<LinearLayout>(R.id.dialogPreviewTrafficLightBlock)
     val previewSpeedometer = dialogView.findViewById<TextView>(R.id.dialogPreviewSpeedometer)
@@ -286,6 +288,9 @@ internal fun MainActivity.openPositionDialog(
         previewArrowBlock.visibility = if (showArrow) View.VISIBLE else View.GONE
         previewSpeedLimit.visibility = if (showSpeed) View.VISIBLE else View.GONE
         previewHudSpeedBlock.visibility = if (showHudSpeed) View.VISIBLE else View.GONE
+        val showHudSpeedLimit = OverlayPrefs.hudSpeedLimitEnabled(activity)
+        previewHudSpeedFull.visibility = if (showHudSpeedLimit) View.VISIBLE else View.GONE
+        previewHudSpeedCompact.visibility = if (showHudSpeedLimit) View.GONE else View.VISIBLE
         previewRoadCameraBlock.visibility = if (showRoadCamera) View.VISIBLE else View.GONE
         previewTrafficLightBlock.visibility = if (showTrafficLight) View.VISIBLE else View.GONE
         previewSpeedometer.visibility = if (showSpeedometer) View.VISIBLE else View.GONE

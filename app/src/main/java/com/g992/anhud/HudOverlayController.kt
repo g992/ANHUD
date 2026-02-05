@@ -118,14 +118,20 @@ class HudOverlayController(private val context: Context) {
     private var speedLimitView: OutlinedTextView? = null
     private var speedometerView: TextView? = null
     private var hudSpeedContainer: FrameLayout? = null
-    private var hudSpeedContent: LinearLayout? = null
+    private var hudSpeedContent: FrameLayout? = null
     private var hudSpeedOverspeedView: View? = null
-    private var hudSpeedLeftColumn: LinearLayout? = null
-    private var hudSpeedRightColumn: LinearLayout? = null
-    private var hudSpeedIcon: ImageView? = null
-    private var hudSpeedDirectionView: ImageView? = null
-    private var hudSpeedDistanceView: TextView? = null
-    private var hudSpeedLimitView: TextView? = null
+    private var hudSpeedFullLayout: LinearLayout? = null
+    private var hudSpeedFullIcon: ImageView? = null
+    private var hudSpeedFullDirection: ImageView? = null
+    private var hudSpeedFullDistance: TextView? = null
+    private var hudSpeedFullLimit: TextView? = null
+    private var hudSpeedCompactLayout: LinearLayout? = null
+    private var hudSpeedCompactLeft: LinearLayout? = null
+    private var hudSpeedCompactRight: LinearLayout? = null
+    private var hudSpeedCompactIcon: ImageView? = null
+    private var hudSpeedCompactDirection: ImageView? = null
+    private var hudSpeedCompactDistance: TextView? = null
+    private var hudSpeedActiveLayout: View? = null
     private var roadCameraContainer: LinearLayout? = null
     private var roadCameraIconView: ImageView? = null
     private var roadCameraDistanceView: TextView? = null
@@ -895,9 +901,7 @@ class HudOverlayController(private val context: Context) {
             )
         }
 
-        val hudSpeedContentView = LinearLayout(displayContext).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.TOP
+        val hudSpeedContentView = FrameLayout(displayContext).apply {
             clipChildren = false
             clipToPadding = false
             layoutParams = FrameLayout.LayoutParams(
@@ -906,12 +910,47 @@ class HudOverlayController(private val context: Context) {
             )
         }
 
-        val hudSpeedLeftColumnView = LinearLayout(displayContext).apply {
+        val hudSpeedFullLayoutView = LinearLayout(displayContext).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.TOP
+            layoutParams = FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                FrameLayout.LayoutParams.WRAP_CONTENT
+            )
+        }
+
+        val hudSpeedFullLeftView = LinearLayout(displayContext).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL
         }
 
-        val hudSpeedRightColumnView = LinearLayout(displayContext).apply {
+        val hudSpeedFullRightView = LinearLayout(displayContext).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_HORIZONTAL
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply {
+                marginStart = (6 * metrics.density).roundToInt()
+            }
+        }
+
+        val hudSpeedCompactLayoutView = LinearLayout(displayContext).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            visibility = View.GONE
+            layoutParams = FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                FrameLayout.LayoutParams.WRAP_CONTENT
+            )
+        }
+
+        val hudSpeedCompactLeftView = LinearLayout(displayContext).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_HORIZONTAL
+        }
+
+        val hudSpeedCompactRightView = LinearLayout(displayContext).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL
             layoutParams = LinearLayout.LayoutParams(
@@ -932,16 +971,14 @@ class HudOverlayController(private val context: Context) {
             visibility = View.GONE
         }
 
-        val hudSpeedIconView = ImageView(displayContext).apply {
+        val hudSpeedFullIconView = ImageView(displayContext).apply {
             layoutParams = LinearLayout.LayoutParams(iconSize, iconSize)
             scaleType = ImageView.ScaleType.FIT_CENTER
             setImageResource(R.drawable.cam_type_1)
         }
 
-        val hudSpeedLimitText = TextView(displayContext).apply {
-            layoutParams = LinearLayout.LayoutParams(iconSize, iconSize).apply {
-                marginStart = (6 * metrics.density).roundToInt()
-            }
+        val hudSpeedFullLimitTextView = TextView(displayContext).apply {
+            layoutParams = LinearLayout.LayoutParams(iconSize, iconSize)
             background = ContextCompat.getDrawable(displayContext, R.drawable.bg_hudspeed_limit)
             gravity = Gravity.CENTER
             setTextColor(Color.BLACK)
@@ -950,7 +987,7 @@ class HudOverlayController(private val context: Context) {
             visibility = View.GONE
         }
 
-        val hudSpeedDistanceText = TextView(displayContext).apply {
+        val hudSpeedFullDistanceTextView = TextView(displayContext).apply {
             layoutParams = LinearLayout.LayoutParams(iconSize, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
                 topMargin = (2 * metrics.density).roundToInt()
             }
@@ -961,7 +998,7 @@ class HudOverlayController(private val context: Context) {
             setTypeface(typeface, Typeface.BOLD)
         }
 
-        val hudSpeedDirectionIcon = ImageView(displayContext).apply {
+        val hudSpeedFullDirectionIconView = ImageView(displayContext).apply {
             layoutParams = LinearLayout.LayoutParams(iconSize, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
                 topMargin = (4 * metrics.density).roundToInt()
             }
@@ -970,14 +1007,44 @@ class HudOverlayController(private val context: Context) {
             visibility = View.GONE
         }
 
-        hudSpeedLeftColumnView.addView(hudSpeedIconView)
-        hudSpeedLeftColumnView.addView(hudSpeedDirectionIcon)
+        val hudSpeedCompactIconView = ImageView(displayContext).apply {
+            layoutParams = LinearLayout.LayoutParams(iconSize, iconSize)
+            scaleType = ImageView.ScaleType.FIT_CENTER
+            setImageResource(R.drawable.cam_type_1)
+        }
 
-        hudSpeedRightColumnView.addView(hudSpeedLimitText)
-        hudSpeedRightColumnView.addView(hudSpeedDistanceText)
+        val halfIconSize = (iconSize / 2f).roundToInt().coerceAtLeast(1)
 
-        hudSpeedContentView.addView(hudSpeedLeftColumnView)
-        hudSpeedContentView.addView(hudSpeedRightColumnView)
+        val hudSpeedCompactDirectionIconView = ImageView(displayContext).apply {
+            layoutParams = LinearLayout.LayoutParams(iconSize, halfIconSize)
+            scaleType = ImageView.ScaleType.FIT_CENTER
+            visibility = View.GONE
+        }
+
+        val hudSpeedCompactDistanceTextView = TextView(displayContext).apply {
+            layoutParams = LinearLayout.LayoutParams(iconSize, halfIconSize)
+            gravity = Gravity.CENTER
+            text = displayContext.getString(R.string.preview_hudspeed_distance)
+            setTextColor(Color.WHITE)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
+            setTypeface(typeface, Typeface.BOLD)
+        }
+
+        hudSpeedFullLeftView.addView(hudSpeedFullIconView)
+        hudSpeedFullLeftView.addView(hudSpeedFullDirectionIconView)
+        hudSpeedFullRightView.addView(hudSpeedFullLimitTextView)
+        hudSpeedFullRightView.addView(hudSpeedFullDistanceTextView)
+        hudSpeedFullLayoutView.addView(hudSpeedFullLeftView)
+        hudSpeedFullLayoutView.addView(hudSpeedFullRightView)
+
+        hudSpeedCompactLeftView.addView(hudSpeedCompactIconView)
+        hudSpeedCompactRightView.addView(hudSpeedCompactDirectionIconView)
+        hudSpeedCompactRightView.addView(hudSpeedCompactDistanceTextView)
+        hudSpeedCompactLayoutView.addView(hudSpeedCompactLeftView)
+        hudSpeedCompactLayoutView.addView(hudSpeedCompactRightView)
+
+        hudSpeedContentView.addView(hudSpeedFullLayoutView)
+        hudSpeedContentView.addView(hudSpeedCompactLayoutView)
 
         hudSpeedBlock.addView(hudSpeedOverspeedViewLocal)
         hudSpeedBlock.addView(hudSpeedContentView)
@@ -1043,12 +1110,17 @@ class HudOverlayController(private val context: Context) {
             hudSpeedContainer = hudSpeedBlock
             hudSpeedContent = hudSpeedContentView
             hudSpeedOverspeedView = hudSpeedOverspeedViewLocal
-            hudSpeedLeftColumn = hudSpeedLeftColumnView
-            hudSpeedRightColumn = hudSpeedRightColumnView
-            hudSpeedIcon = hudSpeedIconView
-            hudSpeedDirectionView = hudSpeedDirectionIcon
-            hudSpeedDistanceView = hudSpeedDistanceText
-            hudSpeedLimitView = hudSpeedLimitText
+            hudSpeedFullLayout = hudSpeedFullLayoutView
+            hudSpeedFullIcon = hudSpeedFullIconView
+            hudSpeedFullDirection = hudSpeedFullDirectionIconView
+            hudSpeedFullDistance = hudSpeedFullDistanceTextView
+            hudSpeedFullLimit = hudSpeedFullLimitTextView
+            hudSpeedCompactLayout = hudSpeedCompactLayoutView
+            hudSpeedCompactLeft = hudSpeedCompactLeftView
+            hudSpeedCompactRight = hudSpeedCompactRightView
+            hudSpeedCompactIcon = hudSpeedCompactIconView
+            hudSpeedCompactDirection = hudSpeedCompactDirectionIconView
+            hudSpeedCompactDistance = hudSpeedCompactDistanceTextView
             roadCameraContainer = roadCameraBlock
             roadCameraIconView = roadCameraIcon
             roadCameraDistanceView = roadCameraDistanceText
@@ -1077,12 +1149,18 @@ class HudOverlayController(private val context: Context) {
             hudSpeedContainer = null
             hudSpeedContent = null
             hudSpeedOverspeedView = null
-            hudSpeedLeftColumn = null
-            hudSpeedRightColumn = null
-            hudSpeedIcon = null
-            hudSpeedDirectionView = null
-            hudSpeedDistanceView = null
-            hudSpeedLimitView = null
+            hudSpeedFullLayout = null
+            hudSpeedFullIcon = null
+            hudSpeedFullDirection = null
+            hudSpeedFullDistance = null
+            hudSpeedFullLimit = null
+            hudSpeedCompactLayout = null
+            hudSpeedCompactLeft = null
+            hudSpeedCompactRight = null
+            hudSpeedCompactIcon = null
+            hudSpeedCompactDirection = null
+            hudSpeedCompactDistance = null
+            hudSpeedActiveLayout = null
             roadCameraContainer = null
             roadCameraIconView = null
             roadCameraDistanceView = null
@@ -1123,12 +1201,18 @@ class HudOverlayController(private val context: Context) {
         hudSpeedContainer = null
         hudSpeedContent = null
         hudSpeedOverspeedView = null
-        hudSpeedLeftColumn = null
-        hudSpeedRightColumn = null
-        hudSpeedIcon = null
-        hudSpeedDirectionView = null
-        hudSpeedDistanceView = null
-        hudSpeedLimitView = null
+        hudSpeedFullLayout = null
+        hudSpeedFullIcon = null
+        hudSpeedFullDirection = null
+        hudSpeedFullDistance = null
+        hudSpeedFullLimit = null
+        hudSpeedCompactLayout = null
+        hudSpeedCompactLeft = null
+        hudSpeedCompactRight = null
+        hudSpeedCompactIcon = null
+        hudSpeedCompactDirection = null
+        hudSpeedCompactDistance = null
+        hudSpeedActiveLayout = null
         roadCameraContainer = null
         roadCameraIconView = null
         roadCameraDistanceView = null
@@ -1587,15 +1671,28 @@ class HudOverlayController(private val context: Context) {
         showLimit: Boolean,
         limitTextScale: Float
     ) {
-        val leftColumn = hudSpeedLeftColumn
-        val rightColumn = hudSpeedRightColumn
-        val icon = hudSpeedIcon ?: return
-        val direction = hudSpeedDirectionView ?: return
-        val distance = hudSpeedDistanceView ?: return
-        val limit = hudSpeedLimitView
-        icon.setImageResource(resolveHudSpeedCamIcon(camType))
-        val limitVisible = showLimit && limitText.isNotBlank()
-        if (limit != null) {
+        val distanceVisible = distanceText.isNotBlank()
+        if (!distanceVisible) {
+            hudSpeedContainer?.visibility = View.GONE
+            return
+        }
+        hudSpeedContainer?.visibility = View.VISIBLE
+        val useFullLayout = showLimit
+        val fullLayout = hudSpeedFullLayout
+        val compactLayout = hudSpeedCompactLayout
+        if (fullLayout == null || compactLayout == null) {
+            return
+        }
+        fullLayout.visibility = if (useFullLayout) View.VISIBLE else View.GONE
+        compactLayout.visibility = if (useFullLayout) View.GONE else View.VISIBLE
+        hudSpeedActiveLayout = if (useFullLayout) fullLayout else compactLayout
+        if (useFullLayout) {
+            val icon = hudSpeedFullIcon ?: return
+            val direction = hudSpeedFullDirection ?: return
+            val distance = hudSpeedFullDistance ?: return
+            val limit = hudSpeedFullLimit ?: return
+            icon.setImageResource(resolveHudSpeedCamIcon(camType))
+            val limitVisible = limitText.isNotBlank()
             if (limitVisible) {
                 val scaledSizeSp =
                     SPEED_LIMIT_TEXT_SIZE_SP *
@@ -1608,40 +1705,45 @@ class HudOverlayController(private val context: Context) {
             } else {
                 limit.visibility = View.GONE
             }
+            distance.text = distanceText
+            distance.visibility = View.VISIBLE
+            if (directionIcon == null) {
+                direction.setImageDrawable(null)
+                direction.visibility = View.GONE
+            } else {
+                direction.setImageResource(directionIcon)
+                direction.visibility = View.VISIBLE
+            }
+            return
         }
-        val distanceVisible = distanceText.isNotBlank()
+        val icon = hudSpeedCompactIcon ?: return
+        val direction = hudSpeedCompactDirection ?: return
+        val distance = hudSpeedCompactDistance ?: return
+        val leftColumn = hudSpeedCompactLeft
+        val rightColumn = hudSpeedCompactRight
+        icon.setImageResource(resolveHudSpeedCamIcon(camType))
         distance.text = distanceText
-        distance.visibility = if (distanceVisible) View.VISIBLE else View.GONE
-        val directionVisible = directionIcon != null && distanceVisible
-        if (!directionVisible) {
-            direction.setImageDrawable(null)
-            direction.visibility = View.GONE
-        } else {
+        distance.visibility = View.VISIBLE
+        val directionVisible = directionIcon != null
+        if (directionVisible) {
             direction.setImageResource(directionIcon)
             direction.visibility = View.VISIBLE
-        }
-        val placeDistanceRight = distanceVisible && limitVisible && directionVisible
-        val targetColumn = if (placeDistanceRight) {
-            rightColumn
         } else {
-            leftColumn ?: rightColumn
+            direction.setImageDrawable(null)
+            direction.visibility = View.GONE
         }
+        val targetColumn = if (directionVisible) rightColumn else leftColumn
         if (targetColumn != null && distance.parent != targetColumn) {
             (distance.parent as? ViewGroup)?.removeView(distance)
             targetColumn.addView(distance)
         }
         if (rightColumn != null) {
-            rightColumn.visibility = if (limitVisible || targetColumn == rightColumn) View.VISIBLE else View.GONE
-        }
-        if (!distanceVisible) {
-            hudSpeedContainer?.visibility = View.GONE
-        } else {
-            hudSpeedContainer?.visibility = View.VISIBLE
+            rightColumn.visibility = if (directionVisible) View.VISIBLE else View.GONE
         }
     }
 
     private fun updateHudSpeedOverspeed(overspeed: Boolean) {
-        val content = hudSpeedContent ?: return
+        val content = hudSpeedActiveLayout ?: hudSpeedContent ?: return
         val background = hudSpeedOverspeedView ?: return
         if (!overspeed) {
             background.visibility = View.GONE
@@ -1649,14 +1751,12 @@ class HudOverlayController(private val context: Context) {
         }
         val density = content.resources.displayMetrics.density
         val paddingPx = (HUDSPEED_OVERSPEED_PADDING_DP * density).roundToInt().coerceAtLeast(0)
-        val measuredWidth = content.measuredWidth.takeIf { it > 0 } ?: run {
-            content.measure(
-                View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
-                View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
-            )
-            content.measuredWidth
-        }
-        val measuredHeight = content.measuredHeight.takeIf { it > 0 } ?: content.height
+        content.measure(
+            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
+            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
+        )
+        val measuredWidth = content.measuredWidth
+        val measuredHeight = content.measuredHeight
         if (measuredWidth <= 0 || measuredHeight <= 0) {
             background.visibility = View.GONE
             return
