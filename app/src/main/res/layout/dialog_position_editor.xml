@@ -116,14 +116,14 @@
                 android:layout_height="wrap_content"
                 android:background="@drawable/bg_hudspeed_overspeed"
                 android:padding="4dp"
-                android:gravity="center_horizontal"
-                android:orientation="vertical">
+                android:gravity="top"
+                android:orientation="horizontal">
 
                 <LinearLayout
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:gravity="center_vertical"
-                    android:orientation="horizontal">
+                    android:gravity="center_horizontal"
+                    android:orientation="vertical">
 
                     <ImageView
                         android:layout_width="48dp"
@@ -132,35 +132,42 @@
                         android:scaleType="fitCenter"
                         android:src="@drawable/cam_type_1" />
 
+                    <ImageView
+                        android:layout_width="48dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:contentDescription="@string/preview_direction_label"
+                        android:scaleType="fitCenter"
+                        android:src="@drawable/cam_dirtype_3_hud" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="6dp"
+                    android:gravity="center_horizontal"
+                    android:orientation="vertical">
+
                     <TextView
                         android:layout_width="48dp"
                         android:layout_height="48dp"
-                        android:layout_marginStart="6dp"
                         android:background="@drawable/bg_hudspeed_limit"
                         android:gravity="center"
                         android:text="@string/preview_speed_limit_text"
                         android:textColor="@color/black"
                         android:textSize="16sp"
                         android:textStyle="bold" />
+
+                    <TextView
+                        android:layout_width="48dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:gravity="center"
+                        android:text="@string/preview_hudspeed_distance"
+                        android:textColor="@color/white"
+                        android:textSize="14sp"
+                        android:textStyle="bold" />
                 </LinearLayout>
-
-                <ImageView
-                    android:layout_width="48dp"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="4dp"
-                    android:contentDescription="@string/preview_direction_label"
-                    android:scaleType="fitCenter"
-                    android:src="@drawable/cam_dirtype_3_hud" />
-
-                <TextView
-                    android:layout_width="48dp"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="2dp"
-                    android:gravity="center"
-                    android:text="@string/preview_hudspeed_distance"
-                    android:textColor="@color/white"
-                    android:textSize="14sp"
-                    android:textStyle="bold" />
             </LinearLayout>
 
             <LinearLayout
