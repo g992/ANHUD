@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
+import android.os.Environment
 import android.provider.Settings
 import android.view.LayoutInflater
 import android.view.View
@@ -128,6 +129,18 @@ internal fun MainActivity.openUnknownSourcesSettings() {
     startActivity(intent)
 }
 
+internal fun MainActivity.openAllFilesAccessSettings() {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return
+    val packageUri = Uri.parse("package:$packageName")
+    val intent = Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION).apply {
+        data = packageUri
+    }
+    runCatching { startActivity(intent) }
+        .onFailure {
+            startActivity(Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION))
+        }
+}
+
 private const val NOTIFICATION_LISTENERS_SETTING = "enabled_notification_listeners"
 
 private fun isNotificationAccessGranted(context: Context): Boolean {
@@ -143,13 +156,15 @@ private fun isNotificationAccessGranted(context: Context): Boolean {
 }
 
 private fun isStoragePermissionMissing(context: Context): Boolean {
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-        return false
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+        return !Environment.isExternalStorageManager()
     }
-    return ContextCompat.checkSelfPermission(
-        context,
+    val permission = if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
         android.Manifest.permission.WRITE_EXTERNAL_STORAGE
-    ) != PackageManager.PERMISSION_GRANTED
+    } else {
+        android.Manifest.permission.READ_EXTERNAL_STORAGE
+    }
+    return ContextCompat.checkSelfPermission(context, permission) != PackageManager.PERMISSION_GRANTED
 }
 
 private fun isInstallPermissionMissing(context: Context): Boolean {

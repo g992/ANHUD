@@ -161,6 +161,15 @@ class NavigationReceiver : BroadcastReceiver() {
                 val raw = normalizeText(intent.getStringExtra(EXTRA_ARRIVAL_TEXT).orEmpty())
                 Log.d(TAG, "Yandex arrival: $raw")
                 UiLogStore.append(LogCategory.NAVIGATION, "яндекс прибытие: $raw")
+                NavigationHudStore.update { state ->
+                    state.copy(
+                        arrival = raw,
+                        source = SOURCE_YANDEX,
+                        lastUpdated = System.currentTimeMillis(),
+                        lastAction = action,
+                        rawArrival = raw
+                    )
+                }
                 // Don't end navigation here - only end when notification is removed
             }
             ACTION_YANDEX_DISTANCE -> {

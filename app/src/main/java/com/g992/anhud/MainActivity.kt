@@ -9,6 +9,7 @@ import android.graphics.Point
 import android.graphics.PointF
 import android.os.Bundle
 import android.os.Build
+import android.os.Environment
 import android.provider.Settings
 import android.view.View
 import android.widget.Button
@@ -43,6 +44,7 @@ class MainActivity : ScaledActivity() {
                 return
             }
             syncUiFromPrefs()
+            syncPresetSelectionFromPrefs()
         }
     }
     private val updateReceiver = object : BroadcastReceiver() {
@@ -71,7 +73,8 @@ class MainActivity : ScaledActivity() {
     internal var mapToggleSwitch: SwitchCompat? = null
     private lateinit var settingsRoot: ScrollView
     internal lateinit var presetSpinner: Spinner
-    internal lateinit var savePresetButton: Button
+    internal lateinit var savePresetButton: ImageButton
+    internal lateinit var saveAsPresetButton: ImageButton
     internal lateinit var displaySpinner: Spinner
     private lateinit var positionContainerCard: View
     private lateinit var positionNavCard: View
@@ -117,6 +120,7 @@ class MainActivity : ScaledActivity() {
     private var guideController: GuideOverlayController? = null
     private var editorGuideController: GuideOverlayController? = null
     private var pendingGuideAfterDialog: List<GuideContent.GuideItem>? = null
+    private var requestedStorageAccessThisSession = false
 
     internal var presetOptions: List<PresetManager.Preset> = emptyList()
     internal var presetAdapter: PresetAdapter? = null
@@ -126,6 +130,7 @@ class MainActivity : ScaledActivity() {
     internal var isApplyingPreset = false
     private val presetPrefsListener = SharedPreferences.OnSharedPreferenceChangeListener { _, _ ->
         if (isApplyingPreset) return@OnSharedPreferenceChangeListener
+        syncPresetSelectionFromPrefs()
         updatePresetModifiedState()
     }
 
@@ -153,6 +158,7 @@ class MainActivity : ScaledActivity() {
 //        mapToggleSwitch = findViewById(R.id.mapToggleSwitch)
         presetSpinner = findViewById(R.id.presetSpinner)
         savePresetButton = findViewById(R.id.savePresetButton)
+        saveAsPresetButton = findViewById(R.id.saveAsPresetButton)
         displaySpinner = findViewById(R.id.displaySpinner)
         positionContainerCard = findViewById(R.id.positionContainerCard)
         positionNavCard = findViewById(R.id.positionNavCard)
@@ -571,7 +577,16 @@ class MainActivity : ScaledActivity() {
     override fun onResume() {
         super.onResume()
         updatePermissionStatus()
+        maybeRequestStorageAccess()
         refreshPresets(keepSelection = true)
+    }
+
+    private fun maybeRequestStorageAccess() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return
+        if (requestedStorageAccessThisSession) return
+        if (Environment.isExternalStorageManager()) return
+        requestedStorageAccessThisSession = true
+        requestStoragePermission()
     }
 
     private fun updateSettingsBadge() {
@@ -583,8 +598,16 @@ class MainActivity : ScaledActivity() {
     }
 
     private fun requestStoragePermission() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
-            storagePermissionLauncher.launch(android.Manifest.permission.WRITE_EXTERNAL_STORAGE)
+        when {
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.R -> {
+                openAllFilesAccessSettings()
+            }
+            Build.VERSION.SDK_INT < Build.VERSION_CODES.Q -> {
+                storagePermissionLauncher.launch(android.Manifest.permission.WRITE_EXTERNAL_STORAGE)
+            }
+            Build.VERSION.SDK_INT <= Build.VERSION_CODES.S_V2 -> {
+                storagePermissionLauncher.launch(android.Manifest.permission.READ_EXTERNAL_STORAGE)
+            }
         }
     }
 

@@ -25,13 +25,13 @@
     <string name="hud_settings_title">Настройки HUD</string>
     <string name="preset_label">Активный пресет</string>
     <string name="preset_save_button">Сохранить пресет</string>
+    <string name="preset_save_as_button">Сохранить копию пресета</string>
     <string name="preset_save_title">Сохранить пресет</string>
     <string name="preset_name_hint">Имя пресета</string>
     <string name="preset_name_invalid">Недопустимое имя пресета</string>
     <string name="preset_load_failed">Не удалось применить пресет</string>
     <string name="preset_save_success">Пресет сохранен</string>
     <string name="preset_save_failed">Не удалось сохранить пресет</string>
-    <string name="preset_folder_hint">Папка пресетов: %1$s</string>
     <string name="preset_base_with_plane">Базовый (с самолетом)</string>
     <string name="preset_top_no_plane">Сверху (без самолета)</string>
     <string name="overlay_permission_granted">Разрешение на оверлей: есть</string>
@@ -44,7 +44,7 @@
     <string name="notification_permission_granted">Доступ к уведомлениям: включен</string>
     <string name="notification_permission_missing">Доступ к уведомлениям нужен для определения конца навигации.</string>
     <string name="notification_permission_button">Разрешить доступ к уведомлениям</string>
-    <string name="storage_permission_missing">Доступ к файлам нужен для экспорта и импорта настроек.</string>
+    <string name="storage_permission_missing">Доступ к файлам нужен для пресетов, экспорта и импорта настроек.</string>
     <string name="storage_permission_button">Разрешить доступ к файлам</string>
     <string name="install_permission_missing">Разрешение на установку из неизвестных источников нужно для обновлений.</string>
     <string name="install_permission_button">Разрешить установку</string>

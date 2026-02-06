@@ -17,11 +17,14 @@ import androidx.appcompat.app.AlertDialog
 import kotlin.math.roundToInt
 
 internal fun MainActivity.setupPresetSelector() {
-    val presetsDir = PresetManager.userPresetDir(this)
-
     savePresetButton.setOnClickListener {
         saveActivePreset()
     }
+    saveAsPresetButton.setOnClickListener {
+        showSavePresetDialog()
+    }
+    saveAsPresetButton.isEnabled = true
+    saveAsPresetButton.alpha = 1f
 
     presetSpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
         override fun onItemSelected(
@@ -116,7 +119,12 @@ private fun MainActivity.saveActivePreset() {
         return
     }
     val payload = PrefsJson.buildPayload(this)
-    val savedPresetId = PresetManager.saveUserPreset(this, preset.name, payload)
+    val savedPresetId = preset.file?.let { file ->
+        runCatching {
+            file.writeText(payload.toString(2), Charsets.UTF_8)
+            PresetManager.presetIdForFile(file)
+        }.getOrNull()
+    } ?: PresetManager.saveUserPreset(this, preset.name, payload)
     if (savedPresetId == null) {
         showToast(R.string.preset_save_failed)
         return
@@ -190,22 +198,65 @@ private fun MainActivity.normalizePresetName(raw: String): String? {
 
 internal fun MainActivity.updatePresetModifiedState() {
     val presetId = activePresetId
-    val preset = presetOptions.firstOrNull { it.id == presetId }
+    var preset = presetOptions.firstOrNull { it.id == presetId }
     if (preset == null) {
-        savePresetButton.visibility = View.GONE
+        setSavePresetEnabled(false)
         presetAdapter?.setModifiedPresetId(null)
         return
     }
-    val payload = PresetManager.readPresetPayload(this, preset)
+    var payload = PresetManager.readPresetPayload(this, preset)
     if (payload == null) {
-        savePresetButton.visibility = View.GONE
+        val currentPayload = PrefsJson.buildPayload(this)
+        val fallbackPreset = presetOptions.firstOrNull { candidate ->
+            val candidatePayload = PresetManager.readPresetPayload(this, candidate) ?: return@firstOrNull false
+            PrefsJson.payloadEquals(candidatePayload, currentPayload)
+        } ?: presetOptions.firstOrNull { candidate ->
+            PresetManager.readPresetPayload(this, candidate) != null
+        }
+        if (fallbackPreset != null && fallbackPreset.id != preset.id) {
+            preset = fallbackPreset
+            payload = PresetManager.readPresetPayload(this, fallbackPreset)
+            PresetPrefs.setActivePresetId(this, fallbackPreset.id)
+            activePresetId = fallbackPreset.id
+            val selectedIndex = presetOptions.indexOfFirst { it.id == fallbackPreset.id }
+            if (selectedIndex >= 0) {
+                isPresetSelectionSyncing = true
+                presetSpinner.setSelection(selectedIndex)
+                isPresetSelectionSyncing = false
+            }
+        }
+    }
+    if (payload == null) {
+        setSavePresetEnabled(false)
         presetAdapter?.setModifiedPresetId(null)
         return
     }
     val currentPayload = PrefsJson.buildPayload(this)
     val modified = !PrefsJson.payloadEquals(payload, currentPayload)
-    savePresetButton.visibility = if (modified) View.VISIBLE else View.GONE
+    setSavePresetEnabled(modified && preset.source == PresetManager.Source.USER)
     presetAdapter?.setModifiedPresetId(if (modified) preset.id else null)
+}
+
+private fun MainActivity.setSavePresetEnabled(enabled: Boolean) {
+    savePresetButton.isEnabled = enabled
+    savePresetButton.alpha = if (enabled) 1f else 0.4f
+}
+
+internal fun MainActivity.syncPresetSelectionFromPrefs() {
+    val presetId = PresetPrefs.activePresetId(this) ?: return
+    if (presetId == activePresetId) return
+    val index = presetOptions.indexOfFirst { it.id == presetId }
+    if (index < 0) {
+        refreshPresets(keepSelection = true)
+        return
+    }
+    activePresetId = presetId
+    if (presetSpinner.selectedItemPosition != index) {
+        isPresetSelectionSyncing = true
+        presetSpinner.setSelection(index)
+        isPresetSelectionSyncing = false
+    }
+    updatePresetModifiedState()
 }
 
 private fun MainActivity.syncDisplaySelectionFromPrefs() {

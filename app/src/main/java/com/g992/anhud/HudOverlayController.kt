@@ -23,26 +23,6 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.core.content.ContextCompat
-import com.yandex.mapkit.MapKitFactory
-import com.yandex.mapkit.RequestPoint
-import com.yandex.mapkit.RequestPointType
-import com.yandex.mapkit.directions.driving.DrivingRoute
-import com.yandex.mapkit.directions.driving.DrivingRouterType
-import com.yandex.mapkit.geometry.Point
-import com.yandex.mapkit.location.LocationSettingsFactory
-import com.yandex.mapkit.location.LocationSimulator
-import com.yandex.mapkit.location.LocationSimulatorListener
-import com.yandex.mapkit.location.SimulationSettings
-import com.yandex.mapkit.map.CameraPosition
-import com.yandex.mapkit.map.MapObjectCollection
-import com.yandex.mapkit.map.PolylineMapObject
-import com.yandex.mapkit.mapview.MapView
-import com.yandex.mapkit.navigation.automotive.Navigation
-import com.yandex.mapkit.navigation.automotive.NavigationFactory
-import com.yandex.mapkit.navigation.automotive.NavigationListener
-import com.yandex.mapkit.navigation.automotive.RouteOptions
-import com.yandex.runtime.Error
-import com.yandex.runtime.network.NetworkError
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -70,14 +50,8 @@ class HudOverlayController(private val context: Context) {
         private const val PREVIEW_HUDSPEED_LIMIT_VALUE = 100
         private const val PREVIEW_HUDSPEED_CAM_FLAG = 3
         private const val HUDSPEED_HIDE_DISTANCE_METERS = 50
-    private const val HUDSPEED_OVERSPEED_PADDING_DP = 8f
+        private const val HUDSPEED_OVERSPEED_PADDING_DP = 8f
         private const val PREVIEW_SPEED_LIMIT_TEXT_SCALE = 1.3f
-        private const val MAP_ROUTE_ZOOM = 12f
-        private const val SIMULATION_SPEED_KMH = 72.0
-        private val MAP_ROUTE_POINTS = listOf(
-            Point(55.757048, 37.615005),
-            Point(55.776384, 37.585504)
-        )
     }
     private val handler = Handler(Looper.getMainLooper())
     private val displayManager = context.getSystemService(DisplayManager::class.java)
@@ -137,13 +111,6 @@ class HudOverlayController(private val context: Context) {
     private var roadCameraDistanceView: TextView? = null
     private var trafficLightContainer: LinearLayout? = null
     private var clockView: TextView? = null
-    private var mapView: MapView? = null
-    private var mapRoutesCollection: MapObjectCollection? = null
-    private var navigation: Navigation? = null
-    private var navigationRequested = false
-    private var locationSimulator: LocationSimulator? = null
-    private var locationSimulatorListener: LocationSimulatorListener? = null
-    private var mapStarted = false
     private var currentDisplayId: Int? = null
     private var lastState: NavigationHudState = NavigationHudState()
     private var lastRenderSignature: RenderSignature? = null
@@ -205,37 +172,6 @@ class HudOverlayController(private val context: Context) {
         override fun run() {
             updateClockText()
             handler.postDelayed(this, CLOCK_TICK_MS)
-        }
-    }
-    private val navigationListener = object : NavigationListener {
-        override fun onRoutesRequestError(error: Error) {
-            navigationRequested = false
-            val message = when (error) {
-                is NetworkError -> "Маршрут: ошибка сети"
-                else -> "Маршрут: ошибка построения"
-            }
-            UiLogStore.append(LogCategory.SYSTEM, message)
-        }
-
-        override fun onRoutesRequested(requestPoints: MutableList<RequestPoint>) = Unit
-
-        override fun onAlternativesRequested(route: DrivingRoute) = Unit
-
-        override fun onUriResolvingRequested(uri: String) = Unit
-
-        override fun onMatchRouteResolvingRequested() = Unit
-
-        override fun onRoutesBuilt() {
-            val navigation = navigation ?: return
-            updateMapRoutes(navigation.routes)
-            val route = navigation.routes.firstOrNull() ?: return
-            navigation.startGuidance(route)
-            startSimulation(route)
-        }
-
-        override fun onResetRoutes() {
-            navigationRequested = false
-            mapRoutesCollection?.clear()
         }
     }
 
@@ -1618,7 +1554,7 @@ class HudOverlayController(private val context: Context) {
 
     private fun buildTimeLine(state: NavigationHudState): String {
         val time = state.time.trim()
-        val arrival = state.arrival.trim()
+        val arrival = resolveArrivalText(state)
         if (time.isNotBlank() && arrival.isNotBlank()) {
             return "$time ($arrival)"
         }
@@ -1629,6 +1565,88 @@ class HudOverlayController(private val context: Context) {
             return "($arrival)"
         }
         return ""
+    }
+
+    private fun resolveArrivalText(state: NavigationHudState): String {
+        val explicitArrival = state.arrival.trim()
+        if (explicitArrival.isNotBlank()) {
+            return normalizeTo24Hour(explicitArrival) ?: explicitArrival
+        }
+        val etaSeconds = parseEtaSeconds(state.time.trim()) ?: return ""
+        if (etaSeconds <= 0) {
+            return ""
+        }
+        val arrivalAtMillis = System.currentTimeMillis() + etaSeconds.toLong() * 1000L
+        return clockFormatter.format(Date(arrivalAtMillis))
+    }
+
+    private fun normalizeTo24Hour(text: String): String? {
+        val normalized = text.trim()
+        val amPmMatch = Regex(
+            "(?i)(\\d{1,2})[:.](\\d{2})\\s*([ap])\\.?\\s*m\\.?"
+        ).find(normalized)
+        if (amPmMatch != null) {
+            val hourRaw = amPmMatch.groupValues[1].toIntOrNull() ?: return null
+            val minute = amPmMatch.groupValues[2].toIntOrNull() ?: return null
+            val meridiem = amPmMatch.groupValues[3].lowercase(Locale.getDefault())
+            if (minute !in 0..59 || hourRaw !in 1..12) {
+                return null
+            }
+            val hour24 = when {
+                meridiem == "a" && hourRaw == 12 -> 0
+                meridiem == "p" && hourRaw != 12 -> hourRaw + 12
+                else -> hourRaw
+            }
+            return String.format(Locale.getDefault(), "%02d:%02d", hour24, minute)
+        }
+
+        val twentyFourMatch = Regex("(?<!\\d)([01]?\\d|2[0-3])[:.](\\d{2})(?!\\d)").find(normalized)
+        if (twentyFourMatch != null) {
+            val hour = twentyFourMatch.groupValues[1].toIntOrNull() ?: return null
+            val minute = twentyFourMatch.groupValues[2].toIntOrNull() ?: return null
+            if (minute !in 0..59) {
+                return null
+            }
+            return String.format(Locale.getDefault(), "%02d:%02d", hour, minute)
+        }
+        return null
+    }
+
+    private fun parseEtaSeconds(text: String): Int? {
+        val normalized = text.lowercase(Locale.getDefault())
+        val days = Regex("(\\d+)\\s*(?:дн\\.?|день|дня|дней|д|day|days)(?!\\p{L})")
+            .find(normalized)
+            ?.groupValues
+            ?.get(1)
+            ?.toIntOrNull()
+            ?: 0
+        if (":" in normalized) {
+            val parts = normalized.split(":").map { it.trim() }
+            if (parts.size == 2) {
+                val first = parts[0].toIntOrNull() ?: return null
+                val second = parts[1].toIntOrNull() ?: return null
+                val base = if (first >= 1) {
+                    first * 3600 + second * 60
+                } else {
+                    first * 60 + second
+                }
+                return days * 86400 + base
+            }
+            if (parts.size == 3) {
+                val hours = parts[0].toIntOrNull() ?: return null
+                val minutes = parts[1].toIntOrNull() ?: return null
+                val seconds = parts[2].toIntOrNull() ?: return null
+                return days * 86400 + hours * 3600 + minutes * 60 + seconds
+            }
+        }
+        val hours = Regex("(\\d+)\\s*ч").find(normalized)?.groupValues?.get(1)?.toIntOrNull() ?: 0
+        val minutes = Regex("(\\d+)\\s*мин").find(normalized)?.groupValues?.get(1)?.toIntOrNull() ?: 0
+        val seconds = Regex("(\\d+)\\s*сек").find(normalized)?.groupValues?.get(1)?.toIntOrNull() ?: 0
+        if (days == 0 && hours == 0 && minutes == 0 && seconds == 0) {
+            val fallback = Regex("(\\d+)").find(normalized)?.groupValues?.get(1)?.toIntOrNull()
+            return fallback?.let { it * 60 }
+        }
+        return days * 86400 + hours * 3600 + minutes * 60 + seconds
     }
 
     private fun updateSpeedLimit(speedLimit: String, preview: Boolean, overspeed: Boolean) {
@@ -2017,159 +2035,15 @@ class HudOverlayController(private val context: Context) {
     }
 
     private fun updateMapView(displayContext: Context, containerWidthPx: Int, containerHeightPx: Int) {
-        val root = overlayView ?: return
         if (!mapEnabled) {
             removeMapView()
             return
         }
-        ensureMapView(displayContext, root, containerWidthPx, containerHeightPx)
-        updateMapLayout(containerWidthPx, containerHeightPx)
-        requestNavigationRoutes()
-    }
-
-    private fun ensureMapView(
-        displayContext: Context,
-        root: FrameLayout,
-        containerWidthPx: Int,
-        containerHeightPx: Int
-    ) {
-        if (mapView != null) {
-            return
-        }
-        val mapView = MapView(displayContext)
-        mapView.layoutParams = mapLayoutParams(containerWidthPx, containerHeightPx)
-        root.addView(mapView, 0)
-        this.mapView = mapView
-        mapRoutesCollection = mapView.mapWindow.map.mapObjects.addCollection()
-        mapView.mapWindow.map.move(
-            CameraPosition(
-                MAP_ROUTE_POINTS.first(),
-                MAP_ROUTE_ZOOM,
-                0f,
-                0f
-            )
-        )
-        startMapIfNeeded()
-    }
-
-    private fun updateMapLayout(containerWidthPx: Int, containerHeightPx: Int) {
-        val mapView = mapView ?: return
-        val params = mapView.layoutParams as? FrameLayout.LayoutParams
-            ?: mapLayoutParams(containerWidthPx, containerHeightPx)
-        val desired = mapLayoutParams(containerWidthPx, containerHeightPx)
-        params.width = desired.width
-        params.height = desired.height
-        params.gravity = desired.gravity
-        mapView.layoutParams = params
-    }
-
-    private fun mapLayoutParams(containerWidthPx: Int, containerHeightPx: Int): FrameLayout.LayoutParams {
-        val width = (containerWidthPx / 2f).roundToInt().coerceAtLeast(1)
-        val height = (containerHeightPx / 2f).roundToInt().coerceAtLeast(1)
-        return FrameLayout.LayoutParams(width, height, Gravity.END or Gravity.BOTTOM)
-    }
-
-    private fun requestNavigationRoutes() {
-        if (navigationRequested) {
-            return
-        }
-        val navigation = ensureNavigation()
-        val requestPoints = buildList {
-            add(RequestPoint(MAP_ROUTE_POINTS.first(), RequestPointType.WAYPOINT, null, null, null))
-            add(RequestPoint(MAP_ROUTE_POINTS.last(), RequestPointType.WAYPOINT, null, null, null))
-        }
-        navigation.requestRoutes(
-            requestPoints,
-            RouteOptions().setInitialAzimuth(navigation.guidance.location?.heading)
-        )
-        navigationRequested = true
-    }
-
-    private fun ensureNavigation(): Navigation {
-        val existing = navigation
-        if (existing != null) {
-            return existing
-        }
-        return NavigationFactory.createNavigation(DrivingRouterType.COMBINED).also { created ->
-            created.addListener(navigationListener)
-            created.resume()
-            navigation = created
-        }
-    }
-
-    private fun stopNavigation() {
-        val navigation = navigation ?: return
-        stopSimulation()
-        try {
-            navigation.stopGuidance()
-            navigation.resetRoutes()
-            navigation.suspend()
-            navigation.removeListener(navigationListener)
-        } catch (_: Exception) {
-        }
-        this.navigation = null
-        navigationRequested = false
-    }
-
-    private fun updateMapRoutes(routes: List<DrivingRoute>) {
-        val routesCollection = mapRoutesCollection ?: return
-        routesCollection.clear()
-        if (routes.isEmpty()) return
-        routes.forEachIndexed { index, route ->
-            routesCollection.addPolyline(route.geometry).apply {
-                if (index == 0) styleMainRoute() else styleAlternativeRoute()
-            }
-        }
-    }
-
-    private fun startSimulation(route: DrivingRoute) {
-        if (locationSimulator != null) {
-            return
-        }
-        val simulator = MapKitFactory.getInstance().createLocationSimulator()
-        val listener = LocationSimulatorListener { stopSimulation() }
-        simulator.subscribeForSimulatorEvents(listener)
-        locationSimulator = simulator
-        locationSimulatorListener = listener
-        MapKitFactory.getInstance().setLocationManager(simulator)
-        val locationSettings = LocationSettingsFactory.coarseSettings()
-        locationSettings.setSpeed(SIMULATION_SPEED_KMH / 3.6)
-        simulator.startSimulation(listOf(SimulationSettings(route.geometry, locationSettings)))
-    }
-
-    private fun stopSimulation() {
-        val simulator = locationSimulator ?: return
-        locationSimulatorListener?.let { simulator.unsubscribeFromSimulatorEvents(it) }
-        locationSimulatorListener = null
-        locationSimulator = null
-        MapKitFactory.getInstance().resetLocationManagerToDefault()
+        // MapKit integration is temporarily disabled to reduce app size.
     }
 
     private fun removeMapView() {
-        val mapView = mapView ?: return
-        mapRoutesCollection = null
-        stopNavigation()
-        overlayView?.removeView(mapView)
-        stopMapIfNeeded()
-        this.mapView = null
-    }
-
-    private fun startMapIfNeeded() {
-        if (mapStarted) {
-            return
-        }
-        MapKitFactory.getInstance().onStart()
-        mapView?.onStart()
-        mapStarted = true
-    }
-
-    private fun stopMapIfNeeded() {
-        if (!mapStarted) {
-            return
-        }
-        mapView?.onStop()
-        MapKitFactory.getInstance().onStop()
-        mapStarted = false
+        // MapKit integration is disabled.
     }
 
     private fun resolveContainerSizePx(metrics: android.util.DisplayMetrics): Pair<Int, Int> {
@@ -2270,26 +2144,6 @@ class HudOverlayController(private val context: Context) {
         primaryView?.setTextSize(TypedValue.COMPLEX_UNIT_SP, NAV_PRIMARY_TEXT_SIZE_SP * scale)
         secondaryView?.setTextSize(TypedValue.COMPLEX_UNIT_SP, NAV_SECONDARY_TEXT_SIZE_SP * scale)
         timeView?.setTextSize(TypedValue.COMPLEX_UNIT_SP, NAV_TIME_TEXT_SIZE_SP * scale)
-    }
-
-    private fun PolylineMapObject.styleMainRoute() {
-        zIndex = 1f
-        setStrokeColor(Color.WHITE)
-        style = style.apply {
-            strokeWidth = 4f
-            outlineColor = Color.BLACK
-            outlineWidth = 2f
-        }
-    }
-
-    private fun PolylineMapObject.styleAlternativeRoute() {
-        zIndex = 0f
-        setStrokeColor(Color.LTGRAY)
-        style = style.apply {
-            strokeWidth = 3f
-            outlineColor = Color.DKGRAY
-            outlineWidth = 1.5f
-        }
     }
 
     private fun updateClockText() {

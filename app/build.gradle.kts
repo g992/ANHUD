@@ -11,8 +11,6 @@ val localProperties = Properties().apply {
         localPropertiesFile.inputStream().use { load(it) }
     }
 }
-val mapkitApiKey = localProperties.getProperty("MAPKIT_API_KEY", "")
-    .ifBlank { System.getenv("MAPKIT_API_KEY") ?: "" }
 
 val versionCodeProp = (project.findProperty("VERSION_CODE") as String?)
     ?.toIntOrNull()
@@ -47,7 +45,6 @@ android {
         versionName = versionNameProp
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        buildConfigField("String", "MAPKIT_API_KEY", "\"$mapkitApiKey\"")
     }
 
     val releaseSigning = if (hasSigning) {
@@ -92,7 +89,6 @@ dependencies {
     implementation(libs.material)
     implementation(libs.androidx.activity)
     implementation(libs.androidx.constraintlayout)
-    implementation(libs.yandex.mapkit)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)

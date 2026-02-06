@@ -72,27 +72,40 @@
             android:textColor="@color/white"
             android:textSize="18sp" />
 
-        <Spinner
-            android:id="@+id/presetSpinner"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="6dp" />
-
-        <Button
-            android:id="@+id/savePresetButton"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:text="@string/preset_save_button"
-            android:visibility="gone" />
-
-        <TextView
-            android:id="@+id/presetFolderHint"
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="6dp"
-            android:textColor="@color/white"
-            android:textSize="12sp" />
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <Spinner
+                android:id="@+id/presetSpinner"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1" />
+
+            <ImageButton
+                android:id="@+id/savePresetButton"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:layout_marginStart="8dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/preset_save_button"
+                android:enabled="false"
+                android:src="@drawable/ic_preset_save_24"
+                android:tint="@color/white" />
+
+            <ImageButton
+                android:id="@+id/saveAsPresetButton"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:layout_marginStart="4dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/preset_save_as_button"
+                android:src="@drawable/ic_preset_save_as_24"
+                android:tint="@color/white" />
+        </LinearLayout>
 
         <TextView
             android:id="@+id/permissionStatus"

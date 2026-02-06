@@ -55,24 +55,26 @@ object PresetManager {
     }
 
     fun readPresetPayload(context: Context, preset: Preset): JSONObject? {
-        val json = when (preset.source) {
-            Source.SYSTEM -> {
-                val resId = preset.resId ?: return null
-                context.resources.openRawResource(resId).bufferedReader(Charsets.UTF_8).use { it.readText() }
-            }
-            Source.USER -> {
-                val file = preset.file
-                if (file != null) {
-                    file.readText(Charsets.UTF_8)
-                } else {
-                    val uri = preset.uri ?: return null
-                    context.contentResolver.openInputStream(uri)
-                        ?.bufferedReader(Charsets.UTF_8)
-                        ?.use { it.readText() }
-                        ?: return null
+        val json = runCatching {
+            when (preset.source) {
+                Source.SYSTEM -> {
+                    val resId = preset.resId ?: return null
+                    context.resources.openRawResource(resId).bufferedReader(Charsets.UTF_8).use { it.readText() }
+                }
+                Source.USER -> {
+                    val file = preset.file
+                    if (file != null) {
+                        file.readText(Charsets.UTF_8)
+                    } else {
+                        val uri = preset.uri ?: return null
+                        context.contentResolver.openInputStream(uri)
+                            ?.bufferedReader(Charsets.UTF_8)
+                            ?.use { it.readText() }
+                            ?: return null
+                    }
                 }
             }
-        }
+        }.getOrNull() ?: return null
         return runCatching { JSONObject(json) }.getOrNull()
     }
 
@@ -97,7 +99,17 @@ object PresetManager {
 
     private fun loadUserPresets(context: Context): List<Preset> {
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            loadUserPresetsMediaStore(context)
+            val mediaStorePresets = loadUserPresetsMediaStore(context)
+            val filePresets = loadUserPresetsLegacy(context)
+            if (filePresets.isEmpty()) {
+                mediaStorePresets
+            } else {
+                val merged = LinkedHashMap<String, Preset>()
+                filePresets.forEach { merged[it.id] = it }
+                mediaStorePresets.forEach { merged.putIfAbsent(it.id, it) }
+                merged.values
+                    .sortedBy { it.name.lowercase() }
+            }
         } else {
             loadUserPresetsLegacy(context)
         }
@@ -153,9 +165,11 @@ object PresetManager {
         if (!dir.exists()) {
             dir.mkdirs()
         }
-        val files = dir.listFiles { file -> file.isFile && file.extension.equals("json", ignoreCase = true) }
-            ?.toList()
-            .orEmpty()
+        val files = runCatching {
+            dir.listFiles { file -> file.isFile && file.extension.equals("json", ignoreCase = true) }
+                ?.toList()
+                .orEmpty()
+        }.getOrElse { emptyList() }
         return files
             .sortedBy { it.nameWithoutExtension.lowercase() }
             .map { file ->
@@ -172,22 +186,23 @@ object PresetManager {
         val presets = mutableListOf<Preset>()
         val resolver = context.contentResolver
         val relativePath = presetRelativePath()
+        val filesUri = MediaStore.Files.getContentUri(MediaStore.VOLUME_EXTERNAL)
         val projection = arrayOf(
-            MediaStore.Downloads._ID,
+            MediaStore.Files.FileColumns._ID,
             MediaStore.MediaColumns.DISPLAY_NAME,
             MediaStore.MediaColumns.RELATIVE_PATH
         )
-        val selection = "${MediaStore.MediaColumns.RELATIVE_PATH}=?"
-        val selectionArgs = arrayOf(relativePath)
+        val selection = "${MediaStore.MediaColumns.RELATIVE_PATH} LIKE ?"
+        val selectionArgs = arrayOf("$relativePath%")
         val sortOrder = "${MediaStore.MediaColumns.DISPLAY_NAME} COLLATE NOCASE ASC"
         resolver.query(
-            MediaStore.Downloads.EXTERNAL_CONTENT_URI,
+            filesUri,
             projection,
             selection,
             selectionArgs,
             sortOrder
         )?.use { cursor ->
-            val idIndex = cursor.getColumnIndexOrThrow(MediaStore.Downloads._ID)
+            val idIndex = cursor.getColumnIndexOrThrow(MediaStore.Files.FileColumns._ID)
             val nameIndex = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.DISPLAY_NAME)
             while (cursor.moveToNext()) {
                 val displayName = cursor.getString(nameIndex) ?: continue
@@ -195,7 +210,13 @@ object PresetManager {
                     continue
                 }
                 val id = cursor.getLong(idIndex)
-                val uri = ContentUris.withAppendedId(MediaStore.Downloads.EXTERNAL_CONTENT_URI, id)
+                val uri = ContentUris.withAppendedId(filesUri, id)
+                val readable = runCatching {
+                    context.contentResolver.openInputStream(uri)?.use { true } ?: false
+                }.getOrDefault(false)
+                if (!readable) {
+                    continue
+                }
                 presets.add(
                     Preset(
                         id = presetIdForDisplayName(displayName),
@@ -251,11 +272,12 @@ object PresetManager {
     private fun findPresetUri(context: Context, displayName: String): Uri? {
         val resolver = context.contentResolver
         val relativePath = presetRelativePath()
-        val projection = arrayOf(MediaStore.Downloads._ID)
+        val filesUri = MediaStore.Files.getContentUri(MediaStore.VOLUME_EXTERNAL)
+        val projection = arrayOf(MediaStore.Files.FileColumns._ID)
         val selection = "${MediaStore.MediaColumns.RELATIVE_PATH}=? AND ${MediaStore.MediaColumns.DISPLAY_NAME}=?"
         val selectionArgs = arrayOf(relativePath, displayName)
         resolver.query(
-            MediaStore.Downloads.EXTERNAL_CONTENT_URI,
+            filesUri,
             projection,
             selection,
             selectionArgs,
@@ -263,7 +285,7 @@ object PresetManager {
         )?.use { cursor ->
             if (cursor.moveToFirst()) {
                 val id = cursor.getLong(0)
-                return ContentUris.withAppendedId(MediaStore.Downloads.EXTERNAL_CONTENT_URI, id)
+                return ContentUris.withAppendedId(filesUri, id)
             }
         }
         return null
