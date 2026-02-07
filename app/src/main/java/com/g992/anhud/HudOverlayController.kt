@@ -7,6 +7,7 @@ import android.graphics.Color
 import android.graphics.PixelFormat
 import android.graphics.PointF
 import android.graphics.Typeface
+import android.graphics.drawable.ColorDrawable
 import android.hardware.display.DisplayManager
 import android.os.Handler
 import android.os.Looper
@@ -445,6 +446,10 @@ class HudOverlayController(private val context: Context) {
         previewShowOthers: Boolean? = null
     ) {
         handler.post {
+            val shouldClearForPreviewTransition = (preview != null && previewMode != preview) ||
+                (previewTarget != null && this.previewTarget != previewTarget) ||
+                (previewShowOthers != null && this.previewShowOthers != previewShowOthers)
+
             if (containerPosition != null) {
                 containerPositionDp = containerPosition
             }
@@ -597,6 +602,9 @@ class HudOverlayController(private val context: Context) {
             }
             if (previewShowOthers != null) {
                 this.previewShowOthers = previewShowOthers
+            }
+            if (shouldClearForPreviewTransition) {
+                clearOverlayForRedraw()
             }
             applyLayout()
             applyState(lastState)
@@ -1244,6 +1252,22 @@ class HudOverlayController(private val context: Context) {
                 removeOverlay()
             }
         }
+    }
+
+    private fun clearOverlayForRedraw() {
+        val container = overlayView ?: return
+        navContainer?.visibility = View.GONE
+        arrowContainer?.visibility = View.GONE
+        speedLimitView?.visibility = View.GONE
+        hudSpeedContainer?.visibility = View.GONE
+        roadCameraContainer?.visibility = View.GONE
+        trafficLightContainer?.visibility = View.GONE
+        speedometerView?.visibility = View.GONE
+        clockView?.visibility = View.GONE
+        container.background = null
+        container.setBackgroundColor(Color.TRANSPARENT)
+        container.visibility = View.VISIBLE
+        container.invalidate()
     }
 
     private fun applyState(state: NavigationHudState) {
@@ -2147,7 +2171,7 @@ class HudOverlayController(private val context: Context) {
 
     private fun updateContainerOutlineAlpha(container: FrameLayout) {
         if (previewMode && previewTarget == OverlayBroadcasts.PREVIEW_TARGET_CONTAINER) {
-            if (container.background == null) {
+            if (container.background == null || container.background is ColorDrawable) {
                 container.background = ContextCompat.getDrawable(container.context, R.drawable.bg_hud_container_outline)
             }
             val effectiveAlpha = max(containerAlpha, CONTAINER_OUTLINE_PREVIEW_MIN_ALPHA)
