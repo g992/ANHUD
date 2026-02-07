@@ -54,6 +54,7 @@ object OverlayPrefs {
     private const val KEY_SPEED_ENABLED = "overlay_speed_enabled"
     private const val KEY_SPEED_LIMIT_FROM_HUDSPEED = "overlay_speed_limit_from_hudspeed"
     private const val KEY_HUDSPEED_ENABLED = "overlay_hudspeed_enabled"
+    private const val KEY_HUDSPEED_GPS_STATUS_ENABLED = "overlay_hudspeed_gps_status_enabled"
     private const val KEY_HUDSPEED_LIMIT_ENABLED = "overlay_hudspeed_limit_enabled"
     private const val KEY_HUDSPEED_LIMIT_ALERT_ENABLED = "overlay_hudspeed_limit_alert_enabled"
     private const val KEY_HUDSPEED_LIMIT_ALERT_THRESHOLD = "overlay_hudspeed_limit_alert_threshold"
@@ -529,6 +530,16 @@ object OverlayPrefs {
     fun setHudSpeedEnabled(context: Context, enabled: Boolean) {
         prefs(context).edit()
             .putBoolean(KEY_HUDSPEED_ENABLED, enabled)
+            .apply()
+    }
+
+    fun hudSpeedGpsStatusEnabled(context: Context): Boolean {
+        return prefs(context).getBoolean(KEY_HUDSPEED_GPS_STATUS_ENABLED, false)
+    }
+
+    fun setHudSpeedGpsStatusEnabled(context: Context, enabled: Boolean) {
+        prefs(context).edit()
+            .putBoolean(KEY_HUDSPEED_GPS_STATUS_ENABLED, enabled)
             .apply()
     }
 

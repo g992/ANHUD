@@ -96,6 +96,8 @@ class HudOverlayController(private val context: Context) {
     private var hudSpeedOverspeedView: View? = null
     private var hudSpeedFullLayout: LinearLayout? = null
     private var hudSpeedFullIcon: ImageView? = null
+    private var hudSpeedFullGpsBadge: ImageView? = null
+    private var hudSpeedFullRight: LinearLayout? = null
     private var hudSpeedFullDirection: ImageView? = null
     private var hudSpeedFullDistance: TextView? = null
     private var hudSpeedFullLimit: TextView? = null
@@ -103,6 +105,7 @@ class HudOverlayController(private val context: Context) {
     private var hudSpeedCompactLeft: LinearLayout? = null
     private var hudSpeedCompactRight: LinearLayout? = null
     private var hudSpeedCompactIcon: ImageView? = null
+    private var hudSpeedCompactGpsBadge: ImageView? = null
     private var hudSpeedCompactDirection: ImageView? = null
     private var hudSpeedCompactDistance: TextView? = null
     private var hudSpeedActiveLayout: View? = null
@@ -315,6 +318,7 @@ class HudOverlayController(private val context: Context) {
             previewSpeed = previewSpeed,
             previewSpeedometer = previewSpeedometer,
             hudSpeedHasCamera = state.hudSpeedHasCamera,
+            hudSpeedHasGps = state.hudSpeedHasGps,
             hudSpeedDistanceMeters = state.hudSpeedDistanceMeters,
             hudSpeedCamType = state.hudSpeedCamType,
             hudSpeedCamFlag = state.hudSpeedCamFlag,
@@ -345,6 +349,7 @@ class HudOverlayController(private val context: Context) {
         val previewSpeed: Boolean,
         val previewSpeedometer: Boolean,
         val hudSpeedHasCamera: Boolean,
+        val hudSpeedHasGps: Boolean,
         val hudSpeedDistanceMeters: Int?,
         val hudSpeedCamType: Int?,
         val hudSpeedCamFlag: Int?,
@@ -907,10 +912,31 @@ class HudOverlayController(private val context: Context) {
             visibility = View.GONE
         }
 
-        val hudSpeedFullIconView = ImageView(displayContext).apply {
+        val gpsBadgeSize = (iconSize / 2f).roundToInt().coerceAtLeast(1)
+        val gpsBadgeOffsetRight = (6 * metrics.density).roundToInt()
+
+        val hudSpeedFullIconContainer = FrameLayout(displayContext).apply {
             layoutParams = LinearLayout.LayoutParams(iconSize, iconSize)
+            clipChildren = false
+            clipToPadding = false
+        }
+
+        val hudSpeedFullIconView = ImageView(displayContext).apply {
+            layoutParams = FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT
+            )
             scaleType = ImageView.ScaleType.FIT_CENTER
             setImageResource(R.drawable.cam_type_1)
+        }
+
+        val hudSpeedFullGpsBadgeView = ImageView(displayContext).apply {
+            layoutParams = FrameLayout.LayoutParams(gpsBadgeSize, gpsBadgeSize).apply {
+                gravity = Gravity.CENTER
+                marginStart = gpsBadgeOffsetRight
+            }
+            scaleType = ImageView.ScaleType.FIT_CENTER
+            visibility = View.GONE
         }
 
         val hudSpeedFullLimitTextView = TextView(displayContext).apply {
@@ -943,10 +969,28 @@ class HudOverlayController(private val context: Context) {
             visibility = View.GONE
         }
 
-        val hudSpeedCompactIconView = ImageView(displayContext).apply {
+        val hudSpeedCompactIconContainer = FrameLayout(displayContext).apply {
             layoutParams = LinearLayout.LayoutParams(iconSize, iconSize)
+            clipChildren = false
+            clipToPadding = false
+        }
+
+        val hudSpeedCompactIconView = ImageView(displayContext).apply {
+            layoutParams = FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT
+            )
             scaleType = ImageView.ScaleType.FIT_CENTER
             setImageResource(R.drawable.cam_type_1)
+        }
+
+        val hudSpeedCompactGpsBadgeView = ImageView(displayContext).apply {
+            layoutParams = FrameLayout.LayoutParams(gpsBadgeSize, gpsBadgeSize).apply {
+                gravity = Gravity.CENTER
+                marginStart = gpsBadgeOffsetRight
+            }
+            scaleType = ImageView.ScaleType.FIT_CENTER
+            visibility = View.GONE
         }
 
         val halfIconSize = (iconSize / 2f).roundToInt().coerceAtLeast(1)
@@ -966,14 +1010,18 @@ class HudOverlayController(private val context: Context) {
             setTypeface(typeface, Typeface.BOLD)
         }
 
-        hudSpeedFullLeftView.addView(hudSpeedFullIconView)
+        hudSpeedFullIconContainer.addView(hudSpeedFullIconView)
+        hudSpeedFullIconContainer.addView(hudSpeedFullGpsBadgeView)
+        hudSpeedFullLeftView.addView(hudSpeedFullIconContainer)
         hudSpeedFullLeftView.addView(hudSpeedFullDirectionIconView)
         hudSpeedFullRightView.addView(hudSpeedFullLimitTextView)
         hudSpeedFullRightView.addView(hudSpeedFullDistanceTextView)
         hudSpeedFullLayoutView.addView(hudSpeedFullLeftView)
         hudSpeedFullLayoutView.addView(hudSpeedFullRightView)
 
-        hudSpeedCompactLeftView.addView(hudSpeedCompactIconView)
+        hudSpeedCompactIconContainer.addView(hudSpeedCompactIconView)
+        hudSpeedCompactIconContainer.addView(hudSpeedCompactGpsBadgeView)
+        hudSpeedCompactLeftView.addView(hudSpeedCompactIconContainer)
         hudSpeedCompactRightView.addView(hudSpeedCompactDirectionIconView)
         hudSpeedCompactRightView.addView(hudSpeedCompactDistanceTextView)
         hudSpeedCompactLayoutView.addView(hudSpeedCompactLeftView)
@@ -1048,6 +1096,8 @@ class HudOverlayController(private val context: Context) {
             hudSpeedOverspeedView = hudSpeedOverspeedViewLocal
             hudSpeedFullLayout = hudSpeedFullLayoutView
             hudSpeedFullIcon = hudSpeedFullIconView
+            hudSpeedFullGpsBadge = hudSpeedFullGpsBadgeView
+            hudSpeedFullRight = hudSpeedFullRightView
             hudSpeedFullDirection = hudSpeedFullDirectionIconView
             hudSpeedFullDistance = hudSpeedFullDistanceTextView
             hudSpeedFullLimit = hudSpeedFullLimitTextView
@@ -1055,6 +1105,7 @@ class HudOverlayController(private val context: Context) {
             hudSpeedCompactLeft = hudSpeedCompactLeftView
             hudSpeedCompactRight = hudSpeedCompactRightView
             hudSpeedCompactIcon = hudSpeedCompactIconView
+            hudSpeedCompactGpsBadge = hudSpeedCompactGpsBadgeView
             hudSpeedCompactDirection = hudSpeedCompactDirectionIconView
             hudSpeedCompactDistance = hudSpeedCompactDistanceTextView
             roadCameraContainer = roadCameraBlock
@@ -1087,6 +1138,8 @@ class HudOverlayController(private val context: Context) {
             hudSpeedOverspeedView = null
             hudSpeedFullLayout = null
             hudSpeedFullIcon = null
+            hudSpeedFullGpsBadge = null
+            hudSpeedFullRight = null
             hudSpeedFullDirection = null
             hudSpeedFullDistance = null
             hudSpeedFullLimit = null
@@ -1094,6 +1147,7 @@ class HudOverlayController(private val context: Context) {
             hudSpeedCompactLeft = null
             hudSpeedCompactRight = null
             hudSpeedCompactIcon = null
+            hudSpeedCompactGpsBadge = null
             hudSpeedCompactDirection = null
             hudSpeedCompactDistance = null
             hudSpeedActiveLayout = null
@@ -1139,6 +1193,8 @@ class HudOverlayController(private val context: Context) {
         hudSpeedOverspeedView = null
         hudSpeedFullLayout = null
         hudSpeedFullIcon = null
+        hudSpeedFullGpsBadge = null
+        hudSpeedFullRight = null
         hudSpeedFullDirection = null
         hudSpeedFullDistance = null
         hudSpeedFullLimit = null
@@ -1146,6 +1202,7 @@ class HudOverlayController(private val context: Context) {
         hudSpeedCompactLeft = null
         hudSpeedCompactRight = null
         hudSpeedCompactIcon = null
+        hudSpeedCompactGpsBadge = null
         hudSpeedCompactDirection = null
         hudSpeedCompactDistance = null
         hudSpeedActiveLayout = null
@@ -1290,6 +1347,11 @@ class HudOverlayController(private val context: Context) {
         } else {
             formatHudSpeedDistance(state.hudSpeedDistanceMeters)
         }
+        val hudSpeedGpsStatusEnabled = OverlayPrefs.hudSpeedGpsStatusEnabled(context)
+        val hudSpeedHasGps = if (previewHudSpeed) false else state.hudSpeedHasGps
+        val hudSpeedGpsStatusVisible = !previewHudSpeed &&
+            hudSpeedGpsStatusEnabled &&
+            !state.hudSpeedHasCamera
         val hudSpeedLimitValue = if (previewHudSpeed) {
             PREVIEW_HUDSPEED_LIMIT_VALUE
         } else {
@@ -1361,7 +1423,9 @@ class HudOverlayController(private val context: Context) {
             hudSpeedDistanceText,
             hudSpeedLimitText,
             hudSpeedLimitEnabled,
-            hudSpeedLimitTextScale
+            hudSpeedLimitTextScale,
+            hudSpeedGpsStatusVisible,
+            hudSpeedHasGps
         )
         updateHudSpeedOverspeed(hudSpeedLimitOverspeed)
         updateRoadCamera(state.roadCameraIcon, roadCameraDistanceText, roadCameraAllowed, previewRoadCamera)
@@ -1395,9 +1459,10 @@ class HudOverlayController(private val context: Context) {
         val hudSpeedVisible = if (showPreview) {
             previewHudSpeed
         } else {
-            state.hudSpeedHasCamera &&
+            val hasCameraData = state.hudSpeedHasCamera &&
                 state.hudSpeedDistanceMeters != null &&
                 !shouldHideHudSpeed(state, showPreview)
+            hasCameraData || hudSpeedGpsStatusVisible
         }
         val speedometerVisible = if (showPreview) previewSpeedometer else state.speedKmh != null
         val clockVisible = if (showPreview) previewClock else true
@@ -1687,10 +1752,13 @@ class HudOverlayController(private val context: Context) {
         distanceText: String,
         limitText: String,
         showLimit: Boolean,
-        limitTextScale: Float
+        limitTextScale: Float,
+        showGpsStatus: Boolean,
+        hasGps: Boolean
     ) {
+        val gpsStatusMode = showGpsStatus
         val distanceVisible = distanceText.isNotBlank()
-        if (!distanceVisible) {
+        if (!distanceVisible && !gpsStatusMode) {
             hudSpeedContainer?.visibility = View.GONE
             return
         }
@@ -1706,10 +1774,32 @@ class HudOverlayController(private val context: Context) {
         hudSpeedActiveLayout = if (useFullLayout) fullLayout else compactLayout
         if (useFullLayout) {
             val icon = hudSpeedFullIcon ?: return
+            val rightColumn = hudSpeedFullRight
             val direction = hudSpeedFullDirection ?: return
             val distance = hudSpeedFullDistance ?: return
             val limit = hudSpeedFullLimit ?: return
+            val gpsBadge = hudSpeedFullGpsBadge
+            if (gpsStatusMode) {
+                icon.setImageDrawable(null)
+                icon.clearColorFilter()
+                icon.visibility = View.GONE
+                gpsBadge?.setImageResource(resolveHudSpeedGpsIcon(hasGps))
+                gpsBadge?.setColorFilter(resolveHudSpeedGpsColor(hasGps))
+                gpsBadge?.visibility = View.VISIBLE
+                rightColumn?.visibility = View.GONE
+                limit.visibility = View.GONE
+                distance.visibility = View.GONE
+                direction.setImageDrawable(null)
+                direction.visibility = View.GONE
+                return
+            }
+            gpsBadge?.setImageDrawable(null)
+            gpsBadge?.clearColorFilter()
+            gpsBadge?.visibility = View.GONE
+            icon.visibility = View.VISIBLE
+            icon.clearColorFilter()
             icon.setImageResource(resolveHudSpeedCamIcon(camType))
+            rightColumn?.visibility = View.VISIBLE
             val limitVisible = limitText.isNotBlank()
             if (limitVisible) {
                 val scaledSizeSp =
@@ -1739,6 +1829,25 @@ class HudOverlayController(private val context: Context) {
         val distance = hudSpeedCompactDistance ?: return
         val leftColumn = hudSpeedCompactLeft
         val rightColumn = hudSpeedCompactRight
+        val gpsBadge = hudSpeedCompactGpsBadge
+        if (gpsStatusMode) {
+            icon.setImageDrawable(null)
+            icon.clearColorFilter()
+            icon.visibility = View.GONE
+            gpsBadge?.setImageResource(resolveHudSpeedGpsIcon(hasGps))
+            gpsBadge?.setColorFilter(resolveHudSpeedGpsColor(hasGps))
+            gpsBadge?.visibility = View.VISIBLE
+            direction.setImageDrawable(null)
+            direction.visibility = View.GONE
+            distance.visibility = View.GONE
+            rightColumn?.visibility = View.GONE
+            return
+        }
+        gpsBadge?.setImageDrawable(null)
+        gpsBadge?.clearColorFilter()
+        gpsBadge?.visibility = View.GONE
+        icon.visibility = View.VISIBLE
+        icon.clearColorFilter()
         icon.setImageResource(resolveHudSpeedCamIcon(camType))
         distance.text = distanceText
         distance.visibility = View.VISIBLE
@@ -1925,6 +2034,21 @@ class HudOverlayController(private val context: Context) {
         val name = "cam_type_$type"
         val resId = context.resources.getIdentifier(name, "drawable", context.packageName)
         return if (resId != 0) resId else R.drawable.cam_type_1
+    }
+
+    private fun resolveHudSpeedGpsIcon(hasGps: Boolean): Int {
+        return if (hasGps) {
+            R.drawable.location_on_24dp_e8eaed_fill0_wght400_grad0_opsz24
+        } else {
+            R.drawable.location_off_24dp_e8eaed_fill0_wght400_grad0_opsz24
+        }
+    }
+
+    private fun resolveHudSpeedGpsColor(hasGps: Boolean): Int {
+        return ContextCompat.getColor(
+            context,
+            if (hasGps) R.color.traffic_light_green_primary else R.color.traffic_light_red_primary
+        )
     }
 
     private fun formatHudSpeedDistance(distanceMeters: Int?): String {

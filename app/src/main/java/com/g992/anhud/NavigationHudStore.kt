@@ -42,6 +42,7 @@ data class NavigationHudState(
     val distanceUnit: String = "",
     val nativeTurnId: Int? = null,
     val hudSpeedHasCamera: Boolean = false,
+    val hudSpeedHasGps: Boolean = false,
     val hudSpeedDistanceMeters: Int? = null,
     val hudSpeedCamType: Int? = null,
     val hudSpeedCamFlag: Int? = null,
@@ -67,6 +68,7 @@ data class NavigationHudState(
             maneuverBitmap == null &&
             maneuverType.isBlank() &&
             !hudSpeedHasCamera &&
+            !hudSpeedHasGps &&
             trafficLights.isEmpty()
     }
 }
@@ -135,6 +137,7 @@ object NavigationHudStore {
                 distanceUnit = "",
                 nativeTurnId = null,
                 hudSpeedHasCamera = if (preserveHudSpeed) current.hudSpeedHasCamera else false,
+                hudSpeedHasGps = if (preserveHudSpeed) current.hudSpeedHasGps else false,
                 hudSpeedDistanceMeters = if (preserveHudSpeed) current.hudSpeedDistanceMeters else null,
                 hudSpeedCamType = if (preserveHudSpeed) current.hudSpeedCamType else null,
                 hudSpeedCamFlag = if (preserveHudSpeed) current.hudSpeedCamFlag else null,

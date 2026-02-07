@@ -453,6 +453,16 @@
         android:textColor="@color/white"
         android:textSize="16sp" />
 
+    <CheckBox
+        android:id="@+id/dialogHudSpeedShowGpsStatus"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:text="@string/position_hudspeed_show_gps_status"
+        android:textColor="@color/white"
+        android:textSize="16sp"
+        android:visibility="gone" />
+
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"

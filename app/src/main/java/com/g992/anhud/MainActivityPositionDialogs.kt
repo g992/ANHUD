@@ -54,6 +54,7 @@ internal fun MainActivity.openPositionDialog(
     val previewSpeedometer = dialogView.findViewById<TextView>(R.id.dialogPreviewSpeedometer)
     val previewClock = dialogView.findViewById<TextView>(R.id.dialogPreviewClock)
     val showOthersCheck = dialogView.findViewById<CheckBox>(R.id.dialogShowOthers)
+    val hudSpeedGpsStatusCheck = dialogView.findViewById<CheckBox>(R.id.dialogHudSpeedShowGpsStatus)
     val containerWidthLabel = dialogView.findViewById<TextView>(R.id.dialogContainerWidthLabel)
     val containerWidthRow = dialogView.findViewById<View>(R.id.dialogContainerWidthRow)
     val containerWidthSeek = dialogView.findViewById<SeekBar>(R.id.dialogContainerWidthSeek)
@@ -155,6 +156,10 @@ internal fun MainActivity.openPositionDialog(
             onDialogDismissed?.invoke()
         }
         .create()
+
+    val showHudSpeedGpsStatusSetting = target == OverlayTarget.HUDSPEED
+    hudSpeedGpsStatusCheck.visibility = if (showHudSpeedGpsStatusSetting) View.VISIBLE else View.GONE
+    hudSpeedGpsStatusCheck.isChecked = OverlayPrefs.hudSpeedGpsStatusEnabled(activity)
 
     if (target == OverlayTarget.CONTAINER) {
         scaleLabel.visibility = View.GONE
@@ -1079,6 +1084,12 @@ internal fun MainActivity.openPositionDialog(
 
     showOthersCheck.setOnCheckedChangeListener { _, isChecked ->
         notifyOverlaySettingsChanged(preview = true, previewTarget = target, previewShowOthers = isChecked)
+        updateDialogVisibility()
+    }
+
+    hudSpeedGpsStatusCheck.setOnCheckedChangeListener { _, isChecked ->
+        OverlayPrefs.setHudSpeedGpsStatusEnabled(activity, isChecked)
+        notifyOverlaySettingsChanged(preview = true, previewTarget = target, previewShowOthers = showOthersCheck.isChecked)
         updateDialogVisibility()
     }
 

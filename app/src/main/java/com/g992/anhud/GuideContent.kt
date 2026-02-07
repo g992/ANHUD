@@ -7,7 +7,8 @@ object GuideContent {
     data class GuideItem(
         @IdRes val targetId: Int?,
         @StringRes val titleRes: Int,
-        @StringRes val bodyRes: Int
+        @StringRes val bodyRes: Int,
+        @StringRes val copyCommandRes: Int? = null
     )
 
     data class GuideSection(
@@ -98,6 +99,12 @@ object GuideContent {
             null,
             R.string.guide_faq_overlay_title,
             R.string.guide_faq_overlay_body
+        ),
+        GuideItem(
+            null,
+            R.string.guide_faq_permissions_title,
+            R.string.guide_faq_permissions_body,
+            R.string.guide_faq_permissions_command
         ),
         GuideItem(
             null,

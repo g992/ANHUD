@@ -192,6 +192,7 @@ object PrefsJson {
         putBoolean("overlay_speed_enabled", OverlayPrefs.speedEnabled(context))
         putBoolean("overlay_speed_limit_from_hudspeed", OverlayPrefs.speedLimitFromHudSpeed(context))
         putBoolean("overlay_hudspeed_enabled", OverlayPrefs.hudSpeedEnabled(context))
+        putBoolean("overlay_hudspeed_gps_status_enabled", OverlayPrefs.hudSpeedGpsStatusEnabled(context))
         putBoolean("overlay_hudspeed_limit_enabled", OverlayPrefs.hudSpeedLimitEnabled(context))
         putBoolean("overlay_hudspeed_limit_alert_enabled", OverlayPrefs.hudSpeedLimitAlertEnabled(context))
         putInt("overlay_hudspeed_limit_alert_threshold", OverlayPrefs.hudSpeedLimitAlertThreshold(context))

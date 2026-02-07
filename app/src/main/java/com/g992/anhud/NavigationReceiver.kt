@@ -294,6 +294,7 @@ class NavigationReceiver : BroadcastReceiver() {
             }
             ACTION_HUDSPEED_UPDATE -> {
                 val hasCamera = intent.getBooleanExtra(HUDSPEED_HAS_CAMERA, false)
+                val hasGps = intent.getBooleanExtra(HUDSPEED_HAS_GPS, false)
 
                 val distance = intent.getIntExtra(HUDSPEED_DISTANCE, -1)
                 val limit1 = intent.getIntExtra(HUDSPEED_LIMIT_1, -1)
@@ -303,7 +304,7 @@ class NavigationReceiver : BroadcastReceiver() {
 
                 Log.d(
                     TAG,
-                    "HUDSPEED_UPDATE: hasCamera=$hasCamera distance=$distance limit1=$limit1 limit2=$limit2 camType=$camType camFlag=$camFlag extras=${formatExtras(intent)}"
+                    "HUDSPEED_UPDATE: hasCamera=$hasCamera hasGps=$hasGps distance=$distance limit1=$limit1 limit2=$limit2 camType=$camType camFlag=$camFlag extras=${formatExtras(intent)}"
                 )
 
                 val resolvedDistance = distance.takeIf { hasCamera && it >= 0 }
@@ -313,6 +314,7 @@ class NavigationReceiver : BroadcastReceiver() {
                 NavigationHudStore.update { state ->
                     val now = System.currentTimeMillis()
                     val hudSpeedDataChanged = hasCamera != state.hudSpeedHasCamera ||
+                        hasGps != state.hudSpeedHasGps ||
                         resolvedDistance != state.hudSpeedDistanceMeters ||
                         resolvedCamType != state.hudSpeedCamType ||
                         resolvedCamFlag != state.hudSpeedCamFlag ||
@@ -327,6 +329,7 @@ class NavigationReceiver : BroadcastReceiver() {
                     val clearHudSpeedLimit = preferHudSpeedLimit && !hasCamera
                     state.copy(
                         hudSpeedHasCamera = hasCamera,
+                        hudSpeedHasGps = hasGps,
                         hudSpeedDistanceMeters = resolvedDistance,
                         hudSpeedCamType = resolvedCamType,
                         hudSpeedCamFlag = resolvedCamFlag,
@@ -436,6 +439,7 @@ class NavigationReceiver : BroadcastReceiver() {
         const val EXTRA_POLYLINE_LONS = "polyline_lons"
         const val EXTRA_POLYLINE_COUNT = "polyline_count"
         const val HUDSPEED_HAS_CAMERA = "hasCamera"
+        const val HUDSPEED_HAS_GPS = "hasGps"
         const val HUDSPEED_DISTANCE = "distance"
         const val HUDSPEED_LIMIT_1 = "limit1"
         const val HUDSPEED_LIMIT_2 = "limit2"

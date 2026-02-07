@@ -9,7 +9,6 @@ import android.graphics.Point
 import android.graphics.PointF
 import android.os.Bundle
 import android.os.Build
-import android.os.Environment
 import android.provider.Settings
 import android.view.View
 import android.widget.Button
@@ -120,8 +119,6 @@ class MainActivity : ScaledActivity() {
     private var guideController: GuideOverlayController? = null
     private var editorGuideController: GuideOverlayController? = null
     private var pendingGuideAfterDialog: List<GuideContent.GuideItem>? = null
-    private var requestedStorageAccessThisSession = false
-
     internal var presetOptions: List<PresetManager.Preset> = emptyList()
     internal var presetAdapter: PresetAdapter? = null
     internal var activePresetId: String? = null
@@ -577,16 +574,7 @@ class MainActivity : ScaledActivity() {
     override fun onResume() {
         super.onResume()
         updatePermissionStatus()
-        maybeRequestStorageAccess()
         refreshPresets(keepSelection = true)
-    }
-
-    private fun maybeRequestStorageAccess() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return
-        if (requestedStorageAccessThisSession) return
-        if (Environment.isExternalStorageManager()) return
-        requestedStorageAccessThisSession = true
-        requestStoragePermission()
     }
 
     private fun updateSettingsBadge() {

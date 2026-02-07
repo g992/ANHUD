@@ -1,8 +1,10 @@
 package com.g992.anhud
 
 import android.Manifest
+import android.content.ClipData
 import android.app.DownloadManager
 import android.content.BroadcastReceiver
+import android.content.ClipboardManager
 import android.content.Context
 import android.content.ContentValues
 import android.content.Intent
@@ -565,6 +567,12 @@ class SettingsActivity : ScaledActivity() {
         Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
     }
 
+    private fun copyTextToClipboard(text: String) {
+        val clipboard = getSystemService(ClipboardManager::class.java) ?: return
+        val clip = ClipData.newPlainText("ANHUD ADB", text)
+        clipboard.setPrimaryClip(clip)
+    }
+
     private fun setupManeuverTab() {
         val inflater = LayoutInflater.from(this)
         val container = maneuverRowContainer
@@ -659,6 +667,23 @@ class SettingsActivity : ScaledActivity() {
                 val row = inflater.inflate(R.layout.item_help_entry, helpListContainer, false)
                 row.findViewById<TextView>(R.id.helpItemTitle).setText(item.titleRes)
                 row.findViewById<TextView>(R.id.helpItemBody).setText(item.bodyRes)
+                val commandView = row.findViewById<TextView>(R.id.helpItemCommand)
+                val copyButton = row.findViewById<View>(R.id.helpCopyCommandButton)
+                val commandRes = item.copyCommandRes
+                if (commandRes != null) {
+                    val command = getString(commandRes)
+                    commandView.text = command
+                    commandView.visibility = View.VISIBLE
+                    copyButton.visibility = View.VISIBLE
+                    copyButton.setOnClickListener {
+                        copyTextToClipboard(command)
+                        showToast(R.string.help_copy_command_done)
+                    }
+                } else {
+                    commandView.visibility = View.GONE
+                    copyButton.visibility = View.GONE
+                    copyButton.setOnClickListener(null)
+                }
                 val rowParams = LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.MATCH_PARENT,
                     LinearLayout.LayoutParams.WRAP_CONTENT
