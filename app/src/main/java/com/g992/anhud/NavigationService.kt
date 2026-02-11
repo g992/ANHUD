@@ -53,6 +53,7 @@ class NavigationService : Service() {
         } finally {
             navigationReceiver = null
         }
+        NavigationReceiver.clearNavigatorIntentTimeout()
         UiLogStore.append(LogCategory.SYSTEM, "NavigationService: остановлен")
     }
 

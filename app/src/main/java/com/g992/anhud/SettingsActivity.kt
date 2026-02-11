@@ -41,6 +41,7 @@ import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.appcompat.widget.SwitchCompat
 import com.google.android.material.tabs.TabLayout
 import org.json.JSONObject
 import java.io.File
@@ -63,8 +64,13 @@ class SettingsActivity : ScaledActivity() {
     private lateinit var trafficLightTimeoutInput: EditText
     private lateinit var roadCameraTimeoutInput: EditText
     private lateinit var navNotificationEndTimeoutInput: EditText
+    private lateinit var navUpdatesEndTimeoutInput: EditText
     private lateinit var speedCorrectionSeek: SeekBar
     private lateinit var speedCorrectionValue: TextView
+    private lateinit var speedFromGpsCheck: SwitchCompat
+    private lateinit var hideTurnWhenFarSwitch: SwitchCompat
+    private lateinit var hideTurnWhenFarDistanceSeek: SeekBar
+    private lateinit var hideTurnWhenFarDistanceValue: TextView
     private lateinit var maneuverRowContainer: LinearLayout
     private lateinit var helpListContainer: LinearLayout
     private lateinit var helpStartGuideButton: View
@@ -95,6 +101,21 @@ class SettingsActivity : ScaledActivity() {
         } else {
             showToast(R.string.settings_export_failed)
         }
+    }
+
+    private val locationPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { grants ->
+        val granted = grants[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
+            grants[Manifest.permission.ACCESS_COARSE_LOCATION] == true
+        if (!granted) {
+            OverlayPrefs.setSpeedFromGps(this, false)
+            syncUiFromPrefs()
+            showToast(R.string.speed_from_gps_permission_denied)
+            return@registerForActivityResult
+        }
+        OverlayPrefs.setSpeedFromGps(this, true)
+        startService(Intent(this, SensorDataService::class.java))
     }
 
     private val exportSettingsLauncher = registerForActivityResult(
@@ -180,8 +201,13 @@ class SettingsActivity : ScaledActivity() {
         trafficLightTimeoutInput = findViewById(R.id.trafficLightTimeoutInput)
         roadCameraTimeoutInput = findViewById(R.id.roadCameraTimeoutInput)
         navNotificationEndTimeoutInput = findViewById(R.id.navNotificationEndTimeoutInput)
+        navUpdatesEndTimeoutInput = findViewById(R.id.navUpdatesEndTimeoutInput)
         speedCorrectionSeek = findViewById(R.id.speedCorrectionSeek)
         speedCorrectionValue = findViewById(R.id.speedCorrectionValue)
+        speedFromGpsCheck = findViewById(R.id.speedFromGpsCheck)
+        hideTurnWhenFarSwitch = findViewById(R.id.hideTurnWhenFarSwitch)
+        hideTurnWhenFarDistanceSeek = findViewById(R.id.hideTurnWhenFarDistanceSeek)
+        hideTurnWhenFarDistanceValue = findViewById(R.id.hideTurnWhenFarDistanceValue)
         maneuverRowContainer = findViewById(R.id.maneuverRowContainer)
         helpListContainer = findViewById(R.id.helpListContainer)
         helpStartGuideButton = findViewById(R.id.helpStartGuideButton)
@@ -367,6 +393,17 @@ class SettingsActivity : ScaledActivity() {
             }
         })
 
+        navUpdatesEndTimeoutInput.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+            override fun afterTextChanged(s: Editable?) {
+                if (isSyncingUi) return
+                val value = s?.toString()?.toIntOrNull() ?: 0
+                val clamped = value.coerceIn(0, OverlayPrefs.TIMEOUT_MAX)
+                OverlayPrefs.setNavUpdatesEndTimeout(this@SettingsActivity, clamped)
+            }
+        })
+
         speedCorrectionSeek.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
                 val correction = progress - 10
@@ -378,6 +415,49 @@ class SettingsActivity : ScaledActivity() {
 
             override fun onStartTrackingTouch(seekBar: SeekBar?) {}
             override fun onStopTrackingTouch(seekBar: SeekBar?) {}
+        })
+
+        speedFromGpsCheck.setOnCheckedChangeListener { _, isChecked ->
+            if (isSyncingUi) return@setOnCheckedChangeListener
+            if (isChecked && !hasLocationPermission()) {
+                locationPermissionLauncher.launch(
+                    arrayOf(
+                        Manifest.permission.ACCESS_FINE_LOCATION,
+                        Manifest.permission.ACCESS_COARSE_LOCATION
+                    )
+                )
+                return@setOnCheckedChangeListener
+            }
+            OverlayPrefs.setSpeedFromGps(this, isChecked)
+            startService(Intent(this, SensorDataService::class.java))
+        }
+
+        hideTurnWhenFarSwitch.setOnCheckedChangeListener { _, isChecked ->
+            if (isSyncingUi) return@setOnCheckedChangeListener
+            OverlayPrefs.setHideTurnWhenFarEnabled(this, isChecked)
+            updateHideTurnDistanceControls(isChecked)
+        }
+
+        hideTurnWhenFarDistanceSeek.max = OverlayPrefs.hideTurnDistanceStepsMeters().lastIndex
+        hideTurnWhenFarDistanceSeek.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                val distance = OverlayPrefs.hideTurnWhenFarDistanceMetersByProgress(progress)
+                hideTurnWhenFarDistanceValue.text = formatManeuverHideDistance(distance)
+                updateHideTurnSwitchLabel(distance)
+                if (!isSyncingUi && fromUser) {
+                    OverlayPrefs.setHideTurnWhenFarDistanceMeters(this@SettingsActivity, distance)
+                }
+            }
+
+            override fun onStartTrackingTouch(seekBar: SeekBar?) {}
+
+            override fun onStopTrackingTouch(seekBar: SeekBar?) {
+                if (isSyncingUi) return
+                val distance = OverlayPrefs.hideTurnWhenFarDistanceMetersByProgress(
+                    seekBar?.progress ?: 0
+                )
+                OverlayPrefs.setHideTurnWhenFarDistanceMeters(this@SettingsActivity, distance)
+            }
         })
     }
 
@@ -440,6 +520,18 @@ class SettingsActivity : ScaledActivity() {
             this,
             Manifest.permission.WRITE_EXTERNAL_STORAGE
         ) != PackageManager.PERMISSION_GRANTED
+    }
+
+    private fun hasLocationPermission(): Boolean {
+        val fineGranted = ContextCompat.checkSelfPermission(
+            this,
+            Manifest.permission.ACCESS_FINE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED
+        val coarseGranted = ContextCompat.checkSelfPermission(
+            this,
+            Manifest.permission.ACCESS_COARSE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED
+        return fineGranted || coarseGranted
     }
 
     private fun requestStoragePermission() {
@@ -595,16 +687,23 @@ class SettingsActivity : ScaledActivity() {
             icon.contentDescription = name
             label.text = name
             spinner.adapter = spinnerAdapter
-            val savedId = prefs.getString(mappingKey(name), null)
-            val resolvedId = savedId ?: defaults[name]
+            val key = mappingKey(name)
+            val savedId = prefs.getString(key, null)
+            val defaultId = sanitizeBasicIconId(defaults[name])
+            val candidateId = sanitizeBasicIconId(savedId ?: defaultId)
+            val resolvedId = if (indexById.containsKey(candidateId)) {
+                candidateId
+            } else {
+                DEFAULT_BASIC_ICON_ID
+            }
             val resolvedIndex = resolvedId?.let { indexById[it] } ?: defaultIndex
             spinner.setSelection(resolvedIndex)
-            if (savedId == null && resolvedId != null) {
-                prefs.edit().putString(mappingKey(name), resolvedId).apply()
+            if (savedId != resolvedId) {
+                prefs.edit().putString(key, resolvedId).apply()
             }
             spinner.onItemSelectedListener = SimpleItemSelectedListener { position ->
                 val selected = basicIcons[position].id
-                prefs.edit().putString(mappingKey(name), selected).apply()
+                prefs.edit().putString(key, selected).apply()
             }
             container.addView(row)
         }
@@ -976,12 +1075,43 @@ class SettingsActivity : ScaledActivity() {
             trafficLightTimeoutInput.setText(OverlayPrefs.trafficLightTimeout(this).toString())
             roadCameraTimeoutInput.setText(OverlayPrefs.roadCameraTimeout(this).toString())
             navNotificationEndTimeoutInput.setText(OverlayPrefs.navNotificationEndTimeout(this).toString())
+            navUpdatesEndTimeoutInput.setText(OverlayPrefs.navUpdatesEndTimeout(this).toString())
             val correction = OverlayPrefs.speedCorrection(this)
             speedCorrectionSeek.progress = correction + 10
             speedCorrectionValue.text = getString(R.string.speed_correction_value, correction)
+            speedFromGpsCheck.isChecked = OverlayPrefs.speedFromGps(this)
+            val hideTurnWhenFarEnabled = OverlayPrefs.hideTurnWhenFarEnabled(this)
+            hideTurnWhenFarSwitch.isChecked = hideTurnWhenFarEnabled
+            val hideDistance = OverlayPrefs.hideTurnWhenFarDistanceMeters(this)
+            hideTurnWhenFarDistanceSeek.progress = OverlayPrefs.hideTurnWhenFarDistanceProgress(this)
+            hideTurnWhenFarDistanceValue.text = formatManeuverHideDistance(hideDistance)
+            updateHideTurnSwitchLabel(hideDistance)
+            updateHideTurnDistanceControls(hideTurnWhenFarEnabled)
         } finally {
             isSyncingUi = false
         }
+    }
+
+    private fun updateHideTurnDistanceControls(enabled: Boolean) {
+        hideTurnWhenFarDistanceSeek.isEnabled = enabled
+        hideTurnWhenFarDistanceSeek.alpha = if (enabled) 1f else 0.5f
+        hideTurnWhenFarDistanceValue.alpha = if (enabled) 1f else 0.5f
+    }
+
+    private fun formatManeuverHideDistance(distanceMeters: Int): String {
+        return if (distanceMeters < 1000) {
+            getString(R.string.hide_turn_when_far_distance_meters_value, distanceMeters)
+        } else {
+            getString(R.string.hide_turn_when_far_distance_km_value, distanceMeters / 1000)
+        }
+    }
+
+    private fun updateHideTurnSwitchLabel(distanceMeters: Int) {
+        val distanceLabel = formatManeuverHideDistance(distanceMeters)
+        hideTurnWhenFarSwitch.text = getString(
+            R.string.hide_turn_when_far_enabled_label_value,
+            distanceLabel
+        )
     }
 
     private fun loadContextDrawables(): List<Pair<String, Int>> {
@@ -1001,18 +1131,24 @@ class SettingsActivity : ScaledActivity() {
 
     private fun loadBasicIcons(): List<BasicIcon> {
         val files = assets.list("basicIcons")
-            ?.filter { it.endsWith(".png") || it.endsWith(".webp") }
+            ?.mapNotNull { file ->
+                if (!file.endsWith(".png") && !file.endsWith(".webp")) {
+                    return@mapNotNull null
+                }
+                val id = file.substringBefore(".").toIntOrNull() ?: return@mapNotNull null
+                if (id > MAX_BASIC_ICON_INDEX) {
+                    return@mapNotNull null
+                }
+                id to file
+            }
             .orEmpty()
-        val sorted = files.sortedBy {
-            it.substringBefore(".").toIntOrNull() ?: Int.MAX_VALUE
-        }
-        val icons = ArrayList<BasicIcon>(sorted.size)
-        for (file in sorted) {
+            .sortedBy { it.first }
+        val icons = ArrayList<BasicIcon>(files.size)
+        for ((id, file) in files) {
             val bitmap = assets.open("basicIcons/$file").use {
                 BitmapFactory.decodeStream(it)
             } ?: continue
-            val id = file.substringBefore(".")
-            icons.add(BasicIcon(id, file, bitmap))
+            icons.add(BasicIcon(id.toString(), file, bitmap))
         }
         return icons
     }
@@ -1034,10 +1170,20 @@ class SettingsActivity : ScaledActivity() {
             val key = trimmed.substring(0, idx).trim()
             val value = trimmed.substring(idx + 1).trim()
             if (key.isNotEmpty() && value.isNotEmpty()) {
-                defaults[key] = value
+                defaults[key] = sanitizeBasicIconId(value)
             }
         }
         return defaults
+    }
+
+    private fun sanitizeBasicIconId(raw: String?): String {
+        val value = raw?.trim().orEmpty()
+        val numeric = value.toIntOrNull() ?: return DEFAULT_BASIC_ICON_ID
+        return if (numeric > MAX_BASIC_ICON_INDEX) {
+            DEFAULT_BASIC_ICON_ID
+        } else {
+            numeric.toString()
+        }
     }
 
     private fun mappingKey(name: String): String = "mapping_$name"
@@ -1101,6 +1247,7 @@ class SettingsActivity : ScaledActivity() {
 
     companion object {
         private const val DEFAULT_BASIC_ICON_ID = "101"
+        private const val MAX_BASIC_ICON_INDEX = 150
         private const val MANEUVER_PREFS_NAME = "maneuver_match_prefs"
         private const val DEFAULTS_ASSET = "maneuver_match_defaults.properties"
     }

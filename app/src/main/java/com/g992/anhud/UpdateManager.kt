@@ -142,6 +142,8 @@ object UpdateManager {
     }
 
     private fun notifyStatusChanged(context: Context) {
-        context.sendBroadcast(Intent(UpdateBroadcasts.ACTION_UPDATE_STATUS_CHANGED))
+        context.sendBroadcast(
+            Intent(UpdateBroadcasts.ACTION_UPDATE_STATUS_CHANGED).setPackage(context.packageName)
+        )
     }
 }

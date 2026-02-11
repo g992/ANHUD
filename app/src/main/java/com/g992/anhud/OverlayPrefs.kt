@@ -2,6 +2,7 @@ package com.g992.anhud
 
 import android.content.Context
 import android.graphics.PointF
+import kotlin.math.abs
 
 object OverlayPrefs {
     private const val PREFS_NAME = "hud_overlay_prefs"
@@ -71,8 +72,12 @@ object OverlayPrefs {
     private const val KEY_CAMERA_TIMEOUT_FAR = "camera_timeout_far"
     private const val KEY_TRAFFIC_LIGHT_TIMEOUT = "traffic_light_timeout"
     private const val KEY_NAV_NOTIFICATION_END_TIMEOUT = "nav_notification_end_timeout"
+    private const val KEY_NAV_UPDATES_END_TIMEOUT = "nav_updates_end_timeout"
     private const val KEY_ROAD_CAMERA_TIMEOUT = "road_camera_timeout"
     private const val KEY_SPEED_CORRECTION = "speed_correction"
+    private const val KEY_SPEED_FROM_GPS = "speed_from_gps"
+    private const val KEY_HIDE_TURN_WHEN_FAR_ENABLED = "hide_turn_when_far_enabled"
+    private const val KEY_HIDE_TURN_WHEN_FAR_DISTANCE_METERS = "hide_turn_when_far_distance_meters"
     private const val KEY_GUIDE_SHOWN = "guide_shown"
     private const val KEY_NAV_WIDTH_DP = "overlay_nav_width_dp"
 
@@ -83,6 +88,10 @@ object OverlayPrefs {
     const val TIMEOUT_MAX = 360
     const val SPEED_CORRECTION_MIN = -10
     const val SPEED_CORRECTION_MAX = 10
+    const val HIDE_TURN_DISTANCE_DEFAULT_METERS = 1000
+    private val HIDE_TURN_DISTANCE_STEPS_METERS = intArrayOf(
+        100, 300, 500, 1000, 3000, 5000, 10_000, 30_000, 50_000
+    )
 
     fun isEnabled(context: Context): Boolean {
         return prefs(context).getBoolean(KEY_ENABLED, false)
@@ -710,6 +719,17 @@ object OverlayPrefs {
             .apply()
     }
 
+    fun navUpdatesEndTimeout(context: Context): Int {
+        return prefs(context).getInt(KEY_NAV_UPDATES_END_TIMEOUT, 0)
+            .coerceIn(0, TIMEOUT_MAX)
+    }
+
+    fun setNavUpdatesEndTimeout(context: Context, timeout: Int) {
+        prefs(context).edit()
+            .putInt(KEY_NAV_UPDATES_END_TIMEOUT, timeout.coerceIn(0, TIMEOUT_MAX))
+            .apply()
+    }
+
     fun roadCameraTimeout(context: Context): Int {
         return prefs(context).getInt(KEY_ROAD_CAMERA_TIMEOUT, 2)
             .coerceIn(0, TIMEOUT_MAX)
@@ -732,6 +752,55 @@ object OverlayPrefs {
             .apply()
     }
 
+    fun speedFromGps(context: Context): Boolean {
+        return prefs(context).getBoolean(KEY_SPEED_FROM_GPS, false)
+    }
+
+    fun setSpeedFromGps(context: Context, enabled: Boolean) {
+        prefs(context).edit()
+            .putBoolean(KEY_SPEED_FROM_GPS, enabled)
+            .apply()
+    }
+
+    fun hideTurnWhenFarEnabled(context: Context): Boolean {
+        return prefs(context).getBoolean(KEY_HIDE_TURN_WHEN_FAR_ENABLED, false)
+    }
+
+    fun setHideTurnWhenFarEnabled(context: Context, enabled: Boolean) {
+        prefs(context).edit()
+            .putBoolean(KEY_HIDE_TURN_WHEN_FAR_ENABLED, enabled)
+            .apply()
+    }
+
+    fun hideTurnDistanceStepsMeters(): IntArray = HIDE_TURN_DISTANCE_STEPS_METERS.copyOf()
+
+    fun hideTurnWhenFarDistanceMeters(context: Context): Int {
+        val value = prefs(context).getInt(
+            KEY_HIDE_TURN_WHEN_FAR_DISTANCE_METERS,
+            HIDE_TURN_DISTANCE_DEFAULT_METERS
+        )
+        return normalizeHideTurnDistance(value)
+    }
+
+    fun hideTurnWhenFarDistanceProgress(context: Context): Int {
+        val distance = hideTurnWhenFarDistanceMeters(context)
+        return HIDE_TURN_DISTANCE_STEPS_METERS.indexOf(distance).coerceAtLeast(0)
+    }
+
+    fun hideTurnWhenFarDistanceMetersByProgress(progress: Int): Int {
+        val index = progress.coerceIn(0, HIDE_TURN_DISTANCE_STEPS_METERS.lastIndex)
+        return HIDE_TURN_DISTANCE_STEPS_METERS[index]
+    }
+
+    fun setHideTurnWhenFarDistanceMeters(context: Context, distanceMeters: Int) {
+        prefs(context).edit()
+            .putInt(
+                KEY_HIDE_TURN_WHEN_FAR_DISTANCE_METERS,
+                normalizeHideTurnDistance(distanceMeters)
+            )
+            .apply()
+    }
+
     fun guideShown(context: Context): Boolean {
         return prefs(context).getBoolean(KEY_GUIDE_SHOWN, false)
     }
@@ -740,6 +809,19 @@ object OverlayPrefs {
         prefs(context).edit()
             .putBoolean(KEY_GUIDE_SHOWN, shown)
             .apply()
+    }
+
+    private fun normalizeHideTurnDistance(distanceMeters: Int): Int {
+        var nearest = HIDE_TURN_DISTANCE_STEPS_METERS.first()
+        var nearestDiff = abs(distanceMeters - nearest)
+        for (step in HIDE_TURN_DISTANCE_STEPS_METERS) {
+            val diff = abs(distanceMeters - step)
+            if (diff < nearestDiff) {
+                nearest = step
+                nearestDiff = diff
+            }
+        }
+        return nearest
     }
 
     private fun prefs(context: Context) = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)

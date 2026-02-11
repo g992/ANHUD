@@ -9,7 +9,7 @@ internal fun MainActivity.setupDisplaySpinners() {
     val activity = this
     val displays = HudDisplayUtils.availableDisplays(this)
     displayOptions = displays.map { display ->
-        val size = HudDisplayUtils.displaySize(display)
+        val size = HudDisplayUtils.displaySize(this, display)
         DisplayOption(
             display.displayId,
             getString(
@@ -68,7 +68,7 @@ internal fun MainActivity.setupDisplaySpinners() {
 internal fun MainActivity.updateDisplayMetrics(displayId: Int) {
     val display = HudDisplayUtils.resolveDisplay(this, displayId)
     if (display != null) {
-        displaySize = HudDisplayUtils.displaySize(display)
+        displaySize = HudDisplayUtils.displaySize(this, display)
         val displayContext = createDisplayContext(display)
         displayDensity = displayContext.resources.displayMetrics.density
     } else {

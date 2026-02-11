@@ -119,20 +119,19 @@ internal fun MainActivity.openPositionDialog(
         OverlayTarget.CONTAINER -> (OverlayPrefs.containerAlpha(this) * 100).toInt()
     }.coerceIn(0, 100)
 
-    val scaledDensity = resources.displayMetrics.scaledDensity
-    val navPrimaryBaseSp = previewNavPrimary.textSize / scaledDensity
-    val navSecondaryBaseSp = previewNavSecondary.textSize / scaledDensity
-    val navTimeBaseSp = previewNavTime.textSize / scaledDensity
-    val speedLimitBaseSp = previewSpeedLimit.textSize / scaledDensity
+    val navPrimaryBasePx = previewNavPrimary.textSize
+    val navSecondaryBasePx = previewNavSecondary.textSize
+    val navTimeBasePx = previewNavTime.textSize
+    val speedLimitBasePx = previewSpeedLimit.textSize
 
     fun applyNavTextScale(scale: Float) {
-        previewNavPrimary.setTextSize(TypedValue.COMPLEX_UNIT_SP, navPrimaryBaseSp * scale)
-        previewNavSecondary.setTextSize(TypedValue.COMPLEX_UNIT_SP, navSecondaryBaseSp * scale)
-        previewNavTime.setTextSize(TypedValue.COMPLEX_UNIT_SP, navTimeBaseSp * scale)
+        previewNavPrimary.setTextSize(TypedValue.COMPLEX_UNIT_PX, navPrimaryBasePx * scale)
+        previewNavSecondary.setTextSize(TypedValue.COMPLEX_UNIT_PX, navSecondaryBasePx * scale)
+        previewNavTime.setTextSize(TypedValue.COMPLEX_UNIT_PX, navTimeBasePx * scale)
     }
 
     fun applySpeedTextScale(scale: Float) {
-        previewSpeedLimit.setTextSize(TypedValue.COMPLEX_UNIT_SP, speedLimitBaseSp * scale)
+        previewSpeedLimit.setTextSize(TypedValue.COMPLEX_UNIT_PX, speedLimitBasePx * scale)
     }
 
     val dialogTitle = when (target) {

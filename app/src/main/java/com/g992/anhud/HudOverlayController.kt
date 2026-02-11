@@ -255,6 +255,7 @@ class HudOverlayController(private val context: Context) {
                 target == OverlayBroadcasts.PREVIEW_TARGET_TRAFFIC_LIGHT ||
                 previewShowOthers
             )
+        val hideNavigationByDistance = shouldHideManeuverByDistance(state, showPreview)
 
         val primaryText = if (previewNav) {
             context.getString(R.string.preview_distance_text)
@@ -327,6 +328,7 @@ class HudOverlayController(private val context: Context) {
             hudSpeedUpdatedAt = state.hudSpeedUpdatedAt,
             previewHudSpeed = previewHudSpeed,
             previewTrafficLight = previewTrafficLight,
+            hideNavigationByDistance = hideNavigationByDistance,
             trafficLights = trafficLightSignatures
         )
     }
@@ -358,6 +360,7 @@ class HudOverlayController(private val context: Context) {
         val hudSpeedUpdatedAt: Long,
         val previewHudSpeed: Boolean,
         val previewTrafficLight: Boolean,
+        val hideNavigationByDistance: Boolean,
         val trafficLights: List<TrafficLightSignature>
     )
 
@@ -1415,6 +1418,7 @@ class HudOverlayController(private val context: Context) {
         } else {
             state.roadCameraDistance.orEmpty()
         }
+        val hideNavigationByDistance = shouldHideManeuverByDistance(state, showPreview)
         val roadCameraHasData = state.roadCameraIcon != null && state.roadCameraDistance?.isNotBlank() == true
         val trafficLights = if (previewTrafficLight) {
             val previewCount = trafficLightMaxActive.coerceAtLeast(1)
@@ -1464,7 +1468,11 @@ class HudOverlayController(private val context: Context) {
             secondaryText.isNotBlank() ||
             timeText.isNotBlank() ||
             state.maneuverBitmap != null
-        val navVisible = if (showPreview) previewNav else navHasContent
+        val navVisible = if (showPreview) {
+            previewNav
+        } else {
+            navHasContent && !hideNavigationByDistance
+        }
         val arrowEligible = if (arrowOnlyWhenNoIcon) {
             NativeNavigationController.isActive() &&
                 state.nativeTurnId == NavigationReceiver.DEFAULT_NATIVE_TURN_ID
@@ -1474,7 +1482,7 @@ class HudOverlayController(private val context: Context) {
         val arrowVisible = if (showPreview) {
             previewArrow
         } else {
-            state.maneuverBitmap != null && arrowEligible
+            state.maneuverBitmap != null && arrowEligible && !hideNavigationByDistance
         }
         val speedVisible = if (showPreview) previewSpeed else state.speedLimit.isNotBlank()
         if (!showPreview && (!state.hudSpeedHasCamera || state.hudSpeedDistanceMeters == null)) {
@@ -2080,6 +2088,40 @@ class HudOverlayController(private val context: Context) {
             return ""
         }
         return "${distanceMeters}м"
+    }
+
+    private fun shouldHideManeuverByDistance(state: NavigationHudState, showPreview: Boolean): Boolean {
+        if (showPreview) {
+            return false
+        }
+        if (!OverlayPrefs.hideTurnWhenFarEnabled(context)) {
+            return false
+        }
+        val distanceMeters = resolveManeuverDistanceMeters(state) ?: return false
+        val thresholdMeters = OverlayPrefs.hideTurnWhenFarDistanceMeters(context)
+        return distanceMeters > thresholdMeters
+    }
+
+    private fun resolveManeuverDistanceMeters(state: NavigationHudState): Int? {
+        val rawNextTextWithUnit = appendUnitIfMissing(state.rawNextText, state.distanceUnit)
+        parseDistanceMeters(rawNextTextWithUnit)?.let { return it }
+        parseDistanceMeters(state.primaryText)?.let { return it }
+        return null
+    }
+
+    private fun parseDistanceMeters(text: String): Int? {
+        val normalized = text.lowercase(Locale.getDefault()).replace(',', '.')
+        val kilometerMatch = Regex("([0-9]+(?:\\.[0-9]+)?)\\s*(км|km)\\b").find(normalized)
+        if (kilometerMatch != null) {
+            val km = kilometerMatch.groupValues[1].toDoubleOrNull() ?: return null
+            return (km * 1000.0).toInt().coerceAtLeast(0)
+        }
+        val meterMatch = Regex("([0-9]+(?:\\.[0-9]+)?)\\s*(м|m)\\b").find(normalized)
+        if (meterMatch != null) {
+            val meters = meterMatch.groupValues[1].toDoubleOrNull() ?: return null
+            return meters.toInt().coerceAtLeast(0)
+        }
+        return null
     }
 
     private fun appendUnitIfMissing(text: String, unit: String): String {

@@ -38,10 +38,9 @@ object HudDisplayUtils {
         return displayManager.displays.sortedBy { it.displayId }
     }
 
-    fun displaySize(display: Display): Point {
-        val size = Point()
-        display.getRealSize(size)
-        return size
+    fun displaySize(context: Context, display: Display): Point {
+        val metrics = context.createDisplayContext(display).resources.displayMetrics
+        return Point(metrics.widthPixels, metrics.heightPixels)
     }
 
 }

@@ -162,8 +162,18 @@ object GuideContent {
                 ),
                 GuideItem(
                     null,
+                    R.string.guide_settings_nav_updates_timeout_title,
+                    R.string.guide_settings_nav_updates_timeout_body
+                ),
+                GuideItem(
+                    null,
                     R.string.guide_settings_speed_correction_title,
                     R.string.guide_settings_speed_correction_body
+                ),
+                GuideItem(
+                    null,
+                    R.string.guide_settings_speed_source_title,
+                    R.string.guide_settings_speed_source_body
                 ),
                 GuideItem(
                     null,

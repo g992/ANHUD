@@ -2,7 +2,6 @@ package com.g992.anhud
 
 import android.content.Context
 import android.content.res.Configuration
-import android.util.DisplayMetrics
 import kotlin.math.roundToInt
 
 object UiScale {
@@ -21,11 +20,6 @@ object UiScale {
             return base
         }
         config.densityDpi = targetDensityDpi
-        val context = base.createConfigurationContext(config)
-        val newMetrics: DisplayMetrics = context.resources.displayMetrics
-        newMetrics.density = metrics.density * UI_SCALE
-        newMetrics.scaledDensity = metrics.scaledDensity * UI_SCALE
-        newMetrics.densityDpi = targetDensityDpi
-        return context
+        return base.createConfigurationContext(config)
     }
 }

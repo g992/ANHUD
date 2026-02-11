@@ -208,6 +208,83 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="20dp"
+                    android:text="@string/nav_updates_end_timeout_label"
+                    android:textColor="@color/white"
+                    android:textSize="16sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:text="@string/nav_updates_end_timeout_hint"
+                    android:textColor="#808080"
+                    android:textSize="12sp" />
+
+                <EditText
+                    android:id="@+id/navUpdatesEndTimeoutInput"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:inputType="number"
+                    android:hint="0"
+                    android:textColor="@color/white"
+                    android:textColorHint="#404040"
+                    android:backgroundTint="@color/white" />
+
+                <androidx.appcompat.widget.SwitchCompat
+                    android:id="@+id/hideTurnWhenFarSwitch"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="20dp"
+                    android:text="@string/hide_turn_when_far_enabled_label"
+                    android:textColor="@color/white"
+                    android:textSize="14sp" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:text="@string/hide_turn_when_far_enabled_hint"
+                    android:textColor="#808080"
+                    android:textSize="12sp" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="@string/hide_turn_when_far_distance_label"
+                        android:textColor="@color/white"
+                        android:textSize="14sp" />
+
+                    <TextView
+                        android:id="@+id/hideTurnWhenFarDistanceValue"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="1 км"
+                        android:textColor="@color/white"
+                        android:textSize="14sp" />
+                </LinearLayout>
+
+                <SeekBar
+                    android:id="@+id/hideTurnWhenFarDistanceSeek"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:max="8"
+                    android:progress="3" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="20dp"
                     android:text="@string/speed_correction_label"
                     android:textColor="@color/white"
                     android:textSize="16sp"
@@ -244,6 +321,23 @@
                     android:layout_marginTop="4dp"
                     android:max="20"
                     android:progress="10" />
+
+                <androidx.appcompat.widget.SwitchCompat
+                    android:id="@+id/speedFromGpsCheck"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="16dp"
+                    android:text="@string/speed_from_gps_label"
+                    android:textColor="@color/white"
+                    android:textSize="14sp" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:text="@string/speed_from_gps_hint"
+                    android:textColor="#808080"
+                    android:textSize="12sp" />
 
                 <Button
                     android:id="@+id/exportSettingsButton"
@@ -350,6 +444,17 @@
                         android:layout_weight="1"
                         android:text="@string/update_install_button" />
                 </LinearLayout>
+
+                <TextView
+                    android:id="@+id/updateOtaFallbackText"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:autoLink="web"
+                    android:linksClickable="true"
+                    android:text="@string/update_ota_fallback_info"
+                    android:textColor="#c0c0c0"
+                    android:textSize="12sp" />
 
                 <ProgressBar
                     android:id="@+id/updateProgressBar"

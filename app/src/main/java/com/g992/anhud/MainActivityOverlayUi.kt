@@ -10,6 +10,7 @@ import android.os.Environment
 import android.provider.Settings
 import android.view.LayoutInflater
 import android.view.View
+import android.view.WindowManager
 import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
@@ -212,8 +213,13 @@ internal fun MainActivity.renderTrafficLightPreview(container: LinearLayout, cou
 
 internal fun MainActivity.showDonateDialog() {
     val dialogView = layoutInflater.inflate(R.layout.dialog_donate, null)
-    AlertDialog.Builder(this, R.style.ThemeOverlay_ANHUD_Dialog)
+    val dialog = AlertDialog.Builder(this, R.style.ThemeOverlay_ANHUD_Dialog)
         .setView(dialogView)
         .setPositiveButton(R.string.donate_dialog_close, null)
-        .show()
+        .create()
+    dialog.setOnShowListener {
+        val width = (resources.displayMetrics.widthPixels * 0.8f).roundToInt()
+        dialog.window?.setLayout(width, WindowManager.LayoutParams.WRAP_CONTENT)
+    }
+    dialog.show()
 }

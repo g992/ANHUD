@@ -20,6 +20,7 @@ class NavigationReceiver : BroadcastReceiver() {
             Log.d(TAG, "not Yandex intent: $action extras=${formatExtras(intent)}")
 
         }
+        touchNavigatorIntentTimeout(context, action)
         when (action) {
             ACTION_NAV_UPDATE, ACTION_NAV_UPDATE_DEBUG -> {
                 Log.d(
@@ -45,6 +46,7 @@ class NavigationReceiver : BroadcastReceiver() {
                 )
                 if (intent.hasExtra(EXTRA_ROUTE_ACTIVE) && !update.routeActive) {
                     UiLogStore.append(LogCategory.NAVIGATION, "маршрут завершен (route_active=false)")
+                    cancelNavigatorIntentTimeout()
                     NavigationHudStore.reset(
                         intent.action.orEmpty(),
                         update.timestamp,
@@ -378,6 +380,9 @@ class NavigationReceiver : BroadcastReceiver() {
         private val activeTrafficLights = LinkedHashMap<Int, TrafficLightInfo>()
         private val roadCameraHandler = android.os.Handler(android.os.Looper.getMainLooper())
         private var pendingRoadCameraHide: Runnable? = null
+        private val navigatorIntentTimeoutHandler = android.os.Handler(android.os.Looper.getMainLooper())
+        private var pendingNavigatorIntentTimeout: Runnable? = null
+        private var navigatorIntentTimeoutContext: Context? = null
         private var roadCameraContext: Context? = null
         private var trafficLightContext: Context? = null
 
@@ -385,6 +390,8 @@ class NavigationReceiver : BroadcastReceiver() {
         private var lastArrowNativeUpdateAt: Long = 0L
         @Volatile
         private var lastStreetUpdateAt: Long = 0L
+        @Volatile
+        private var lastNavigatorIntentAt: Long = 0L
         @Volatile
         private var lastNativeNavPayload: NativeNavPayload? = null
 
@@ -413,6 +420,7 @@ class NavigationReceiver : BroadcastReceiver() {
         const val ACTION_YANDEX_ROUTE_POLYLINE = "com.yandex.ROUTE_POLYLINE"
         const val ACTION_NATIVE_NAV_STOP = "com.g992.anhud.NATIVE_NAV_STOP"
         const val ACTION_HUDSPEED_UPDATE = "air.strelkasd.CAMERA_INFO_CHANGED"
+        private const val ACTION_NAV_UPDATES_TIMEOUT = "nav_updates_timeout"
 
         const val EXTRA_MANEUVER_BITMAP = "maneuver_bitmap"
         const val EXTRA_MANEUVER_TYPE = "maneuver_type"
@@ -449,6 +457,108 @@ class NavigationReceiver : BroadcastReceiver() {
         private const val SOURCE_YANDEX = "yandex"
         private const val SOURCE_HUDSPEED = "hudspeed"
         const val DEFAULT_NATIVE_TURN_ID = 101
+        private const val MAX_SUPPORTED_TURN_ID = 150
+
+        fun onNavigationStartedFromNotification(context: Context) {
+            val appContext = context.applicationContext
+            navigatorIntentTimeoutContext = appContext
+            lastNavigatorIntentAt = System.currentTimeMillis()
+            scheduleNavigatorIntentTimeout(appContext)
+        }
+
+        fun clearNavigatorIntentTimeout() {
+            cancelNavigatorIntentTimeout()
+        }
+
+        private fun touchNavigatorIntentTimeout(context: Context, action: String) {
+            if (!isNavigatorIntentAction(action)) {
+                return
+            }
+            val appContext = context.applicationContext
+            navigatorIntentTimeoutContext = appContext
+            lastNavigatorIntentAt = System.currentTimeMillis()
+            scheduleNavigatorIntentTimeout(appContext)
+        }
+
+        private fun isNavigatorIntentAction(action: String): Boolean {
+            return action == ACTION_NAV_UPDATE ||
+                action == ACTION_NAV_UPDATE_DEBUG ||
+                action == ACTION_YANDEX_MANEUVER ||
+                action == ACTION_YANDEX_NEXT_TEXT ||
+                action == ACTION_YANDEX_NEXT_STREET ||
+                action == ACTION_YANDEX_SPEEDLIMIT ||
+                action == ACTION_YANDEX_ARRIVAL ||
+                action == ACTION_YANDEX_DISTANCE ||
+                action == ACTION_YANDEX_TIME ||
+                action == ACTION_YANDEX_NAV_ACTIVE ||
+                action == ACTION_YANDEX_ROADCAMERA ||
+                action == ACTION_YANDEX_TRAFFICLIGHT ||
+                action == ACTION_YANDEX_ROUTE_POLYLINE
+        }
+
+        private fun scheduleNavigatorIntentTimeout(context: Context) {
+            pendingNavigatorIntentTimeout?.let { navigatorIntentTimeoutHandler.removeCallbacks(it) }
+            pendingNavigatorIntentTimeout = null
+            val timeoutSeconds = OverlayPrefs.navUpdatesEndTimeout(context)
+            if (timeoutSeconds <= 0) {
+                return
+            }
+            val delayMs = timeoutSeconds.toLong() * 1000L
+            val runnable = Runnable {
+                pendingNavigatorIntentTimeout = null
+                handleNavigatorIntentTimeout()
+            }
+            pendingNavigatorIntentTimeout = runnable
+            navigatorIntentTimeoutHandler.postDelayed(runnable, delayMs)
+        }
+
+        private fun handleNavigatorIntentTimeout() {
+            val context = navigatorIntentTimeoutContext ?: return
+            val timeoutSeconds = OverlayPrefs.navUpdatesEndTimeout(context)
+            if (timeoutSeconds <= 0) {
+                cancelNavigatorIntentTimeout()
+                return
+            }
+            val timeoutMs = timeoutSeconds.toLong() * 1000L
+            val lastAt = lastNavigatorIntentAt
+            if (lastAt <= 0L) {
+                return
+            }
+            val elapsed = System.currentTimeMillis() - lastAt
+            if (elapsed < timeoutMs) {
+                scheduleNavigatorIntentTimeout(context)
+                return
+            }
+            if (!isNavigationActiveForTimeout()) {
+                return
+            }
+            endNavigation(
+                context,
+                ACTION_NAV_UPDATES_TIMEOUT,
+                "таймаут обновлений навигатора: стоп"
+            )
+        }
+
+        private fun isNavigationActiveForTimeout(): Boolean {
+            val state = NavigationHudStore.snapshot()
+            return state.routeActive == true ||
+                state.rawTitle.isNotBlank() ||
+                state.rawText.isNotBlank() ||
+                state.rawSubtext.isNotBlank() ||
+                state.rawNextText.isNotBlank() ||
+                state.rawNextStreet.isNotBlank() ||
+                state.rawDistance.isNotBlank() ||
+                state.rawTime.isNotBlank() ||
+                state.maneuverBitmap != null ||
+                state.maneuverType.isNotBlank()
+        }
+
+        private fun cancelNavigatorIntentTimeout() {
+            pendingNavigatorIntentTimeout?.let { navigatorIntentTimeoutHandler.removeCallbacks(it) }
+            pendingNavigatorIntentTimeout = null
+            lastNavigatorIntentAt = 0L
+            navigatorIntentTimeoutContext = null
+        }
 
         private fun normalizeText(value: String): String {
             if (value.isBlank()) {
@@ -482,6 +592,7 @@ class NavigationReceiver : BroadcastReceiver() {
         private fun formatExtras(intent: Intent): String {
             val extras = intent.extras ?: return "{}"
             val entries = extras.keySet().sorted().map { key ->
+                @Suppress("DEPRECATION")
                 val value = extras.get(key)
                 val formatted = describeExtraValue(value)
                 "$key=$formatted"
@@ -625,6 +736,7 @@ class NavigationReceiver : BroadcastReceiver() {
         private fun endNavigation(context: Context, action: String, reason: String) {
             Log.d(TAG, "Navigation ended: $reason")
             UiLogStore.append(LogCategory.NAVIGATION, reason)
+            cancelNavigatorIntentTimeout()
             // Only stop native navigation if it was enabled
             if (OverlayPrefs.nativeNavEnabled(context)) {
                 NativeNavigationController.stopNavigation(context)
@@ -847,9 +959,20 @@ class NavigationReceiver : BroadcastReceiver() {
                 "maneuver_match_prefs",
                 Context.MODE_PRIVATE
             )
-            val raw = prefs.getString("mapping_$maneuverType", null).orEmpty()
-            val match = Regex("^\\d+").find(raw)
-            return match?.value?.toIntOrNull() ?: DEFAULT_NATIVE_TURN_ID
+            val key = "mapping_$maneuverType"
+            val raw = prefs.getString(key, null)
+            val match = Regex("^\\d+").find(raw.orEmpty())
+            val parsed = match?.value?.toIntOrNull()
+            val resolved = if (parsed == null || parsed > MAX_SUPPORTED_TURN_ID) {
+                DEFAULT_NATIVE_TURN_ID
+            } else {
+                parsed
+            }
+            val normalized = resolved.toString()
+            if (!raw.isNullOrBlank() && raw != normalized) {
+                prefs.edit().putString(key, normalized).apply()
+            }
+            return resolved
         }
 
         private fun parseDistanceMeters(text: String): Int? {

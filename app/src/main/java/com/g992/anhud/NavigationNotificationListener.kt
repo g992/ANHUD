@@ -150,6 +150,7 @@ class NavigationNotificationListener : NotificationListenerService() {
     private fun startNavigation() {
         Log.d(TAG, "Navigation active via notification")
         UiLogStore.append(LogCategory.NAVIGATION, "навигация по уведомлению: старт")
+        NavigationReceiver.onNavigationStartedFromNotification(applicationContext)
 
         NavigationHudStore.update { state ->
             state.copy(
@@ -167,6 +168,7 @@ class NavigationNotificationListener : NotificationListenerService() {
     private fun endNavigation() {
         Log.d(TAG, "Navigation ended via notification removal")
         UiLogStore.append(LogCategory.NAVIGATION, "навигация по уведомлению: стоп")
+        NavigationReceiver.clearNavigatorIntentTimeout()
 
         // Only stop native navigation if it was enabled
         if (OverlayPrefs.nativeNavEnabled(applicationContext)) {

@@ -452,7 +452,7 @@
       {
         "k": "mapping_context_ra_in_circular_movement",
         "t": "s",
-        "v": "183"
+        "v": "101"
       },
       {
         "k": "mapping_context_ra_turn_back_right",
@@ -682,7 +682,7 @@
       {
         "k": "mapping_context_ra_exit_left",
         "t": "s",
-        "v": "181"
+        "v": "101"
       },
       {
         "k": "mapping_context_lane_left135_small",
@@ -777,7 +777,7 @@
       {
         "k": "mapping_context_ra_exit_right",
         "t": "s",
-        "v": "179"
+        "v": "101"
       },
       {
         "k": "mapping_context_lane_leftfromright_small",
@@ -792,7 +792,7 @@
       {
         "k": "mapping_context_ra_boardferry",
         "t": "s",
-        "v": "184"
+        "v": "101"
       },
       {
         "k": "mapping_context_lane_straightahead_large_24",
@@ -837,7 +837,7 @@
       {
         "k": "mapping_context_ra_out_circular_movement",
         "t": "s",
-        "v": "188"
+        "v": "101"
       }
     ]
   }

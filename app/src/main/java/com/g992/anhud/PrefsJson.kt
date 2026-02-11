@@ -8,6 +8,8 @@ object PrefsJson {
     const val OVERLAY_PREFS_NAME = "hud_overlay_prefs"
     const val MANEUVER_PREFS_NAME = "maneuver_match_prefs"
     private const val DEFAULTS_ASSET = "maneuver_match_defaults.properties"
+    private const val DEFAULT_MANEUVER_ICON_ID = "101"
+    private const val MAX_SUPPORTED_MANEUVER_ICON_ID = 150
 
     fun buildPayload(context: Context): JSONObject {
         val payload = JSONObject()
@@ -209,8 +211,10 @@ object PrefsJson {
         putInt("camera_timeout_far", OverlayPrefs.cameraTimeoutFar(context))
         putInt("traffic_light_timeout", OverlayPrefs.trafficLightTimeout(context))
         putInt("nav_notification_end_timeout", OverlayPrefs.navNotificationEndTimeout(context))
+        putInt("nav_updates_end_timeout", OverlayPrefs.navUpdatesEndTimeout(context))
         putInt("road_camera_timeout", OverlayPrefs.roadCameraTimeout(context))
         putInt("speed_correction", OverlayPrefs.speedCorrection(context))
+        putBoolean("speed_from_gps", OverlayPrefs.speedFromGps(context))
         putBoolean("guide_shown", OverlayPrefs.guideShown(context))
 
         return items
@@ -222,10 +226,11 @@ object PrefsJson {
         val merged = mutableMapOf<String, Any?>()
         for ((name, defaultId) in defaults) {
             val key = "mapping_$name"
-            merged[key] = prefs.getString(key, defaultId) ?: defaultId
+            val stored = prefs.getString(key, defaultId) ?: defaultId
+            merged[key] = sanitizeManeuverMappingValue(key, stored)
         }
         for ((key, value) in prefs.all) {
-            merged[key] = value
+            merged[key] = sanitizeManeuverMappingValue(key, value)
         }
         val items = JSONArray()
         for (key in merged.keys.sorted()) {
@@ -286,6 +291,17 @@ object PrefsJson {
             val key = entry.optString("k", "")
             val type = entry.optString("t", "")
             if (key.isBlank()) continue
+            if (prefName == MANEUVER_PREFS_NAME && isManeuverMappingKey(key)) {
+                val raw = when (type) {
+                    "s" -> entry.optString("v", "")
+                    "i" -> entry.optInt("v").toString()
+                    "l" -> entry.optLong("v").toString()
+                    "f" -> entry.optDouble("v").toInt().toString()
+                    else -> null
+                }
+                editor.putString(key, sanitizeManeuverIconId(raw))
+                continue
+            }
             when (type) {
                 "b" -> editor.putBoolean(key, entry.optBoolean("v"))
                 "f" -> editor.putFloat(key, entry.optDouble("v").toFloat())
@@ -325,9 +341,28 @@ object PrefsJson {
             val key = trimmed.substring(0, idx).trim()
             val value = trimmed.substring(idx + 1).trim()
             if (key.isNotEmpty() && value.isNotEmpty()) {
-                defaults[key] = value
+                defaults[key] = sanitizeManeuverIconId(value)
             }
         }
         return defaults
+    }
+
+    private fun sanitizeManeuverMappingValue(key: String, value: Any?): Any? {
+        if (!isManeuverMappingKey(key)) {
+            return value
+        }
+        return sanitizeManeuverIconId(value?.toString())
+    }
+
+    private fun isManeuverMappingKey(key: String): Boolean = key.startsWith("mapping_")
+
+    private fun sanitizeManeuverIconId(raw: String?): String {
+        val value = raw?.trim().orEmpty()
+        val numeric = value.toIntOrNull() ?: return DEFAULT_MANEUVER_ICON_ID
+        return if (numeric > MAX_SUPPORTED_MANEUVER_ICON_ID) {
+            DEFAULT_MANEUVER_ICON_ID
+        } else {
+            numeric.toString()
+        }
     }
 }
