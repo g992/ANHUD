@@ -294,6 +294,51 @@ class NavigationReceiver : BroadcastReceiver() {
             ACTION_NATIVE_NAV_STOP -> {
                 endNavigation(context, action, "штатная навигация: стоп")
             }
+            ACTION_HEADUNIT_NAVIGATION_UPDATE -> {
+                try {
+                    val distanceMeters = intent.getIntExtra(EXTRA_HEADUNIT_DISTANCE_METERS, -1)
+                    val timeSeconds = intent.getIntExtra(EXTRA_HEADUNIT_TIME_SECONDS, -1)
+                    val road = normalizeText(intent.getStringExtra(EXTRA_HEADUNIT_ROAD).orEmpty())
+                    val nextEventType = intent.getIntExtra(EXTRA_HEADUNIT_NEXT_EVENT_TYPE, 0)
+                    val actionText = normalizeText(intent.getStringExtra(EXTRA_HEADUNIT_ACTION_TEXT).orEmpty())
+                    Log.d(TAG, "Headunit nav: distance=$distanceMeters m time=$timeSeconds s road=\"$road\" eventType=$nextEventType action=\"$actionText\"")
+                    UiLogStore.append(
+                        LogCategory.NAVIGATION,
+                        "headunit: ${distanceMeters}м ${timeSeconds}с улица=\"$road\" действие=\"$actionText\""
+                    )
+                    val primaryText = when {
+                        distanceMeters >= 0 && actionText.isNotBlank() -> "$distanceMeters м — $actionText"
+                        distanceMeters >= 0 -> "$distanceMeters м"
+                        actionText.isNotBlank() -> actionText
+                        else -> ""
+                    }
+                    val rawNextText = if (distanceMeters >= 0) "$distanceMeters м" else ""
+                    val distanceUnit = if (distanceMeters >= 0) "м" else ""
+                    val rawTime = if (timeSeconds >= 0) "${timeSeconds} сек" else ""
+                    val maneuverTypeKey = headunitEventTypeToManeuverKey(nextEventType)
+                    NavigationHudStore.update { state ->
+                        state.copy(
+                            maneuverBitmap = ,
+                            primaryText = primaryText.ifBlank { state.primaryText },
+                            secondaryText = road.ifBlank { state.secondaryText },
+                            maneuverType = maneuverTypeKey.ifBlank { state.maneuverType },
+                            source = SOURCE_HEADUNIT,
+                            routeActive = true,
+                            lastUpdated = System.currentTimeMillis(),
+                            lastAction = action,
+                            rawNextText = rawNextText.ifBlank { state.rawNextText },
+                            rawNextStreet = road.ifBlank { state.rawNextStreet },
+                            rawTime = rawTime.ifBlank { state.rawTime },
+                            distanceUnit = distanceUnit.ifBlank { state.distanceUnit }
+                        )
+                    }
+                    val state = NavigationHudStore.snapshot()
+                    maybeUpdateNativeNavigation(context, state, NativeNavUpdateTrigger.DISTANCE)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Headunit nav: failed to process broadcast", e)
+                    UiLogStore.append(LogCategory.NAVIGATION, "headunit ошибка: ${e.message}")
+                }
+            }
             ACTION_HUDSPEED_UPDATE -> {
                 val hasCamera = intent.getBooleanExtra(HUDSPEED_HAS_CAMERA, false)
                 val hasGps = intent.getBooleanExtra(HUDSPEED_HAS_GPS, false)
@@ -420,7 +465,15 @@ class NavigationReceiver : BroadcastReceiver() {
         const val ACTION_YANDEX_ROUTE_POLYLINE = "com.yandex.ROUTE_POLYLINE"
         const val ACTION_NATIVE_NAV_STOP = "com.g992.anhud.NATIVE_NAV_STOP"
         const val ACTION_HUDSPEED_UPDATE = "air.strelkasd.CAMERA_INFO_CHANGED"
+        /** Broadcast from Headunit Revived (Android Auto nav data from any AA nav app). */
+        const val ACTION_HEADUNIT_NAVIGATION_UPDATE = "com.andrerinas.headunitrevived.NAVIGATION_UPDATE"
         private const val ACTION_NAV_UPDATES_TIMEOUT = "nav_updates_timeout"
+
+        private const val EXTRA_HEADUNIT_DISTANCE_METERS = "distance_meters"
+        private const val EXTRA_HEADUNIT_TIME_SECONDS = "time_seconds"
+        private const val EXTRA_HEADUNIT_ROAD = "road"
+        private const val EXTRA_HEADUNIT_NEXT_EVENT_TYPE = "next_event_type"
+        private const val EXTRA_HEADUNIT_ACTION_TEXT = "action_text"
 
         const val EXTRA_MANEUVER_BITMAP = "maneuver_bitmap"
         const val EXTRA_MANEUVER_TYPE = "maneuver_type"
@@ -456,6 +509,7 @@ class NavigationReceiver : BroadcastReceiver() {
 
         private const val SOURCE_YANDEX = "yandex"
         private const val SOURCE_HUDSPEED = "hudspeed"
+        private const val SOURCE_HEADUNIT = "headunit"
         const val DEFAULT_NATIVE_TURN_ID = 101
         private const val MAX_SUPPORTED_TURN_ID = 150
 
@@ -493,7 +547,32 @@ class NavigationReceiver : BroadcastReceiver() {
                 action == ACTION_YANDEX_NAV_ACTIVE ||
                 action == ACTION_YANDEX_ROADCAMERA ||
                 action == ACTION_YANDEX_TRAFFICLIGHT ||
-                action == ACTION_YANDEX_ROUTE_POLYLINE
+                action == ACTION_YANDEX_ROUTE_POLYLINE ||
+                action == ACTION_HEADUNIT_NAVIGATION_UPDATE
+        }
+
+        /** Маппинг next_event_type (Android Auto proto) в ключ манёвра для resolveTurnId / HUD. */
+        private fun headunitEventTypeToManeuverKey(nextEventType: Int): String {
+            return when (nextEventType.coerceIn(0, 31)) {
+                0 -> "unknown"
+                1 -> "depart"
+                2 -> "name_change"
+                3 -> "slight_turn"
+                4 -> "turn"
+                5 -> "sharp_turn"
+                6 -> "uturn"
+                7 -> "on_ramp"
+                8 -> "off_ramp"
+                9, 10 -> "merge"
+                11 -> "roundabout_enter"
+                12 -> "roundabout_exit"
+                13 -> "roundabout"
+                14 -> "straight"
+                16 -> "ferry"
+                17 -> "ferry_train"
+                18 -> "destination"
+                else -> "unknown"
+            }
         }
 
         private fun scheduleNavigatorIntentTimeout(context: Context) {

@@ -1458,16 +1458,18 @@ class HudOverlayController(private val context: Context) {
         updateHudSpeedOverspeed(hudSpeedLimitOverspeed)
         updateRoadCamera(state.roadCameraIcon, roadCameraDistanceText, roadCameraAllowed, previewRoadCamera)
         updateTrafficLights(trafficLights, trafficLightAllowed, previewTrafficLight)
-        updateManeuver(state.maneuverBitmap, previewNav)
-        updateArrowManeuver(state.maneuverBitmap, previewArrow)
+        updateManeuver(state.maneuverBitmap, state.maneuverType, previewNav)
+        updateArrowManeuver(state.maneuverBitmap, state.maneuverType, previewArrow)
         if (clock != null) {
             updateClockText()
         }
 
+        val hasManeuverIcon = state.maneuverBitmap != null ||
+            resolveManeuverDrawableResId(state.maneuverType) != 0
         val navHasContent = primaryText.isNotBlank() ||
             secondaryText.isNotBlank() ||
             timeText.isNotBlank() ||
-            state.maneuverBitmap != null
+            hasManeuverIcon
         val navVisible = if (showPreview) {
             previewNav
         } else {
@@ -1482,7 +1484,7 @@ class HudOverlayController(private val context: Context) {
         val arrowVisible = if (showPreview) {
             previewArrow
         } else {
-            state.maneuverBitmap != null && arrowEligible && !hideNavigationByDistance
+            hasManeuverIcon && arrowEligible && !hideNavigationByDistance
         }
         val speedVisible = if (showPreview) previewSpeed else state.speedLimit.isNotBlank()
         if (!showPreview && (!state.hudSpeedHasCamera || state.hudSpeedDistanceMeters == null)) {
@@ -1590,7 +1592,7 @@ class HudOverlayController(private val context: Context) {
         hudSpeedHideRunnable = null
     }
 
-    private fun updateManeuver(bitmap: android.graphics.Bitmap?, preview: Boolean) {
+    private fun updateManeuver(bitmap: android.graphics.Bitmap?, maneuverType: String, preview: Boolean) {
         val image = maneuverView ?: return
         val label = maneuverLabel ?: return
         val container = maneuverContainer ?: return
@@ -1605,17 +1607,33 @@ class HudOverlayController(private val context: Context) {
             label.visibility = View.VISIBLE
             return
         }
-        if (bitmap != null) {
-            image.setImageBitmap(bitmap)
-            image.visibility = View.VISIBLE
-            label.visibility = View.GONE
-        } else {
-            image.visibility = View.GONE
-            label.visibility = View.GONE
+        when {
+            bitmap != null -> {
+                image.setImageBitmap(bitmap)
+                image.setImageResource(0)
+                image.visibility = View.VISIBLE
+                label.visibility = View.GONE
+            }
+            maneuverType.isNotBlank() -> {
+                val resId = resolveManeuverDrawableResId(maneuverType)
+                if (resId != 0) {
+                    image.setImageBitmap(null)
+                    image.setImageResource(resId)
+                    image.visibility = View.VISIBLE
+                    label.visibility = View.GONE
+                } else {
+                    image.visibility = View.GONE
+                    label.visibility = View.GONE
+                }
+            }
+            else -> {
+                image.visibility = View.GONE
+                label.visibility = View.GONE
+            }
         }
     }
 
-    private fun updateArrowManeuver(bitmap: android.graphics.Bitmap?, preview: Boolean) {
+    private fun updateArrowManeuver(bitmap: android.graphics.Bitmap?, maneuverType: String, preview: Boolean) {
         val image = arrowView ?: return
         val label = arrowLabel ?: return
         val container = arrowContainer ?: return
@@ -1630,14 +1648,51 @@ class HudOverlayController(private val context: Context) {
             label.visibility = View.VISIBLE
             return
         }
-        if (bitmap != null) {
-            image.setImageBitmap(bitmap)
-            image.visibility = View.VISIBLE
-            label.visibility = View.GONE
-        } else {
-            image.visibility = View.GONE
-            label.visibility = View.GONE
+        when {
+            bitmap != null -> {
+                image.setImageBitmap(bitmap)
+                image.setImageResource(0)
+                image.visibility = View.VISIBLE
+                label.visibility = View.GONE
+            }
+            maneuverType.isNotBlank() -> {
+                val resId = resolveManeuverDrawableResId(maneuverType)
+                if (resId != 0) {
+                    image.setImageBitmap(null)
+                    image.setImageResource(resId)
+                    image.visibility = View.VISIBLE
+                    label.visibility = View.GONE
+                } else {
+                    image.visibility = View.GONE
+                    label.visibility = View.GONE
+                }
+            }
+            else -> {
+                image.visibility = View.GONE
+                label.visibility = View.GONE
+            }
         }
+    }
+
+    private fun resolveManeuverDrawableResId(maneuverType: String): Int {
+        if (maneuverType.isBlank()) return 0
+        val name = when (maneuverType.trim().lowercase()) {
+            "turn" -> "context_ra_turn_right"
+            "slight_turn" -> "context_ra_turn_right"
+            "sharp_turn" -> "context_ra_hard_turn_right"
+            "uturn" -> "context_ra_turn_back_right"
+            "off_ramp" -> "context_ra_exit_right"
+            "on_ramp", "merge" -> "context_ra_take_right"
+            "roundabout", "roundabout_enter", "roundabout_exit" -> "context_ra_in_circular_movement"
+            "straight" -> "context_ra_forward"
+            "depart", "name_change" -> "context_ra_forward"
+            "ferry", "ferry_train" -> "context_ra_boardferry"
+            "destination" -> "context_ra_finish"
+            "unknown" -> "context_ra_via"
+            else -> "context_ra_via"
+        }
+        val resId = context.resources.getIdentifier(name, "drawable", context.packageName)
+        return if (resId != 0) resId else 0
     }
 
     private fun setTextOrHide(view: TextView, text: String) {
