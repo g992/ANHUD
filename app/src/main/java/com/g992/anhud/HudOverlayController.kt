@@ -1676,7 +1676,12 @@ class HudOverlayController(private val context: Context) {
 
     private fun resolveManeuverDrawableResId(maneuverType: String): Int {
         if (maneuverType.isBlank()) return 0
-        val name = when (maneuverType.trim().lowercase()) {
+        val normalized = maneuverType.trim().lowercase()
+        val name = when {
+            // Best path: already a concrete ANHUD drawable key.
+            normalized.startsWith("context_ra_") -> normalized
+            // Backward compatibility for generic keys.
+            else -> when (normalized) {
             "turn" -> "context_ra_turn_right"
             "slight_turn" -> "context_ra_turn_right"
             "sharp_turn" -> "context_ra_hard_turn_right"
@@ -1690,6 +1695,7 @@ class HudOverlayController(private val context: Context) {
             "destination" -> "context_ra_finish"
             "unknown" -> "context_ra_via"
             else -> "context_ra_via"
+            }
         }
         val resId = context.resources.getIdentifier(name, "drawable", context.packageName)
         return if (resId != 0) resId else 0
