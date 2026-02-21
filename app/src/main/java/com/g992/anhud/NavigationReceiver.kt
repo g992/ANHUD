@@ -301,6 +301,8 @@ class NavigationReceiver : BroadcastReceiver() {
                     val road = normalizeText(intent.getStringExtra(EXTRA_HEADUNIT_ROAD).orEmpty())
                     val nextEventType = intent.getIntExtra(EXTRA_HEADUNIT_NEXT_EVENT_TYPE, 0)
                     val turnSide = intent.getIntExtra(EXTRA_HEADUNIT_TURN_SIDE, TURN_SIDE_UNSPECIFIED)
+                    val turnNumber = intent.getIntExtra(EXTRA_HEADUNIT_TURN_NUMBER, -1)
+                    val turnAngle = intent.getIntExtra(EXTRA_HEADUNIT_TURN_ANGLE, -1)
                     val actionText = normalizeText(intent.getStringExtra(EXTRA_HEADUNIT_ACTION_TEXT).orEmpty())
                     Log.d(TAG, "Headunit nav: distance=$distanceMeters m time=$timeSeconds s road=\"$road\" eventType=$nextEventType side=$turnSide action=\"$actionText\"")
                     UiLogStore.append(
@@ -316,7 +318,7 @@ class NavigationReceiver : BroadcastReceiver() {
                     val rawNextText = if (distanceMeters >= 0) "$distanceMeters м" else ""
                     val distanceUnit = if (distanceMeters >= 0) "м" else ""
                     val rawTime = if (timeSeconds >= 0) "${timeSeconds} сек" else ""
-                    val maneuverTypeKey = headunitEventTypeToManeuverKey(nextEventType, turnSide)
+                    val maneuverTypeKey = headunitEventTypeToManeuverKey(nextEventType, turnSide, turnNumber, turnAngle)
                     NavigationHudStore.update { state ->
                         state.copy(
                             // Headunit doesn't provide bitmap; force icon resolution from maneuverType.
@@ -477,6 +479,8 @@ class NavigationReceiver : BroadcastReceiver() {
         private const val EXTRA_HEADUNIT_NEXT_EVENT_TYPE = "next_event_type"
         private const val EXTRA_HEADUNIT_ACTION_TEXT = "action_text"
         private const val EXTRA_HEADUNIT_TURN_SIDE = "turn_side"
+        private const val EXTRA_HEADUNIT_TURN_NUMBER = "turn_number"
+        private const val EXTRA_HEADUNIT_TURN_ANGLE = "turn_angle"
         private const val TURN_SIDE_LEFT = 1
         private const val TURN_SIDE_RIGHT = 2
         private const val TURN_SIDE_UNSPECIFIED = 3
@@ -557,27 +561,35 @@ class NavigationReceiver : BroadcastReceiver() {
                 action == ACTION_HEADUNIT_NAVIGATION_UPDATE
         }
 
-        /** Маппинг next_event_type + side в максимально точные context_ra_* ключи ANHUD. */
-        private fun headunitEventTypeToManeuverKey(nextEventType: Int, turnSide: Int): String {
+        /** Маппинг next_event_type + side + номер/угол в максимально точные context_ra_* ключи ANHUD. */
+        private fun headunitEventTypeToManeuverKey(
+            nextEventType: Int,
+            turnSide: Int,
+            turnNumber: Int,
+            turnAngle: Int
+        ): String {
             val isLeft = turnSide == TURN_SIDE_LEFT
             val isRight = turnSide == TURN_SIDE_RIGHT
+            val shape = resolveTurnShape(nextEventType, turnAngle)
             return when (nextEventType.coerceIn(0, 31)) {
                 0 -> "context_ra_via"
                 1, 2 -> "context_ra_forward"
-                3 -> when {
-                    isLeft -> "context_ra_take_left"
-                    isRight -> "context_ra_take_right"
-                    else -> "context_ra_forward"
-                }
-                4 -> when {
-                    isLeft -> "context_ra_turn_left"
-                    isRight -> "context_ra_turn_right"
-                    else -> "context_ra_turn_right"
-                }
-                5 -> when {
-                    isLeft -> "context_ra_hard_turn_left"
-                    isRight -> "context_ra_hard_turn_right"
-                    else -> "context_ra_hard_turn_right"
+                3, 4, 5 -> when (shape) {
+                    TurnShape.SLIGHT -> when {
+                        isLeft -> "context_ra_take_left"
+                        isRight -> "context_ra_take_right"
+                        else -> "context_ra_forward"
+                    }
+                    TurnShape.SHARP -> when {
+                        isLeft -> "context_ra_hard_turn_left"
+                        isRight -> "context_ra_hard_turn_right"
+                        else -> "context_ra_hard_turn_right"
+                    }
+                    TurnShape.NORMAL -> when {
+                        isLeft -> "context_ra_turn_left"
+                        isRight -> "context_ra_turn_right"
+                        else -> "context_ra_turn_right"
+                    }
                 }
                 6 -> when {
                     isLeft -> "context_ra_turn_back_left"
@@ -595,11 +607,38 @@ class NavigationReceiver : BroadcastReceiver() {
                     else -> "context_ra_exit_right"
                 }
                 11 -> "context_ra_in_circular_movement"
-                12, 13 -> "context_ra_out_circular_movement"
+                12 -> "context_ra_out_circular_movement"
+                13 -> if (turnNumber > 0) "context_ra_out_circular_movement" else "context_ra_in_circular_movement"
                 14 -> "context_ra_forward"
                 16, 17 -> "context_ra_boardferry"
                 18 -> "context_ra_finish"
                 else -> "context_ra_via"
+            }
+        }
+
+        private enum class TurnShape {
+            SLIGHT,
+            NORMAL,
+            SHARP
+        }
+
+        private fun resolveTurnShape(nextEventType: Int, turnAngle: Int): TurnShape {
+            return when (nextEventType) {
+                3 -> TurnShape.SLIGHT
+                5 -> TurnShape.SHARP
+                else -> {
+                    if (turnAngle < 0) {
+                        TurnShape.NORMAL
+                    } else {
+                        val normalized = ((turnAngle % 360) + 360) % 360
+                        val deflection = if (normalized > 180) 360 - normalized else normalized
+                        when {
+                            deflection <= 35 -> TurnShape.SLIGHT
+                            deflection >= 120 -> TurnShape.SHARP
+                            else -> TurnShape.NORMAL
+                        }
+                    }
+                }
             }
         }
 
