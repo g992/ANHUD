@@ -347,7 +347,7 @@ class SensorDataService : Service() {
         private const val ACTION_SENSOR_FLOAT_CHANGED = "com.salat.gbinder.SENSOR_FLOAT_CHANGED"
         private const val EXTRA_ID = "id"
         private const val EXTRA_VALUE = "value"
-        private const val SENSOR_ID_CAR_SPEED = 1048832
+        private const val SENSOR_ID_CAR_SPEED = 1055232
         private const val MS_TO_KMH = 3.6f
         private const val GPS_SPEED_WINDOW_POINTS = 3
         private const val GPS_MIN_UPDATE_INTERVAL_MS = 400L

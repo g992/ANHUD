@@ -1049,9 +1049,14 @@ class HudOverlayController(private val context: Context) {
                 FrameLayout.LayoutParams.WRAP_CONTENT,
                 FrameLayout.LayoutParams.WRAP_CONTENT
             )
+            gravity = Gravity.CENTER
+            textAlignment = View.TEXT_ALIGNMENT_CENTER
             setTextColor(Color.WHITE)
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 20f)
             setTypeface(typeface, Typeface.BOLD)
+            val speedometerWidthPx = paint.measureText("888").roundToInt().coerceAtLeast(1)
+            minWidth = speedometerWidthPx
+            maxWidth = speedometerWidthPx
         }
 
         val clockText = TextView(displayContext).apply {
@@ -1379,6 +1384,7 @@ class HudOverlayController(private val context: Context) {
         val hudSpeedGpsStatusVisible = !previewHudSpeed &&
             hudSpeedGpsStatusEnabled &&
             !state.hudSpeedHasCamera
+        val hudSpeedTransparentFillVisible = !previewHudSpeed && !state.hudSpeedHasCamera
         val hudSpeedLimitValue = if (previewHudSpeed) {
             PREVIEW_HUDSPEED_LIMIT_VALUE
         } else {
@@ -1453,7 +1459,8 @@ class HudOverlayController(private val context: Context) {
             hudSpeedLimitEnabled,
             hudSpeedLimitTextScale,
             hudSpeedGpsStatusVisible,
-            hudSpeedHasGps
+            hudSpeedHasGps,
+            hudSpeedTransparentFillVisible
         )
         updateHudSpeedOverspeed(hudSpeedLimitOverspeed)
         updateRoadCamera(state.roadCameraIcon, roadCameraDistanceText, roadCameraAllowed, previewRoadCamera)
@@ -1494,7 +1501,7 @@ class HudOverlayController(private val context: Context) {
             val hasCameraData = state.hudSpeedHasCamera &&
                 state.hudSpeedDistanceMeters != null &&
                 !shouldHideHudSpeed(state, showPreview)
-            hasCameraData || hudSpeedGpsStatusVisible
+            hasCameraData || hudSpeedGpsStatusVisible || hudSpeedTransparentFillVisible
         }
         val speedometerVisible = if (showPreview) previewSpeedometer else state.speedKmh != null
         val clockVisible = if (showPreview) previewClock else true
@@ -1786,11 +1793,13 @@ class HudOverlayController(private val context: Context) {
         showLimit: Boolean,
         limitTextScale: Float,
         showGpsStatus: Boolean,
-        hasGps: Boolean
+        hasGps: Boolean,
+        fillTransparentBackground: Boolean
     ) {
         val gpsStatusMode = showGpsStatus
+        val transparentFillMode = fillTransparentBackground
         val distanceVisible = distanceText.isNotBlank()
-        if (!distanceVisible && !gpsStatusMode) {
+        if (!distanceVisible && !gpsStatusMode && !transparentFillMode) {
             hudSpeedContainer?.visibility = View.GONE
             return
         }
@@ -1804,6 +1813,7 @@ class HudOverlayController(private val context: Context) {
         fullLayout.visibility = if (useFullLayout) View.VISIBLE else View.GONE
         compactLayout.visibility = if (useFullLayout) View.GONE else View.VISIBLE
         hudSpeedActiveLayout = if (useFullLayout) fullLayout else compactLayout
+        hudSpeedContent?.setBackgroundColor(Color.TRANSPARENT)
         if (useFullLayout) {
             val icon = hudSpeedFullIcon ?: return
             val rightColumn = hudSpeedFullRight
@@ -1811,18 +1821,25 @@ class HudOverlayController(private val context: Context) {
             val distance = hudSpeedFullDistance ?: return
             val limit = hudSpeedFullLimit ?: return
             val gpsBadge = hudSpeedFullGpsBadge
-            if (gpsStatusMode) {
-                icon.setImageDrawable(null)
-                icon.clearColorFilter()
-                icon.visibility = View.GONE
-                gpsBadge?.setImageResource(resolveHudSpeedGpsIcon(hasGps))
-                gpsBadge?.setColorFilter(resolveHudSpeedGpsColor(hasGps))
-                gpsBadge?.visibility = View.VISIBLE
-                rightColumn?.visibility = View.GONE
-                limit.visibility = View.GONE
-                distance.visibility = View.GONE
+            if (gpsStatusMode || transparentFillMode) {
+                gpsBadge?.setImageDrawable(null)
+                gpsBadge?.clearColorFilter()
+                gpsBadge?.visibility = View.GONE
+                if (gpsStatusMode) {
+                    icon.setImageResource(resolveHudSpeedGpsIcon(hasGps))
+                    icon.setColorFilter(resolveHudSpeedGpsColor(hasGps))
+                    icon.visibility = View.VISIBLE
+                } else {
+                    icon.setImageDrawable(null)
+                    icon.clearColorFilter()
+                    icon.visibility = View.INVISIBLE
+                }
+                val clearOnly = transparentFillMode
+                rightColumn?.visibility = if (clearOnly) View.INVISIBLE else View.GONE
+                limit.visibility = if (clearOnly) View.INVISIBLE else View.GONE
+                distance.visibility = if (clearOnly) View.INVISIBLE else View.GONE
                 direction.setImageDrawable(null)
-                direction.visibility = View.GONE
+                direction.visibility = if (clearOnly) View.INVISIBLE else View.GONE
                 return
             }
             gpsBadge?.setImageDrawable(null)
@@ -1862,17 +1879,24 @@ class HudOverlayController(private val context: Context) {
         val leftColumn = hudSpeedCompactLeft
         val rightColumn = hudSpeedCompactRight
         val gpsBadge = hudSpeedCompactGpsBadge
-        if (gpsStatusMode) {
-            icon.setImageDrawable(null)
-            icon.clearColorFilter()
-            icon.visibility = View.GONE
-            gpsBadge?.setImageResource(resolveHudSpeedGpsIcon(hasGps))
-            gpsBadge?.setColorFilter(resolveHudSpeedGpsColor(hasGps))
-            gpsBadge?.visibility = View.VISIBLE
+        if (gpsStatusMode || transparentFillMode) {
+            gpsBadge?.setImageDrawable(null)
+            gpsBadge?.clearColorFilter()
+            gpsBadge?.visibility = View.GONE
+            if (gpsStatusMode) {
+                icon.setImageResource(resolveHudSpeedGpsIcon(hasGps))
+                icon.setColorFilter(resolveHudSpeedGpsColor(hasGps))
+                icon.visibility = View.VISIBLE
+            } else {
+                icon.setImageDrawable(null)
+                icon.clearColorFilter()
+                icon.visibility = View.INVISIBLE
+            }
+            val clearOnly = transparentFillMode
             direction.setImageDrawable(null)
-            direction.visibility = View.GONE
-            distance.visibility = View.GONE
-            rightColumn?.visibility = View.GONE
+            direction.visibility = if (clearOnly) View.INVISIBLE else View.GONE
+            distance.visibility = if (clearOnly) View.INVISIBLE else View.GONE
+            rightColumn?.visibility = if (clearOnly) View.INVISIBLE else View.GONE
             return
         }
         gpsBadge?.setImageDrawable(null)
@@ -2179,6 +2203,11 @@ class HudOverlayController(private val context: Context) {
             positionView(it, trafficLightPositionDp, trafficLightScale, trafficLightAlpha, metrics.density, containerWidth, containerHeight)
         }
         speedometerView?.let {
+            if (previewMode && previewTarget == OverlayBroadcasts.PREVIEW_TARGET_SPEEDOMETER) {
+                it.background = ContextCompat.getDrawable(it.context, R.drawable.bg_nav_block_outline)
+            } else {
+                it.background = null
+            }
             positionView(it, speedometerPositionDp, speedometerScale, speedometerAlpha, metrics.density, containerWidth, containerHeight)
         }
         clockView?.let {
@@ -2285,6 +2314,10 @@ class HudOverlayController(private val context: Context) {
         if (scaledWidth <= 0f || scaledHeight <= 0f) {
             return
         }
+        // Keep anchoring consistent: scaling should expand from top-left,
+        // otherwise centered pivot creates a visual gap near container edges.
+        view.pivotX = 0f
+        view.pivotY = 0f
         view.scaleX = scale
         view.scaleY = scale
         view.alpha = alpha

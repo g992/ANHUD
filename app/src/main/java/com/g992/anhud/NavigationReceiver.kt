@@ -649,12 +649,28 @@ class NavigationReceiver : BroadcastReceiver() {
 
         private fun sendNativeNavUpdate(context: Context) {
             val state = NavigationHudStore.snapshot()
+            if (!OverlayPrefs.nativeNavEnabled(context)) {
+                Log.d(TAG, "Native nav disabled in settings, skipping start/update")
+                return
+            }
             val maneuverType = state.maneuverType.trim()
             val street = state.rawNextStreet.trim()
-            val distanceText = state.rawNextText.trim()
+            val maneuverDistanceMeters = resolveManeuverDistanceMeters(state)
+            if (shouldHideNativeNavigationByDistance(context, maneuverDistanceMeters)) {
+                val thresholdMeters = OverlayPrefs.hideTurnWhenFarDistanceMeters(context)
+                if (NativeNavigationController.isActive()) {
+                    Log.d(
+                        TAG,
+                        "Stopping native navigation: maneuver distance $maneuverDistanceMeters m exceeds threshold $thresholdMeters m"
+                    )
+                    NativeNavigationController.stopNavigation(context)
+                }
+                lastNativeNavPayload = null
+                return
+            }
             val destinationDistanceText = state.rawDistance.trim()
             val timeText = state.rawTime.trim()
-            val distanceMeters = parseDistanceMeters(distanceText) ?: 0
+            val distanceMeters = maneuverDistanceMeters ?: 0
             val destinationDistanceMeters = parseDistanceMeters(destinationDistanceText) ?: 0
             val etaSeconds = parseEtaSeconds(timeText) ?: 0
             val turnId = resolveTurnId(context, maneuverType)
@@ -715,6 +731,36 @@ class NavigationReceiver : BroadcastReceiver() {
                 TAG,
                 "Native nav update sent: turnId=$turnId street=$street dist=$distanceMeters dest=$destinationDistanceMeters eta=$etaSeconds"
             )
+        }
+
+        private fun shouldHideNativeNavigationByDistance(
+            context: Context,
+            maneuverDistanceMeters: Int?
+        ): Boolean {
+            if (!OverlayPrefs.hideTurnWhenFarEnabled(context)) {
+                return false
+            }
+            val distanceMeters = maneuverDistanceMeters ?: return false
+            val thresholdMeters = OverlayPrefs.hideTurnWhenFarDistanceMeters(context)
+            return distanceMeters > thresholdMeters
+        }
+
+        private fun resolveManeuverDistanceMeters(state: NavigationHudState): Int? {
+            val rawNextTextWithUnit = appendUnitIfMissing(state.rawNextText, state.distanceUnit)
+            parseDistanceMeters(rawNextTextWithUnit)?.let { return it }
+            parseDistanceMeters(state.primaryText)?.let { return it }
+            return null
+        }
+
+        private fun appendUnitIfMissing(text: String, unit: String): String {
+            val trimmed = text.trim()
+            if (trimmed.isBlank() || unit.isBlank()) {
+                return text
+            }
+            if (!trimmed.matches(Regex("\\d+(?:[.,]\\d+)?"))) {
+                return text
+            }
+            return "$trimmed $unit"
         }
 
         private fun canSendArrowUpdate(): Boolean {

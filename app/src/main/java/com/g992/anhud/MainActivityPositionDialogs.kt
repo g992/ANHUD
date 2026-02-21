@@ -2,6 +2,7 @@ package com.g992.anhud
 
 import android.graphics.PointF
 import android.util.TypedValue
+import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
@@ -123,6 +124,13 @@ internal fun MainActivity.openPositionDialog(
     val navSecondaryBasePx = previewNavSecondary.textSize
     val navTimeBasePx = previewNavTime.textSize
     val speedLimitBasePx = previewSpeedLimit.textSize
+    previewSpeedometer.gravity = Gravity.CENTER
+    previewSpeedometer.textAlignment = View.TEXT_ALIGNMENT_CENTER
+    val previewSpeedometerWidthPx = previewSpeedometer.paint.measureText("888")
+        .roundToInt()
+        .coerceAtLeast(1)
+    previewSpeedometer.minWidth = previewSpeedometerWidthPx
+    previewSpeedometer.maxWidth = previewSpeedometerWidthPx
 
     fun applyNavTextScale(scale: Float) {
         previewNavPrimary.setTextSize(TypedValue.COMPLEX_UNIT_PX, navPrimaryBasePx * scale)
@@ -349,6 +357,11 @@ internal fun MainActivity.openPositionDialog(
             } else {
                 OverlayPrefs.navAlpha(activity).coerceIn(0f, 1f)
             }
+        }
+        if (target == OverlayTarget.SPEEDOMETER) {
+            previewSpeedometer.background = ContextCompat.getDrawable(activity, R.drawable.bg_nav_block_outline)
+        } else {
+            previewSpeedometer.background = null
         }
         if (showArrow) {
             positionPreviewView(

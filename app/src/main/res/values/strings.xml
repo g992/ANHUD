@@ -89,7 +89,7 @@
     <string name="preview_street_text">Пушкина</string>
     <string name="preview_time_text">1 ч 10 мин (12:00)</string>
     <string name="preview_speed_limit_text">100</string>
-    <string name="preview_speedometer_text">88</string>
+    <string name="preview_speedometer_text">100</string>
     <string name="preview_clock_text">12:34</string>
     <string name="preview_hudspeed_distance">500м</string>
     <string name="preview_road_camera_distance">460м</string>
