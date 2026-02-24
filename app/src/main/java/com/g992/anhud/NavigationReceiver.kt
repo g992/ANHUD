@@ -294,6 +294,65 @@ class NavigationReceiver : BroadcastReceiver() {
             ACTION_NATIVE_NAV_STOP -> {
                 endNavigation(context, action, "штатная навигация: стоп")
             }
+            ACTION_HEADUNIT_NAVIGATION_UPDATE -> {
+                if (!OverlayPrefs.headunitNavEnabled(context)) {
+                    return
+                }
+                try {
+                    val distanceMeters = intent.getIntExtra(EXTRA_HEADUNIT_DISTANCE_METERS, -1)
+                    val timeSeconds = intent.getIntExtra(EXTRA_HEADUNIT_TIME_SECONDS, -1)
+                    val road = normalizeText(intent.getStringExtra(EXTRA_HEADUNIT_ROAD).orEmpty())
+                    val nextEventType = intent.getIntExtra(EXTRA_HEADUNIT_NEXT_EVENT_TYPE, 0)
+                    val turnSide = intent.getIntExtra(EXTRA_HEADUNIT_TURN_SIDE, TURN_SIDE_UNSPECIFIED)
+                    val turnNumber = intent.getIntExtra(EXTRA_HEADUNIT_TURN_NUMBER, -1)
+                    val turnAngle = intent.getIntExtra(EXTRA_HEADUNIT_TURN_ANGLE, -1)
+                    val actionText = normalizeText(intent.getStringExtra(EXTRA_HEADUNIT_ACTION_TEXT).orEmpty())
+                    Log.d(
+                        TAG,
+                        "Headunit nav: distance=$distanceMeters m time=$timeSeconds s road=\"$road\" eventType=$nextEventType side=$turnSide action=\"$actionText\""
+                    )
+                    UiLogStore.append(
+                        LogCategory.NAVIGATION,
+                        "headunit: ${distanceMeters}м ${timeSeconds}с улица=\"$road\" event=$nextEventType side=$turnSide действие=\"$actionText\""
+                    )
+                    val primaryText = when {
+                        distanceMeters >= 0 && actionText.isNotBlank() -> "$distanceMeters м - $actionText"
+                        distanceMeters >= 0 -> "$distanceMeters м"
+                        actionText.isNotBlank() -> actionText
+                        else -> ""
+                    }
+                    val rawNextText = if (distanceMeters >= 0) "$distanceMeters м" else ""
+                    val distanceUnit = if (distanceMeters >= 0) "м" else ""
+                    val rawTime = if (timeSeconds >= 0) "${timeSeconds} сек" else ""
+                    val maneuverTypeKey = headunitEventTypeToManeuverKey(
+                        nextEventType,
+                        turnSide,
+                        turnNumber,
+                        turnAngle
+                    )
+                    NavigationHudStore.update { state ->
+                        state.copy(
+                            maneuverBitmap = null,
+                            primaryText = primaryText.ifBlank { state.primaryText },
+                            secondaryText = road.ifBlank { state.secondaryText },
+                            maneuverType = maneuverTypeKey.ifBlank { state.maneuverType },
+                            source = SOURCE_HEADUNIT,
+                            routeActive = true,
+                            lastUpdated = System.currentTimeMillis(),
+                            lastAction = action,
+                            rawNextText = rawNextText.ifBlank { state.rawNextText },
+                            rawNextStreet = road.ifBlank { state.rawNextStreet },
+                            rawTime = rawTime.ifBlank { state.rawTime },
+                            distanceUnit = distanceUnit.ifBlank { state.distanceUnit }
+                        )
+                    }
+                    val state = NavigationHudStore.snapshot()
+                    maybeUpdateNativeNavigation(context, state, NativeNavUpdateTrigger.DISTANCE)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Headunit nav: failed to process broadcast", e)
+                    UiLogStore.append(LogCategory.NAVIGATION, "headunit ошибка: ${e.message}")
+                }
+            }
             ACTION_HUDSPEED_UPDATE -> {
                 val hasCamera = intent.getBooleanExtra(HUDSPEED_HAS_CAMERA, false)
                 val hasGps = intent.getBooleanExtra(HUDSPEED_HAS_GPS, false)
@@ -420,7 +479,20 @@ class NavigationReceiver : BroadcastReceiver() {
         const val ACTION_YANDEX_ROUTE_POLYLINE = "com.yandex.ROUTE_POLYLINE"
         const val ACTION_NATIVE_NAV_STOP = "com.g992.anhud.NATIVE_NAV_STOP"
         const val ACTION_HUDSPEED_UPDATE = "air.strelkasd.CAMERA_INFO_CHANGED"
+        const val ACTION_HEADUNIT_NAVIGATION_UPDATE = "com.andrerinas.headunitrevived.NAVIGATION_UPDATE"
         private const val ACTION_NAV_UPDATES_TIMEOUT = "nav_updates_timeout"
+
+        private const val EXTRA_HEADUNIT_DISTANCE_METERS = "distance_meters"
+        private const val EXTRA_HEADUNIT_TIME_SECONDS = "time_seconds"
+        private const val EXTRA_HEADUNIT_ROAD = "road"
+        private const val EXTRA_HEADUNIT_NEXT_EVENT_TYPE = "next_event_type"
+        private const val EXTRA_HEADUNIT_ACTION_TEXT = "action_text"
+        private const val EXTRA_HEADUNIT_TURN_SIDE = "turn_side"
+        private const val EXTRA_HEADUNIT_TURN_NUMBER = "turn_number"
+        private const val EXTRA_HEADUNIT_TURN_ANGLE = "turn_angle"
+        private const val TURN_SIDE_LEFT = 1
+        private const val TURN_SIDE_RIGHT = 2
+        private const val TURN_SIDE_UNSPECIFIED = 3
 
         const val EXTRA_MANEUVER_BITMAP = "maneuver_bitmap"
         const val EXTRA_MANEUVER_TYPE = "maneuver_type"
@@ -456,6 +528,7 @@ class NavigationReceiver : BroadcastReceiver() {
 
         private const val SOURCE_YANDEX = "yandex"
         private const val SOURCE_HUDSPEED = "hudspeed"
+        private const val SOURCE_HEADUNIT = "headunit"
         const val DEFAULT_NATIVE_TURN_ID = 101
         private const val MAX_SUPPORTED_TURN_ID = 150
 
@@ -471,6 +544,9 @@ class NavigationReceiver : BroadcastReceiver() {
         }
 
         private fun touchNavigatorIntentTimeout(context: Context, action: String) {
+            if (action == ACTION_HEADUNIT_NAVIGATION_UPDATE && !OverlayPrefs.headunitNavEnabled(context)) {
+                return
+            }
             if (!isNavigatorIntentAction(action)) {
                 return
             }
@@ -493,7 +569,88 @@ class NavigationReceiver : BroadcastReceiver() {
                 action == ACTION_YANDEX_NAV_ACTIVE ||
                 action == ACTION_YANDEX_ROADCAMERA ||
                 action == ACTION_YANDEX_TRAFFICLIGHT ||
-                action == ACTION_YANDEX_ROUTE_POLYLINE
+                action == ACTION_YANDEX_ROUTE_POLYLINE ||
+                action == ACTION_HEADUNIT_NAVIGATION_UPDATE
+        }
+
+        private fun headunitEventTypeToManeuverKey(
+            nextEventType: Int,
+            turnSide: Int,
+            turnNumber: Int,
+            turnAngle: Int
+        ): String {
+            val isLeft = turnSide == TURN_SIDE_LEFT
+            val isRight = turnSide == TURN_SIDE_RIGHT
+            val shape = resolveTurnShape(nextEventType, turnAngle)
+            return when (nextEventType.coerceIn(0, 31)) {
+                0 -> "context_ra_via"
+                1, 2 -> "context_ra_forward"
+                3, 4, 5 -> when (shape) {
+                    TurnShape.SLIGHT -> when {
+                        isLeft -> "context_ra_take_left"
+                        isRight -> "context_ra_take_right"
+                        else -> "context_ra_forward"
+                    }
+                    TurnShape.SHARP -> when {
+                        isLeft -> "context_ra_hard_turn_left"
+                        isRight -> "context_ra_hard_turn_right"
+                        else -> "context_ra_hard_turn_right"
+                    }
+                    TurnShape.NORMAL -> when {
+                        isLeft -> "context_ra_turn_left"
+                        isRight -> "context_ra_turn_right"
+                        else -> "context_ra_turn_right"
+                    }
+                }
+                6 -> when {
+                    isLeft -> "context_ra_turn_back_left"
+                    isRight -> "context_ra_turn_back_right"
+                    else -> "context_ra_turn_back_right"
+                }
+                7, 9, 10 -> when {
+                    isLeft -> "context_ra_take_left"
+                    isRight -> "context_ra_take_right"
+                    else -> "context_ra_take_right"
+                }
+                8 -> when {
+                    isLeft -> "context_ra_exit_left"
+                    isRight -> "context_ra_exit_right"
+                    else -> "context_ra_exit_right"
+                }
+                11 -> "context_ra_in_circular_movement"
+                12 -> "context_ra_out_circular_movement"
+                13 -> if (turnNumber > 0) "context_ra_out_circular_movement" else "context_ra_in_circular_movement"
+                14 -> "context_ra_forward"
+                16, 17 -> "context_ra_boardferry"
+                18 -> "context_ra_finish"
+                else -> "context_ra_via"
+            }
+        }
+
+        private enum class TurnShape {
+            SLIGHT,
+            NORMAL,
+            SHARP
+        }
+
+        private fun resolveTurnShape(nextEventType: Int, turnAngle: Int): TurnShape {
+            return when (nextEventType) {
+                3 -> TurnShape.SLIGHT
+                5 -> TurnShape.SHARP
+                else -> {
+                    if (turnAngle < 0) {
+                        TurnShape.NORMAL
+                    } else {
+                        val normalized = ((turnAngle % 360) + 360) % 360
+                        val deflection = if (normalized > 180) 360 - normalized else normalized
+                        when {
+                            deflection <= 35 -> TurnShape.SLIGHT
+                            deflection >= 120 -> TurnShape.SHARP
+                            else -> TurnShape.NORMAL
+                        }
+                    }
+                }
+            }
         }
 
         private fun scheduleNavigatorIntentTimeout(context: Context) {

@@ -166,6 +166,12 @@ class NavigationNotificationListener : NotificationListenerService() {
     }
 
     private fun endNavigation() {
+        val currentSource = NavigationHudStore.snapshot().source
+        if (OverlayPrefs.headunitNavEnabled(applicationContext) && currentSource == SOURCE_HEADUNIT) {
+            Log.d(TAG, "Navigation end skipped: current source is Headunit, not Yandex")
+            return
+        }
+
         Log.d(TAG, "Navigation ended via notification removal")
         UiLogStore.append(LogCategory.NAVIGATION, "навигация по уведомлению: стоп")
         NavigationReceiver.clearNavigatorIntentTimeout()
@@ -196,6 +202,7 @@ class NavigationNotificationListener : NotificationListenerService() {
         private const val ACTION_NAV_NOTIFICATION_ACTIVE = "notification.NAVIGATION_ACTIVE"
         private const val ACTION_NAV_NOTIFICATION_ENDED = "notification.NAVIGATION_ENDED"
         private const val SOURCE_YANDEX = "yandex"
+        private const val SOURCE_HEADUNIT = "headunit"
         private const val YANDEX_STATIC_NOTIFICATION_ID = 2
 
         // Yandex packages to listen for (same as PLUS_MONJ)

@@ -69,6 +69,7 @@ class MainActivity : ScaledActivity() {
     internal lateinit var requestInstallPermissionButton: Button
     internal lateinit var overlaySwitch: SwitchCompat
     internal lateinit var nativeNavSwitch: SwitchCompat
+    internal lateinit var headunitNavSwitch: SwitchCompat
     internal var mapToggleSwitch: SwitchCompat? = null
     private lateinit var settingsRoot: ScrollView
     internal lateinit var presetSpinner: Spinner
@@ -152,6 +153,7 @@ class MainActivity : ScaledActivity() {
         requestInstallPermissionButton = findViewById(R.id.requestInstallPermissionButton)
         overlaySwitch = findViewById(R.id.overlaySwitch)
         nativeNavSwitch = findViewById(R.id.nativeNavSwitch)
+        headunitNavSwitch = findViewById(R.id.headunitNavSwitch)
 //        mapToggleSwitch = findViewById(R.id.mapToggleSwitch)
         presetSpinner = findViewById(R.id.presetSpinner)
         savePresetButton = findViewById(R.id.savePresetButton)
@@ -243,6 +245,14 @@ class MainActivity : ScaledActivity() {
             if (!isChecked && NativeNavigationController.isActive()) {
                 NativeNavigationController.stopNavigation(this)
             }
+        }
+
+        headunitNavSwitch.isChecked = OverlayPrefs.headunitNavEnabled(this)
+        headunitNavSwitch.setOnCheckedChangeListener { _, isChecked ->
+            if (isSyncingUi) {
+                return@setOnCheckedChangeListener
+            }
+            OverlayPrefs.setHeadunitNavEnabled(this, isChecked)
         }
 
         mapToggleSwitch?.apply {

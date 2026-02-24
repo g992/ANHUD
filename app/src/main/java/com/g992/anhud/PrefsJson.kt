@@ -206,6 +206,7 @@ object PrefsJson {
         putBoolean("overlay_clock_enabled", OverlayPrefs.clockEnabled(context))
         putInt("overlay_traffic_light_max_active", OverlayPrefs.trafficLightMaxActive(context))
         putBoolean("native_nav_enabled", OverlayPrefs.nativeNavEnabled(context))
+        putBoolean("headunit_nav_enabled", OverlayPrefs.headunitNavEnabled(context))
         putBoolean("overlay_map_enabled", OverlayPrefs.mapEnabled(context))
         putInt("camera_timeout_near", OverlayPrefs.cameraTimeoutNear(context))
         putInt("camera_timeout_far", OverlayPrefs.cameraTimeoutFar(context))
