@@ -110,7 +110,7 @@ object NavigationHudStore {
             current.copy(
                 primaryText = "",
                 secondaryText = "",
-                speedKmh = null,
+                speedKmh = current.speedKmh,
                 speedLimit = if (preserveSpeedLimit) current.speedLimit else "",
                 arrival = "",
                 distance = "",

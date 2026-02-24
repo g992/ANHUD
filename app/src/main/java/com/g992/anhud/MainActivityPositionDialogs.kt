@@ -752,7 +752,7 @@ internal fun MainActivity.openPositionDialog(
         }
     })
 
-    val scaleMinPercent = 50
+    val scaleMinPercent = 25
     val scaleMaxPercent = when (target) {
         OverlayTarget.SPEEDOMETER -> 300
         OverlayTarget.CONTAINER -> 100

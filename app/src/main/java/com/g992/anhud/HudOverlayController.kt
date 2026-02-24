@@ -1049,6 +1049,8 @@ class HudOverlayController(private val context: Context) {
                 FrameLayout.LayoutParams.WRAP_CONTENT,
                 FrameLayout.LayoutParams.WRAP_CONTENT
             )
+            includeFontPadding = false
+            setPadding(0, 0, 0, 0)
             gravity = Gravity.CENTER
             textAlignment = View.TEXT_ALIGNMENT_CENTER
             setTextColor(Color.WHITE)
@@ -1064,6 +1066,8 @@ class HudOverlayController(private val context: Context) {
                 FrameLayout.LayoutParams.WRAP_CONTENT,
                 FrameLayout.LayoutParams.WRAP_CONTENT
             )
+            includeFontPadding = false
+            setPadding(0, 0, 0, 0)
             setTextColor(Color.WHITE)
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
             setTypeface(typeface, Typeface.BOLD)
@@ -1822,14 +1826,17 @@ class HudOverlayController(private val context: Context) {
             val limit = hudSpeedFullLimit ?: return
             val gpsBadge = hudSpeedFullGpsBadge
             if (gpsStatusMode || transparentFillMode) {
-                gpsBadge?.setImageDrawable(null)
-                gpsBadge?.clearColorFilter()
-                gpsBadge?.visibility = View.GONE
                 if (gpsStatusMode) {
-                    icon.setImageResource(resolveHudSpeedGpsIcon(hasGps))
-                    icon.setColorFilter(resolveHudSpeedGpsColor(hasGps))
-                    icon.visibility = View.VISIBLE
+                    icon.setImageDrawable(null)
+                    icon.clearColorFilter()
+                    icon.visibility = View.INVISIBLE
+                    gpsBadge?.setImageResource(resolveHudSpeedGpsIcon(hasGps))
+                    gpsBadge?.setColorFilter(resolveHudSpeedGpsColor(hasGps))
+                    gpsBadge?.visibility = View.VISIBLE
                 } else {
+                    gpsBadge?.setImageDrawable(null)
+                    gpsBadge?.clearColorFilter()
+                    gpsBadge?.visibility = View.GONE
                     icon.setImageDrawable(null)
                     icon.clearColorFilter()
                     icon.visibility = View.INVISIBLE
@@ -1880,14 +1887,17 @@ class HudOverlayController(private val context: Context) {
         val rightColumn = hudSpeedCompactRight
         val gpsBadge = hudSpeedCompactGpsBadge
         if (gpsStatusMode || transparentFillMode) {
-            gpsBadge?.setImageDrawable(null)
-            gpsBadge?.clearColorFilter()
-            gpsBadge?.visibility = View.GONE
             if (gpsStatusMode) {
-                icon.setImageResource(resolveHudSpeedGpsIcon(hasGps))
-                icon.setColorFilter(resolveHudSpeedGpsColor(hasGps))
-                icon.visibility = View.VISIBLE
+                icon.setImageDrawable(null)
+                icon.clearColorFilter()
+                icon.visibility = View.INVISIBLE
+                gpsBadge?.setImageResource(resolveHudSpeedGpsIcon(hasGps))
+                gpsBadge?.setColorFilter(resolveHudSpeedGpsColor(hasGps))
+                gpsBadge?.visibility = View.VISIBLE
             } else {
+                gpsBadge?.setImageDrawable(null)
+                gpsBadge?.clearColorFilter()
+                gpsBadge?.visibility = View.GONE
                 icon.setImageDrawable(null)
                 icon.clearColorFilter()
                 icon.visibility = View.INVISIBLE
