@@ -318,7 +318,7 @@ class NavigationReceiver : BroadcastReceiver() {
                     val rawNextText = if (distanceMeters >= 0) "$distanceMeters м" else ""
                     val distanceUnit = if (distanceMeters >= 0) "м" else ""
                     val rawTime = if (timeSeconds >= 0) "${timeSeconds} сек" else ""
-                    val maneuverTypeKey = headunitEventTypeToManeuverKey(nextEventType, turnSide, turnNumber, turnAngle)
+                    val maneuverTypeKey = headunitEventTypeToManeuverKey(nextEventType, turnSide, turnNumber, turnAngle, distanceMeters)
                     NavigationHudStore.update { state ->
                         state.copy(
                             // Headunit doesn't provide bitmap; force icon resolution from maneuverType.
@@ -566,7 +566,8 @@ class NavigationReceiver : BroadcastReceiver() {
             nextEventType: Int,
             turnSide: Int,
             turnNumber: Int,
-            turnAngle: Int
+            turnAngle: Int,
+            distanceMeters: Int
         ): String {
             val isLeft = turnSide == TURN_SIDE_LEFT
             val isRight = turnSide == TURN_SIDE_RIGHT
@@ -596,23 +597,23 @@ class NavigationReceiver : BroadcastReceiver() {
                     isRight -> "context_ra_turn_back_right"
                     else -> "context_ra_turn_back_right"
                 }
-                7, 9, 10 -> when {
-                    isLeft -> "context_ra_take_left"
-                    isRight -> "context_ra_take_right"
-                    else -> "context_ra_take_right"
-                }
-                8 -> when {
+                7, 8, 9 -> when { //Заезд/съезд на эстакаду + съезд
                     isLeft -> "context_ra_exit_left"
                     isRight -> "context_ra_exit_right"
                     else -> "context_ra_exit_right"
                 }
-                11 -> "context_ra_in_circular_movement"
-                12 -> "context_ra_out_circular_movement"
-                13 -> if (turnNumber > 0) "context_ra_out_circular_movement" else "context_ra_in_circular_movement"
-                14 -> "context_ra_forward"
-                16, 17 -> "context_ra_boardferry"
-                18 -> "context_ra_finish"
-                else -> "context_ra_via"
+                10 -> when { //вклинивание в основную полосу
+                    isLeft -> "context_ra_take_left"
+                    isRight -> "context_ra_take_right"
+                    else -> "context_ra_take_left"
+                }
+                11 -> "context_ra_in_circular_movement" //въезд на кольцо
+                12 -> "context_ra_out_circular_movement" //выезд с кольца
+                13 -> if (turnNumber > 0) "context_ra_out_circular_movement" else "context_ra_in_circular_movement" //въезд и сразу выезд с кольца
+                14 -> "context_ra_forward" //прямо
+                16, 17 -> "context_ra_boardferry" //паром
+                18 -> "context_ra_finish" //пункт назначения
+                else -> "context_lane_unknowndirection_large"
             }
         }
 
@@ -626,19 +627,20 @@ class NavigationReceiver : BroadcastReceiver() {
             return when (nextEventType) {
                 3 -> TurnShape.SLIGHT
                 5 -> TurnShape.SHARP
-                else -> {
-                    if (turnAngle < 0) {
-                        TurnShape.NORMAL
-                    } else {
-                        val normalized = ((turnAngle % 360) + 360) % 360
-                        val deflection = if (normalized > 180) 360 - normalized else normalized
-                        when {
-                            deflection <= 35 -> TurnShape.SLIGHT
-                            deflection >= 120 -> TurnShape.SHARP
-                            else -> TurnShape.NORMAL
-                        }
-                    }
-                }
+                else -> TurnShape.NORMAL
+//                else -> {
+//                    if (turnAngle < 0) {
+//                        TurnShape.NORMAL
+//                    } else {
+//                        val normalized = ((turnAngle % 360) + 360) % 360
+//                        val deflection = if (normalized > 180) 360 - normalized else normalized
+//                        when {
+//                            deflection <= 35 -> TurnShape.SLIGHT
+//                            deflection >= 120 -> TurnShape.SHARP
+//                            else -> TurnShape.NORMAL
+//                        }
+//                    }
+//                }
             }
         }
 
