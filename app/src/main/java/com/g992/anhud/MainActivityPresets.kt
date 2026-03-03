@@ -278,6 +278,7 @@ private fun MainActivity.notifyOverlaySettingsChangedFull() {
     val roadCameraPos = OverlayPrefs.roadCameraPositionDp(this)
     val trafficLightPos = OverlayPrefs.trafficLightPositionDp(this)
     val speedometerPos = OverlayPrefs.speedometerPositionDp(this)
+    val turnSignalsPos = OverlayPrefs.turnSignalsPositionDp(this)
     val clockPos = OverlayPrefs.clockPositionDp(this)
     val containerPos = OverlayPrefs.containerPositionDp(this)
     val containerSize = OverlayPrefs.containerSizeDp(this)
@@ -294,6 +295,7 @@ private fun MainActivity.notifyOverlaySettingsChangedFull() {
         roadCameraPosition = roadCameraPos,
         trafficLightPosition = trafficLightPos,
         speedometerPosition = speedometerPos,
+        turnSignalsPosition = turnSignalsPos,
         clockPosition = clockPos,
         navScale = OverlayPrefs.navScale(this),
         navTextScale = OverlayPrefs.navTextScale(this),
@@ -304,6 +306,7 @@ private fun MainActivity.notifyOverlaySettingsChangedFull() {
         roadCameraScale = OverlayPrefs.roadCameraScale(this),
         trafficLightScale = OverlayPrefs.trafficLightScale(this),
         speedometerScale = OverlayPrefs.speedometerScale(this),
+        turnSignalsScale = OverlayPrefs.turnSignalsScale(this),
         clockScale = OverlayPrefs.clockScale(this),
         navAlpha = OverlayPrefs.navAlpha(this),
         arrowAlpha = OverlayPrefs.arrowAlpha(this),
@@ -312,6 +315,7 @@ private fun MainActivity.notifyOverlaySettingsChangedFull() {
         roadCameraAlpha = OverlayPrefs.roadCameraAlpha(this),
         trafficLightAlpha = OverlayPrefs.trafficLightAlpha(this),
         speedometerAlpha = OverlayPrefs.speedometerAlpha(this),
+        turnSignalsAlpha = OverlayPrefs.turnSignalsAlpha(this),
         clockAlpha = OverlayPrefs.clockAlpha(this),
         containerAlpha = OverlayPrefs.containerAlpha(this),
         navEnabled = OverlayPrefs.navEnabled(this),
@@ -327,6 +331,8 @@ private fun MainActivity.notifyOverlaySettingsChangedFull() {
         speedLimitAlertEnabled = OverlayPrefs.speedLimitAlertEnabled(this),
         speedLimitAlertThreshold = OverlayPrefs.speedLimitAlertThreshold(this),
         speedometerEnabled = OverlayPrefs.speedometerEnabled(this),
+        speedometerShowUnitText = OverlayPrefs.speedometerShowUnitText(this),
+        turnSignalsEnabled = OverlayPrefs.turnSignalsEnabled(this),
         clockEnabled = OverlayPrefs.clockEnabled(this),
         trafficLightMaxActive = OverlayPrefs.trafficLightMaxActive(this),
         mapEnabled = OverlayPrefs.mapEnabled(this)

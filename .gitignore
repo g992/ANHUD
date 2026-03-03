@@ -37,13 +37,7 @@ captures/
 ./CLAUDE.md
 ./.claude/*
 /yandex_maps_mod_workspace/
-/HUDSPEED_decompile/
-/MDPI_decompile/
-/mhud_decompile/
-/PLUS_MONJ_decompile/
-/yandex_maps_mod_workspace/
 /YN_decompile/
-/extracted/
 /MODIFICATIONS.md
 /my-release-key.jks
 /CLAUDE.md
@@ -51,7 +45,6 @@ captures/
 /.claude/
 /app/release/
 /.kotlin/
-/mapkit/
 
 YN_Patch/*
 YN_Patch
@@ -60,4 +53,3 @@ YN_Patch
 /YN_src_extracted/
 /YM_src
 /YN_src
-/YN_Patch/

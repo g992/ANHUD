@@ -22,6 +22,7 @@ import android.provider.MediaStore
 import android.provider.Settings
 import android.text.Editable
 import android.text.TextWatcher
+import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -33,6 +34,8 @@ import android.widget.ProgressBar
 import android.widget.ScrollView
 import android.widget.SeekBar
 import android.widget.Spinner
+import android.widget.TableLayout
+import android.widget.TableRow
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.enableEdgeToEdge
@@ -84,6 +87,12 @@ class SettingsActivity : ScaledActivity() {
     private lateinit var updateInstallButton: View
     private lateinit var updateProgressBar: ProgressBar
     private lateinit var updateProgressText: TextView
+    private lateinit var cpuGraph: PerformanceGraphView
+    private lateinit var ramGraph: PerformanceGraphView
+    private lateinit var cpuGraphSummary: TextView
+    private lateinit var ramGraphSummary: TextView
+    private lateinit var topCpuTable: TableLayout
+    private lateinit var topCpuNote: TextView
 
     private var updateDownloadId: Long = -1L
     private var updatesTabIndex: Int = -1
@@ -148,6 +157,14 @@ class SettingsActivity : ScaledActivity() {
                 section.scrollView.post {
                     section.scrollView.fullScroll(View.FOCUS_DOWN)
                 }
+            }
+        }
+    }
+
+    private val performanceListener = object : PerformanceDebugMonitor.Listener {
+        override fun onSnapshotUpdated(snapshot: PerformanceDebugMonitor.Snapshot) {
+            runOnUiThread {
+                renderPerformanceSnapshot(snapshot)
             }
         }
     }
@@ -221,6 +238,12 @@ class SettingsActivity : ScaledActivity() {
         updateInstallButton = findViewById(R.id.updateInstallButton)
         updateProgressBar = findViewById(R.id.updateProgressBar)
         updateProgressText = findViewById(R.id.updateProgressText)
+        cpuGraph = findViewById(R.id.cpuGraphView)
+        ramGraph = findViewById(R.id.ramGraphView)
+        cpuGraphSummary = findViewById(R.id.cpuGraphSummary)
+        ramGraphSummary = findViewById(R.id.ramGraphSummary)
+        topCpuTable = findViewById(R.id.topCpuTable)
+        topCpuNote = findViewById(R.id.topCpuNote)
 
         setupTabs()
         setupGeneralSettings()
@@ -233,6 +256,7 @@ class SettingsActivity : ScaledActivity() {
 
     override fun onDestroy() {
         UiLogStore.unregisterListener(logListener)
+        PerformanceDebugMonitor.unregisterListener(performanceListener)
         super.onDestroy()
     }
 
@@ -638,6 +662,10 @@ class SettingsActivity : ScaledActivity() {
         intent.putExtra(OverlayBroadcasts.EXTRA_ROAD_CAMERA_ENABLED, OverlayPrefs.roadCameraEnabled(this))
         intent.putExtra(OverlayBroadcasts.EXTRA_TRAFFIC_LIGHT_ENABLED, OverlayPrefs.trafficLightEnabled(this))
         intent.putExtra(OverlayBroadcasts.EXTRA_SPEEDOMETER_ENABLED, OverlayPrefs.speedometerEnabled(this))
+        intent.putExtra(
+            OverlayBroadcasts.EXTRA_SPEEDOMETER_SHOW_UNIT_TEXT,
+            OverlayPrefs.speedometerShowUnitText(this)
+        )
         intent.putExtra(OverlayBroadcasts.EXTRA_CLOCK_ENABLED, OverlayPrefs.clockEnabled(this))
         intent.putExtra(OverlayBroadcasts.EXTRA_TRAFFIC_LIGHT_MAX_ACTIVE, OverlayPrefs.trafficLightMaxActive(this))
         intent.putExtra(OverlayBroadcasts.EXTRA_SPEED_LIMIT_ALERT_ENABLED, OverlayPrefs.speedLimitAlertEnabled(this))
@@ -726,6 +754,9 @@ class SettingsActivity : ScaledActivity() {
     }
 
     private fun setupDebugTab() {
+        cpuGraph.setLineColor(0xFFE57373.toInt())
+        ramGraph.setLineColor(0xFF4DB6AC.toInt())
+
         logSections[LogCategory.NAVIGATION] = LogSection(
             findViewById(R.id.navScroll),
             findViewById(R.id.navLogs)
@@ -739,6 +770,93 @@ class SettingsActivity : ScaledActivity() {
             findViewById(R.id.systemLogs)
         )
         UiLogStore.registerListener(logListener)
+        PerformanceDebugMonitor.registerListener(performanceListener)
+        renderPerformanceSnapshot(PerformanceDebugMonitor.currentSnapshot())
+    }
+
+    private fun renderPerformanceSnapshot(snapshot: PerformanceDebugMonitor.Snapshot) {
+        val cpuValues = snapshot.samples.map { it.systemCpuPercent }
+        val ramValues = snapshot.samples.map { it.ramUsedPercent }
+        cpuGraph.setValues(cpuValues)
+        ramGraph.setValues(ramValues)
+
+        val latest = snapshot.samples.lastOrNull()
+        if (latest == null) {
+            cpuGraphSummary.text = getString(R.string.performance_waiting_data)
+            ramGraphSummary.text = getString(R.string.performance_waiting_data)
+            renderTopCpuRows(emptyList())
+            topCpuNote.visibility = View.VISIBLE
+            topCpuNote.text = getString(R.string.performance_waiting_data)
+            return
+        }
+
+        cpuGraphSummary.text = getString(
+            R.string.performance_cpu_summary,
+            PerformanceDebugMonitor.formatPercent(latest.systemCpuPercent),
+            PerformanceDebugMonitor.formatPercent(latest.appCpuPercent)
+        ) + snapshot.systemCpuNote?.let { "\n$it" }.orEmpty()
+        ramGraphSummary.text = getString(
+            R.string.performance_ram_summary,
+            PerformanceDebugMonitor.formatPercent(latest.ramUsedPercent),
+            PerformanceDebugMonitor.formatMb(latest.ramUsedMb),
+            PerformanceDebugMonitor.formatMb(latest.ramTotalMb),
+            PerformanceDebugMonitor.formatMb(latest.appPssMb)
+        )
+
+        renderTopCpuRows(snapshot.topApps)
+        if (snapshot.topAppsNote.isNullOrBlank()) {
+            topCpuNote.visibility = View.GONE
+        } else {
+            topCpuNote.visibility = View.VISIBLE
+            topCpuNote.text = snapshot.topAppsNote
+        }
+    }
+
+    private fun renderTopCpuRows(topApps: List<PerformanceDebugMonitor.TopAppCpu>) {
+        if (topCpuTable.childCount > 1) {
+            topCpuTable.removeViews(1, topCpuTable.childCount - 1)
+        }
+
+        if (topApps.isEmpty()) {
+            val row = TableRow(this)
+            row.addView(makeTopCpuCell("—", 0.9f, Gravity.CENTER))
+            row.addView(makeTopCpuCell("—", 1.1f, Gravity.END))
+            row.addView(makeTopCpuCell("—", 1.0f, Gravity.END))
+            row.addView(makeTopCpuCell(getString(R.string.performance_no_active_apps), 4.0f, Gravity.START))
+            topCpuTable.addView(row)
+            return
+        }
+
+        topApps.take(10).forEachIndexed { index, app ->
+            val row = TableRow(this)
+            row.addView(makeTopCpuCell((index + 1).toString(), 0.9f, Gravity.CENTER))
+            row.addView(
+                makeTopCpuCell(
+                    PerformanceDebugMonitor.formatPercent(app.cpuPercent),
+                    1.1f,
+                    Gravity.END
+                )
+            )
+            row.addView(makeTopCpuCell(app.pid.toString(), 1.0f, Gravity.END))
+            row.addView(makeTopCpuCell(app.processName, 4.0f, Gravity.START))
+            topCpuTable.addView(row)
+        }
+    }
+
+    private fun makeTopCpuCell(text: String, weight: Float, gravity: Int): TextView {
+        return TextView(this).apply {
+            this.text = text
+            this.gravity = gravity
+            setTextColor(ContextCompat.getColor(this@SettingsActivity, R.color.white))
+            textSize = 12f
+            maxLines = 1
+            ellipsize = android.text.TextUtils.TruncateAt.END
+            layoutParams = TableRow.LayoutParams(0, TableRow.LayoutParams.WRAP_CONTENT, weight).apply {
+                marginEnd = dp(4)
+                topMargin = dp(2)
+                bottomMargin = dp(2)
+            }
+        }
     }
 
     private fun setupHelpTab() {

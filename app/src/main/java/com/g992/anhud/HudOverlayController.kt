@@ -13,6 +13,9 @@ import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import android.provider.Settings
+import android.text.SpannableStringBuilder
+import android.text.Spanned
+import android.text.style.RelativeSizeSpan
 import android.util.TypedValue
 import android.view.Gravity
 import android.view.LayoutInflater
@@ -53,6 +56,8 @@ class HudOverlayController(private val context: Context) {
         private const val HUDSPEED_HIDE_DISTANCE_METERS = 50
         private const val HUDSPEED_OVERSPEED_PADDING_DP = 8f
         private const val PREVIEW_SPEED_LIMIT_TEXT_SCALE = 1.3f
+        private const val SPEEDOMETER_UNIT_RELATIVE_SIZE = 1f / 3f
+        private const val TURN_SIGNAL_BLINK_INTERVAL_MS = 450L
     }
     private val handler = Handler(Looper.getMainLooper())
     private val displayManager = context.getSystemService(DisplayManager::class.java)
@@ -114,6 +119,9 @@ class HudOverlayController(private val context: Context) {
     private var roadCameraIconView: ImageView? = null
     private var roadCameraDistanceView: TextView? = null
     private var trafficLightContainer: LinearLayout? = null
+    private var turnSignalsContainer: LinearLayout? = null
+    private var turnSignalLeftView: ImageView? = null
+    private var turnSignalRightView: ImageView? = null
     private var clockView: TextView? = null
     private var currentDisplayId: Int? = null
     private var lastState: NavigationHudState = NavigationHudState()
@@ -130,6 +138,7 @@ class HudOverlayController(private val context: Context) {
     private var roadCameraPositionDp: PointF = OverlayPrefs.roadCameraPositionDp(context)
     private var trafficLightPositionDp: PointF = OverlayPrefs.trafficLightPositionDp(context)
     private var speedometerPositionDp: PointF = OverlayPrefs.speedometerPositionDp(context)
+    private var turnSignalsPositionDp: PointF = OverlayPrefs.turnSignalsPositionDp(context)
     private var clockPositionDp: PointF = OverlayPrefs.clockPositionDp(context)
     private var navScale: Float = OverlayPrefs.navScale(context)
     private var navTextScale: Float = OverlayPrefs.navTextScale(context)
@@ -140,6 +149,7 @@ class HudOverlayController(private val context: Context) {
     private var roadCameraScale: Float = OverlayPrefs.roadCameraScale(context)
     private var trafficLightScale: Float = OverlayPrefs.trafficLightScale(context)
     private var speedometerScale: Float = OverlayPrefs.speedometerScale(context)
+    private var turnSignalsScale: Float = OverlayPrefs.turnSignalsScale(context)
     private var clockScale: Float = OverlayPrefs.clockScale(context)
     private var navAlpha: Float = OverlayPrefs.navAlpha(context)
     private var arrowAlpha: Float = OverlayPrefs.arrowAlpha(context)
@@ -148,6 +158,7 @@ class HudOverlayController(private val context: Context) {
     private var roadCameraAlpha: Float = OverlayPrefs.roadCameraAlpha(context)
     private var trafficLightAlpha: Float = OverlayPrefs.trafficLightAlpha(context)
     private var speedometerAlpha: Float = OverlayPrefs.speedometerAlpha(context)
+    private var turnSignalsAlpha: Float = OverlayPrefs.turnSignalsAlpha(context)
     private var clockAlpha: Float = OverlayPrefs.clockAlpha(context)
     private var containerAlpha: Float = OverlayPrefs.containerAlpha(context)
     private var navEnabled: Boolean = OverlayPrefs.navEnabled(context)
@@ -164,6 +175,8 @@ class HudOverlayController(private val context: Context) {
     private var trafficLightMaxActive: Int = OverlayPrefs.trafficLightMaxActive(context)
     private var speedLimitAlertThreshold: Int = OverlayPrefs.speedLimitAlertThreshold(context)
     private var speedometerEnabled: Boolean = OverlayPrefs.speedometerEnabled(context)
+    private var speedometerShowUnitText: Boolean = OverlayPrefs.speedometerShowUnitText(context)
+    private var turnSignalsEnabled: Boolean = OverlayPrefs.turnSignalsEnabled(context)
     private var clockEnabled: Boolean = OverlayPrefs.clockEnabled(context)
     private var mapEnabled: Boolean = OverlayPrefs.mapEnabled(context)
     private var previewMode: Boolean = false
@@ -172,6 +185,11 @@ class HudOverlayController(private val context: Context) {
     private var clearOnDisablePending: Boolean = false
     private val speedLimitNumberRegex = Regex("\\d+")
     private var hudSpeedHideRunnable: Runnable? = null
+    private var turnSignalBlinkRunnable: Runnable? = null
+    private var turnSignalBlinkVisible: Boolean = true
+    private var turnSignalLeftActive: Boolean = false
+    private var turnSignalRightActive: Boolean = false
+    private var turnSignalsPreviewMode: Boolean = false
     private val clockTicker = object : Runnable {
         override fun run() {
             updateClockText()
@@ -245,6 +263,11 @@ class HudOverlayController(private val context: Context) {
                 target == OverlayBroadcasts.PREVIEW_TARGET_SPEEDOMETER ||
                 previewShowOthers
             )
+        val previewTurnSignals = showPreview && (
+            target == null ||
+                target == OverlayBroadcasts.PREVIEW_TARGET_TURN_SIGNALS ||
+                previewShowOthers
+            )
         val previewHudSpeed = showPreview && (
             target == null ||
                 target == OverlayBroadcasts.PREVIEW_TARGET_HUDSPEED ||
@@ -278,11 +301,12 @@ class HudOverlayController(private val context: Context) {
             buildTimeLine(state)
         }
         val speedValue = state.speedKmh?.coerceAtLeast(0)
-        val speedometerText = if (previewSpeedometer) {
+        val speedometerBaseText = if (previewSpeedometer) {
             context.getString(R.string.preview_speedometer_text)
         } else {
             speedValue?.toString().orEmpty()
         }
+        val speedometerText = formatSpeedometerText(speedometerBaseText)
         val speedLimitText = if (previewSpeed) {
             context.getString(R.string.preview_speed_limit_text)
         } else {
@@ -319,6 +343,10 @@ class HudOverlayController(private val context: Context) {
             previewArrow = previewArrow,
             previewSpeed = previewSpeed,
             previewSpeedometer = previewSpeedometer,
+            previewTurnSignals = previewTurnSignals,
+            turnSignalLeft = state.turnSignalLeft,
+            turnSignalRight = state.turnSignalRight,
+            turnSignalHazard = state.turnSignalHazard,
             hudSpeedHasCamera = state.hudSpeedHasCamera,
             hudSpeedHasGps = state.hudSpeedHasGps,
             hudSpeedDistanceMeters = state.hudSpeedDistanceMeters,
@@ -351,6 +379,10 @@ class HudOverlayController(private val context: Context) {
         val previewArrow: Boolean,
         val previewSpeed: Boolean,
         val previewSpeedometer: Boolean,
+        val previewTurnSignals: Boolean,
+        val turnSignalLeft: Boolean,
+        val turnSignalRight: Boolean,
+        val turnSignalHazard: Boolean,
         val hudSpeedHasCamera: Boolean,
         val hudSpeedHasGps: Boolean,
         val hudSpeedDistanceMeters: Int?,
@@ -408,6 +440,7 @@ class HudOverlayController(private val context: Context) {
         roadCameraPosition: PointF?,
         trafficLightPosition: PointF?,
         speedometerPosition: PointF?,
+        turnSignalsPosition: PointF?,
         clockPosition: PointF?,
         navScale: Float?,
         navTextScale: Float?,
@@ -418,6 +451,7 @@ class HudOverlayController(private val context: Context) {
         roadCameraScale: Float?,
         trafficLightScale: Float?,
         speedometerScale: Float?,
+        turnSignalsScale: Float?,
         clockScale: Float?,
         navAlpha: Float?,
         arrowAlpha: Float?,
@@ -426,6 +460,7 @@ class HudOverlayController(private val context: Context) {
         roadCameraAlpha: Float?,
         trafficLightAlpha: Float?,
         speedometerAlpha: Float?,
+        turnSignalsAlpha: Float?,
         clockAlpha: Float?,
         containerAlpha: Float?,
         navEnabled: Boolean?,
@@ -441,6 +476,8 @@ class HudOverlayController(private val context: Context) {
         speedLimitAlertEnabled: Boolean?,
         speedLimitAlertThreshold: Int?,
         speedometerEnabled: Boolean?,
+        speedometerShowUnitText: Boolean?,
+        turnSignalsEnabled: Boolean?,
         clockEnabled: Boolean?,
         trafficLightMaxActive: Int?,
         mapEnabled: Boolean?,
@@ -486,6 +523,9 @@ class HudOverlayController(private val context: Context) {
             if (speedometerPosition != null) {
                 speedometerPositionDp = speedometerPosition
             }
+            if (turnSignalsPosition != null) {
+                turnSignalsPositionDp = turnSignalsPosition
+            }
             if (clockPosition != null) {
                 clockPositionDp = clockPosition
             }
@@ -517,6 +557,9 @@ class HudOverlayController(private val context: Context) {
             if (speedometerScale != null) {
                 this.speedometerScale = speedometerScale.coerceAtLeast(0f)
             }
+            if (turnSignalsScale != null) {
+                this.turnSignalsScale = turnSignalsScale.coerceAtLeast(0f)
+            }
             if (clockScale != null) {
                 this.clockScale = clockScale.coerceAtLeast(0f)
             }
@@ -540,6 +583,9 @@ class HudOverlayController(private val context: Context) {
             }
             if (speedometerAlpha != null) {
                 this.speedometerAlpha = speedometerAlpha.coerceIn(0f, 1f)
+            }
+            if (turnSignalsAlpha != null) {
+                this.turnSignalsAlpha = turnSignalsAlpha.coerceIn(0f, 1f)
             }
             if (clockAlpha != null) {
                 this.clockAlpha = clockAlpha.coerceIn(0f, 1f)
@@ -588,6 +634,12 @@ class HudOverlayController(private val context: Context) {
             if (speedometerEnabled != null) {
                 this.speedometerEnabled = speedometerEnabled
             }
+            if (speedometerShowUnitText != null) {
+                this.speedometerShowUnitText = speedometerShowUnitText
+            }
+            if (turnSignalsEnabled != null) {
+                this.turnSignalsEnabled = turnSignalsEnabled
+            }
             if (clockEnabled != null) {
                 this.clockEnabled = clockEnabled
             }
@@ -619,6 +671,7 @@ class HudOverlayController(private val context: Context) {
             clearDisplayRetry()
             handler.removeCallbacks(displayChangeRefreshRunnable)
             displayChangeRefreshPending = false
+            stopTurnSignalBlinking()
             displayManager?.unregisterDisplayListener(displayListener)
             removeOverlay()
         }
@@ -1056,10 +1109,43 @@ class HudOverlayController(private val context: Context) {
             setTextColor(Color.WHITE)
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 20f)
             setTypeface(typeface, Typeface.BOLD)
-            val speedometerWidthPx = paint.measureText("888").roundToInt().coerceAtLeast(1)
+            val speedometerWidthPx = max(
+                paint.measureText("888"),
+                paint.measureText(displayContext.getString(R.string.speedometer_unit_text))
+            ).roundToInt().coerceAtLeast(1)
             minWidth = speedometerWidthPx
             maxWidth = speedometerWidthPx
         }
+
+        val turnSignalsBlock = LinearLayout(displayContext).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            layoutParams = FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                FrameLayout.LayoutParams.WRAP_CONTENT
+            )
+            visibility = View.GONE
+        }
+        val turnArrowSize = (24 * metrics.density).roundToInt().coerceAtLeast(1)
+        val turnArrowGap = (8 * metrics.density).roundToInt()
+        val turnArrowColor = ContextCompat.getColor(displayContext, R.color.traffic_light_green_primary)
+        val turnSignalLeft = ImageView(displayContext).apply {
+            layoutParams = LinearLayout.LayoutParams(turnArrowSize, turnArrowSize).apply {
+                marginEnd = turnArrowGap
+            }
+            scaleType = ImageView.ScaleType.FIT_CENTER
+            setImageResource(R.drawable.keyboard_double_arrow_left_24dp_e3e3e3_fill0_wght400_grad0_opsz24)
+            setColorFilter(turnArrowColor)
+        }
+        val turnSignalRight = ImageView(displayContext).apply {
+            layoutParams = LinearLayout.LayoutParams(turnArrowSize, turnArrowSize)
+            scaleType = ImageView.ScaleType.FIT_CENTER
+            rotation = 180f
+            setImageResource(R.drawable.keyboard_double_arrow_left_24dp_e3e3e3_fill0_wght400_grad0_opsz24)
+            setColorFilter(turnArrowColor)
+        }
+        turnSignalsBlock.addView(turnSignalLeft)
+        turnSignalsBlock.addView(turnSignalRight)
 
         val clockText = TextView(displayContext).apply {
             layoutParams = FrameLayout.LayoutParams(
@@ -1080,6 +1166,7 @@ class HudOverlayController(private val context: Context) {
         root.addView(roadCameraBlock)
         root.addView(trafficLightBlock)
         root.addView(speedometerText)
+        root.addView(turnSignalsBlock)
         root.addView(clockText)
 
         val layoutParams = WindowManager.LayoutParams(
@@ -1133,6 +1220,9 @@ class HudOverlayController(private val context: Context) {
             roadCameraDistanceView = roadCameraDistanceText
             trafficLightContainer = trafficLightBlock
             speedometerView = speedometerText
+            turnSignalsContainer = turnSignalsBlock
+            turnSignalLeftView = turnSignalLeft
+            turnSignalRightView = turnSignalRight
             clockView = clockText
             currentDisplayId = display.displayId
             applyNavTextScale()
@@ -1176,14 +1266,19 @@ class HudOverlayController(private val context: Context) {
             roadCameraDistanceView = null
             trafficLightContainer = null
             speedometerView = null
+            turnSignalsContainer = null
+            turnSignalLeftView = null
+            turnSignalRightView = null
             clockView = null
             currentDisplayId = null
+            stopTurnSignalBlinking()
             stopClockTicker()
         }
     }
 
     private fun removeOverlay() {
         cancelHudSpeedHide()
+        stopTurnSignalBlinking()
         removeMapView()
         val wm = windowManager
         val view = overlayView
@@ -1231,6 +1326,9 @@ class HudOverlayController(private val context: Context) {
         roadCameraDistanceView = null
         trafficLightContainer = null
         speedometerView = null
+        turnSignalsContainer = null
+        turnSignalLeftView = null
+        turnSignalRightView = null
         clockView = null
         currentDisplayId = null
         stopClockTicker()
@@ -1238,6 +1336,7 @@ class HudOverlayController(private val context: Context) {
 
     private fun clearOverlayForDisable() {
         cancelHudSpeedHide()
+        stopTurnSignalBlinking()
         val container = overlayView
         if (container == null) {
             removeOverlay()
@@ -1254,6 +1353,7 @@ class HudOverlayController(private val context: Context) {
         roadCameraContainer?.visibility = View.GONE
         trafficLightContainer?.visibility = View.GONE
         speedometerView?.visibility = View.GONE
+        turnSignalsContainer?.visibility = View.GONE
         clockView?.visibility = View.GONE
         container.setBackgroundColor(Color.TRANSPARENT)
         container.visibility = View.VISIBLE
@@ -1267,6 +1367,7 @@ class HudOverlayController(private val context: Context) {
     }
 
     private fun clearOverlayForRedraw() {
+        stopTurnSignalBlinking()
         val container = overlayView ?: return
         navContainer?.visibility = View.GONE
         arrowContainer?.visibility = View.GONE
@@ -1275,6 +1376,7 @@ class HudOverlayController(private val context: Context) {
         roadCameraContainer?.visibility = View.GONE
         trafficLightContainer?.visibility = View.GONE
         speedometerView?.visibility = View.GONE
+        turnSignalsContainer?.visibility = View.GONE
         clockView?.visibility = View.GONE
         container.background = null
         container.setBackgroundColor(Color.TRANSPARENT)
@@ -1311,6 +1413,11 @@ class HudOverlayController(private val context: Context) {
                 target == OverlayBroadcasts.PREVIEW_TARGET_SPEEDOMETER ||
                 previewShowOthers
             )
+        val previewTurnSignals = showPreview && (
+            target == null ||
+                target == OverlayBroadcasts.PREVIEW_TARGET_TURN_SIGNALS ||
+                previewShowOthers
+            )
         val previewHudSpeed = showPreview && (
             target == null ||
                 target == OverlayBroadcasts.PREVIEW_TARGET_HUDSPEED ||
@@ -1335,6 +1442,7 @@ class HudOverlayController(private val context: Context) {
         val arrowAllowed = arrowEnabled || (showPreview && target == OverlayBroadcasts.PREVIEW_TARGET_ARROW)
         val speedAllowed = speedEnabled || (showPreview && target == OverlayBroadcasts.PREVIEW_TARGET_SPEED)
         val speedometerAllowed = speedometerEnabled || (showPreview && target == OverlayBroadcasts.PREVIEW_TARGET_SPEEDOMETER)
+        val turnSignalsAllowed = turnSignalsEnabled || (showPreview && target == OverlayBroadcasts.PREVIEW_TARGET_TURN_SIGNALS)
         val hudSpeedAllowed = hudSpeedEnabled || (showPreview && target == OverlayBroadcasts.PREVIEW_TARGET_HUDSPEED)
         val roadCameraAllowed = roadCameraEnabled || (showPreview && target == OverlayBroadcasts.PREVIEW_TARGET_ROAD_CAMERA)
         val trafficLightAllowed = trafficLightEnabled || (showPreview && target == OverlayBroadcasts.PREVIEW_TARGET_TRAFFIC_LIGHT)
@@ -1366,11 +1474,12 @@ class HudOverlayController(private val context: Context) {
         }
 
         val speedValue = state.speedKmh?.coerceAtLeast(0)
-        val speedometerText = if (previewSpeedometer) {
+        val speedometerBaseText = if (previewSpeedometer) {
             context.getString(R.string.preview_speedometer_text)
         } else {
             speedValue?.toString().orEmpty()
         }
+        val speedometerText = formatSpeedometerText(speedometerBaseText)
         val speedLimitText = state.speedLimit
         val speedLimitValue = parseSpeedLimitValue(speedLimitText)
         val overspeed = !previewSpeed &&
@@ -1453,7 +1562,23 @@ class HudOverlayController(private val context: Context) {
         setTextOrHide(secondary, secondaryText)
         setTextOrHide(time, timeText)
         updateSpeedLimit(speedLimitText, previewSpeed, overspeed)
-        speedometer?.let { setTextOrHide(it, speedometerText) }
+        speedometer?.let { setSpeedometerTextOrHide(it, speedometerText) }
+        val turnSignalLeft = if (previewTurnSignals) {
+            true
+        } else {
+            state.turnSignalLeft || state.turnSignalHazard
+        }
+        val turnSignalRight = if (previewTurnSignals) {
+            true
+        } else {
+            state.turnSignalRight || state.turnSignalHazard
+        }
+        updateTurnSignals(
+            allowed = turnSignalsAllowed,
+            preview = previewTurnSignals,
+            leftActive = turnSignalLeft,
+            rightActive = turnSignalRight
+        )
         val hudSpeedLimitTextScale = PREVIEW_SPEED_LIMIT_TEXT_SCALE
         updateHudSpeed(
             hudSpeedCamType,
@@ -1508,6 +1633,7 @@ class HudOverlayController(private val context: Context) {
             hasCameraData || hudSpeedGpsStatusVisible || hudSpeedTransparentFillVisible
         }
         val speedometerVisible = if (showPreview) previewSpeedometer else state.speedKmh != null
+        val turnSignalsVisible = turnSignalsAllowed && (previewTurnSignals || turnSignalLeft || turnSignalRight)
         val clockVisible = if (showPreview) previewClock else true
         val roadCameraVisible = roadCameraAllowed && (previewRoadCamera || roadCameraHasData)
         val trafficLightVisible = trafficLightAllowed && (previewTrafficLight || trafficLights.isNotEmpty())
@@ -1526,6 +1652,7 @@ class HudOverlayController(private val context: Context) {
             roadCameraVisible ||
             trafficLightVisible ||
             (speedometerAllowed && speedometerVisible) ||
+            turnSignalsVisible ||
             (clockAllowed && clockVisible)
         container?.visibility = if (showPreview || anyVisible) View.VISIBLE else View.GONE
 
@@ -1651,6 +1778,66 @@ class HudOverlayController(private val context: Context) {
         }
     }
 
+    private fun updateTurnSignals(
+        allowed: Boolean,
+        preview: Boolean,
+        leftActive: Boolean,
+        rightActive: Boolean
+    ) {
+        val container = turnSignalsContainer ?: return
+        turnSignalsPreviewMode = preview
+        turnSignalLeftActive = leftActive
+        turnSignalRightActive = rightActive
+        if (!allowed) {
+            stopTurnSignalBlinking()
+            container.visibility = View.GONE
+            return
+        }
+        val hasActive = leftActive || rightActive
+        if (!preview && !hasActive) {
+            stopTurnSignalBlinking()
+            container.visibility = View.GONE
+            return
+        }
+        if (preview) {
+            stopTurnSignalBlinking()
+        } else {
+            startTurnSignalBlinking()
+        }
+        applyTurnSignalVisibility()
+        container.visibility = View.VISIBLE
+    }
+
+    private fun applyTurnSignalVisibility() {
+        val left = turnSignalLeftView ?: return
+        val right = turnSignalRightView ?: return
+        val onPhase = turnSignalsPreviewMode || turnSignalBlinkVisible
+        left.visibility = if (turnSignalLeftActive && onPhase) View.VISIBLE else View.INVISIBLE
+        right.visibility = if (turnSignalRightActive && onPhase) View.VISIBLE else View.INVISIBLE
+    }
+
+    private fun startTurnSignalBlinking() {
+        if (turnSignalBlinkRunnable != null) {
+            return
+        }
+        turnSignalBlinkVisible = true
+        val runnable = object : Runnable {
+            override fun run() {
+                turnSignalBlinkVisible = !turnSignalBlinkVisible
+                applyTurnSignalVisibility()
+                handler.postDelayed(this, TURN_SIGNAL_BLINK_INTERVAL_MS)
+            }
+        }
+        turnSignalBlinkRunnable = runnable
+        handler.postDelayed(runnable, TURN_SIGNAL_BLINK_INTERVAL_MS)
+    }
+
+    private fun stopTurnSignalBlinking() {
+        turnSignalBlinkRunnable?.let { handler.removeCallbacks(it) }
+        turnSignalBlinkRunnable = null
+        turnSignalBlinkVisible = true
+    }
+
     private fun setTextOrHide(view: TextView, text: String) {
         if (text.isBlank()) {
             view.visibility = View.GONE
@@ -1658,6 +1845,40 @@ class HudOverlayController(private val context: Context) {
             view.text = text
             view.visibility = View.VISIBLE
         }
+    }
+
+    private fun setSpeedometerTextOrHide(view: TextView, text: String) {
+        if (text.isBlank()) {
+            view.visibility = View.GONE
+            return
+        }
+        val speedText = text.substringBefore('\n')
+        val unitText = text.substringAfter('\n', "")
+        view.text = if (unitText.isBlank()) {
+            speedText
+        } else {
+            val fullText = "$speedText\n$unitText"
+            val unitStart = speedText.length + 1
+            SpannableStringBuilder(fullText).apply {
+                setSpan(
+                    RelativeSizeSpan(SPEEDOMETER_UNIT_RELATIVE_SIZE),
+                    unitStart,
+                    fullText.length,
+                    Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+                )
+            }
+        }
+        view.visibility = View.VISIBLE
+    }
+
+    private fun formatSpeedometerText(speedText: String): String {
+        if (speedText.isBlank()) {
+            return ""
+        }
+        if (!speedometerShowUnitText) {
+            return speedText
+        }
+        return "$speedText\n${context.getString(R.string.speedometer_unit_text)}"
     }
 
     private fun buildTimeLine(state: NavigationHudState): String {
@@ -2219,6 +2440,22 @@ class HudOverlayController(private val context: Context) {
                 it.background = null
             }
             positionView(it, speedometerPositionDp, speedometerScale, speedometerAlpha, metrics.density, containerWidth, containerHeight)
+        }
+        turnSignalsContainer?.let {
+            if (previewMode && previewTarget == OverlayBroadcasts.PREVIEW_TARGET_TURN_SIGNALS) {
+                it.background = ContextCompat.getDrawable(it.context, R.drawable.bg_nav_block_outline)
+            } else {
+                it.background = null
+            }
+            positionView(
+                it,
+                turnSignalsPositionDp,
+                turnSignalsScale,
+                turnSignalsAlpha,
+                metrics.density,
+                containerWidth,
+                containerHeight
+            )
         }
         clockView?.let {
             positionView(it, clockPositionDp, clockScale, clockAlpha, metrics.density, containerWidth, containerHeight)

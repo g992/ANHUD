@@ -17,6 +17,18 @@
     <string name="sensors_title">Датчики</string>
     <string name="navigation_title">Навигация</string>
     <string name="system_title">Система</string>
+    <string name="performance_title">Производительность</string>
+    <string name="performance_cpu_chart_title">CPU устройства (глубина 5 минут)</string>
+    <string name="performance_ram_chart_title">ОЗУ устройства (глубина 5 минут)</string>
+    <string name="performance_top_apps_title">TOP-10 процессов по CPU (за последний интервал)</string>
+    <string name="performance_top_header_rank">#</string>
+    <string name="performance_top_header_cpu">CPU</string>
+    <string name="performance_top_header_pid">PID</string>
+    <string name="performance_top_header_process">Процесс</string>
+    <string name="performance_waiting_data">Ожидание данных…</string>
+    <string name="performance_no_active_apps">Нет активных процессов</string>
+    <string name="performance_cpu_summary">CPU системы: %1$s, CPU ANHUD: %2$s</string>
+    <string name="performance_ram_summary">ОЗУ: %1$s (%2$s / %3$s), PSS ANHUD: %4$s</string>
     <string name="accessibility_service_description">Служба доступности Mirror HUD</string>
     <string name="hud_service_channel_name">Сервис ANHUD</string>
     <string name="hud_service_channel_desc">Поддерживает ANHUD в фоне</string>
@@ -59,6 +71,7 @@
     <string name="position_road_camera_block_label">Блок камер Яндекс Навигатора</string>
     <string name="position_traffic_light_block_label">Блок светофоров</string>
     <string name="position_speedometer_block_label">Спидометр</string>
+    <string name="position_turn_signals_block_label">Блок поворотников</string>
     <string name="position_clock_block_label">Блок часов</string>
     <string name="projection_toggle_label">Проекция</string>
     <string name="position_scale_label">Масштаб</string>
@@ -76,6 +89,8 @@
     <string name="speed_scale_label">Масштаб ограничителя скорости</string>
     <string name="speed_limit_alert_enable">Индикация превышения скорости</string>
     <string name="speed_limit_from_hudspeed_label">Брать ограничение из HUD Speed</string>
+    <string name="speedometer_show_unit_text_label">Отображать текст &quot;км/ч&quot;</string>
+    <string name="speedometer_unit_text">км/ч</string>
     <string name="hudspeed_limit_show_label">Показывать ограничение скорости</string>
     <string name="speed_limit_alert_threshold_label">Порог индикации превышения</string>
     <string name="speed_limit_alert_threshold_value">+%1$d км/ч</string>
@@ -90,6 +105,7 @@
     <string name="preview_time_text">1 ч 10 мин (12:00)</string>
     <string name="preview_speed_limit_text">100</string>
     <string name="preview_speedometer_text">100</string>
+    <string name="preview_speedometer_with_unit_text">100\nкм/ч</string>
     <string name="preview_clock_text">12:34</string>
     <string name="preview_hudspeed_distance">500м</string>
     <string name="preview_road_camera_distance">460м</string>

@@ -8,6 +8,11 @@
         "v": 55.10451126098633
       },
       {
+        "k": "overlay_turn_signals_y_dp",
+        "t": "f",
+        "v": 55.10451126098633
+      },
+      {
         "k": "overlay_nav_y_dp",
         "t": "f",
         "v": 0
@@ -103,6 +108,11 @@
         "v": 71.546875
       },
       {
+        "k": "overlay_turn_signals_x_dp",
+        "t": "f",
+        "v": 71.546875
+      },
+      {
         "k": "overlay_nav_scale",
         "t": "f",
         "v": 0.6000000238418579
@@ -151,6 +161,16 @@
         "k": "overlay_speedometer_enabled",
         "t": "b",
         "v": false
+      },
+      {
+        "k": "overlay_speedometer_show_unit_text",
+        "t": "b",
+        "v": false
+      },
+      {
+        "k": "overlay_turn_signals_enabled",
+        "t": "b",
+        "v": true
       },
       {
         "k": "overlay_speed_enabled",
@@ -223,6 +243,11 @@
         "v": 1.0
       },
       {
+        "k": "overlay_turn_signals_scale",
+        "t": "f",
+        "v": 1.0
+      },
+      {
         "k": "overlay_clock_scale",
         "t": "f",
         "v": 1.0
@@ -259,6 +284,11 @@
       },
       {
         "k": "overlay_speedometer_alpha",
+        "t": "f",
+        "v": 1.0
+      },
+      {
+        "k": "overlay_turn_signals_alpha",
         "t": "f",
         "v": 1.0
       },

@@ -39,6 +39,8 @@ class HudBackgroundService : Service() {
                 val trafficLightY = intent.getFloatExtra(OverlayBroadcasts.EXTRA_TRAFFIC_LIGHT_Y_DP, Float.NaN)
                 val speedometerX = intent.getFloatExtra(OverlayBroadcasts.EXTRA_SPEEDOMETER_X_DP, Float.NaN)
                 val speedometerY = intent.getFloatExtra(OverlayBroadcasts.EXTRA_SPEEDOMETER_Y_DP, Float.NaN)
+                val turnSignalsX = intent.getFloatExtra(OverlayBroadcasts.EXTRA_TURN_SIGNALS_X_DP, Float.NaN)
+                val turnSignalsY = intent.getFloatExtra(OverlayBroadcasts.EXTRA_TURN_SIGNALS_Y_DP, Float.NaN)
                 val clockX = intent.getFloatExtra(OverlayBroadcasts.EXTRA_CLOCK_X_DP, Float.NaN)
                 val clockY = intent.getFloatExtra(OverlayBroadcasts.EXTRA_CLOCK_Y_DP, Float.NaN)
                 val containerX = intent.getFloatExtra(OverlayBroadcasts.EXTRA_CONTAINER_X_DP, Float.NaN)
@@ -54,6 +56,7 @@ class HudBackgroundService : Service() {
                 val roadCameraScale = intent.getFloatExtra(OverlayBroadcasts.EXTRA_ROAD_CAMERA_SCALE, Float.NaN)
                 val trafficLightScale = intent.getFloatExtra(OverlayBroadcasts.EXTRA_TRAFFIC_LIGHT_SCALE, Float.NaN)
                 val speedometerScale = intent.getFloatExtra(OverlayBroadcasts.EXTRA_SPEEDOMETER_SCALE, Float.NaN)
+                val turnSignalsScale = intent.getFloatExtra(OverlayBroadcasts.EXTRA_TURN_SIGNALS_SCALE, Float.NaN)
                 val clockScale = intent.getFloatExtra(OverlayBroadcasts.EXTRA_CLOCK_SCALE, Float.NaN)
                 val navAlpha = intent.getFloatExtra(OverlayBroadcasts.EXTRA_NAV_ALPHA, Float.NaN)
                 val arrowAlpha = intent.getFloatExtra(OverlayBroadcasts.EXTRA_ARROW_ALPHA, Float.NaN)
@@ -62,6 +65,7 @@ class HudBackgroundService : Service() {
                 val roadCameraAlpha = intent.getFloatExtra(OverlayBroadcasts.EXTRA_ROAD_CAMERA_ALPHA, Float.NaN)
                 val trafficLightAlpha = intent.getFloatExtra(OverlayBroadcasts.EXTRA_TRAFFIC_LIGHT_ALPHA, Float.NaN)
                 val speedometerAlpha = intent.getFloatExtra(OverlayBroadcasts.EXTRA_SPEEDOMETER_ALPHA, Float.NaN)
+                val turnSignalsAlpha = intent.getFloatExtra(OverlayBroadcasts.EXTRA_TURN_SIGNALS_ALPHA, Float.NaN)
                 val clockAlpha = intent.getFloatExtra(OverlayBroadcasts.EXTRA_CLOCK_ALPHA, Float.NaN)
                 val containerAlpha = intent.getFloatExtra(OverlayBroadcasts.EXTRA_CONTAINER_ALPHA, Float.NaN)
                 val navEnabled = if (intent.hasExtra(OverlayBroadcasts.EXTRA_NAV_ENABLED)) {
@@ -136,6 +140,16 @@ class HudBackgroundService : Service() {
                 } else {
                     null
                 }
+                val turnSignalsEnabled = if (intent.hasExtra(OverlayBroadcasts.EXTRA_TURN_SIGNALS_ENABLED)) {
+                    intent.getBooleanExtra(OverlayBroadcasts.EXTRA_TURN_SIGNALS_ENABLED, true)
+                } else {
+                    null
+                }
+                val speedometerShowUnitText = if (intent.hasExtra(OverlayBroadcasts.EXTRA_SPEEDOMETER_SHOW_UNIT_TEXT)) {
+                    intent.getBooleanExtra(OverlayBroadcasts.EXTRA_SPEEDOMETER_SHOW_UNIT_TEXT, false)
+                } else {
+                    null
+                }
                 val clockEnabled = if (intent.hasExtra(OverlayBroadcasts.EXTRA_CLOCK_ENABLED)) {
                     intent.getBooleanExtra(OverlayBroadcasts.EXTRA_CLOCK_ENABLED, true)
                 } else {
@@ -189,6 +203,11 @@ class HudBackgroundService : Service() {
                 } else {
                     null
                 }
+                val turnSignalsPosition = if (!turnSignalsX.isNaN() && !turnSignalsY.isNaN()) {
+                    android.graphics.PointF(turnSignalsX, turnSignalsY)
+                } else {
+                    null
+                }
                 val clockPosition = if (!clockX.isNaN() && !clockY.isNaN()) {
                     android.graphics.PointF(clockX, clockY)
                 } else {
@@ -211,6 +230,7 @@ class HudBackgroundService : Service() {
                 val roadCameraScaleValue = roadCameraScale.takeIf { !it.isNaN() }
                 val trafficLightScaleValue = trafficLightScale.takeIf { !it.isNaN() }
                 val speedometerScaleValue = speedometerScale.takeIf { !it.isNaN() }
+                val turnSignalsScaleValue = turnSignalsScale.takeIf { !it.isNaN() }
                 val clockScaleValue = clockScale.takeIf { !it.isNaN() }
                 val navAlphaValue = navAlpha.takeIf { !it.isNaN() }
                 val arrowAlphaValue = arrowAlpha.takeIf { !it.isNaN() }
@@ -219,6 +239,7 @@ class HudBackgroundService : Service() {
                 val roadCameraAlphaValue = roadCameraAlpha.takeIf { !it.isNaN() }
                 val trafficLightAlphaValue = trafficLightAlpha.takeIf { !it.isNaN() }
                 val speedometerAlphaValue = speedometerAlpha.takeIf { !it.isNaN() }
+                val turnSignalsAlphaValue = turnSignalsAlpha.takeIf { !it.isNaN() }
                 val clockAlphaValue = clockAlpha.takeIf { !it.isNaN() }
                 val containerAlphaValue = containerAlpha.takeIf { !it.isNaN() }
                 overlayController.updateLayout(
@@ -233,6 +254,7 @@ class HudBackgroundService : Service() {
                     roadCameraPosition,
                     trafficLightPosition,
                     speedometerPosition,
+                    turnSignalsPosition,
                     clockPosition,
                     navScaleValue,
                     navTextScaleValue,
@@ -243,6 +265,7 @@ class HudBackgroundService : Service() {
                     roadCameraScaleValue,
                     trafficLightScaleValue,
                     speedometerScaleValue,
+                    turnSignalsScaleValue,
                     clockScaleValue,
                     navAlphaValue,
                     arrowAlphaValue,
@@ -251,6 +274,7 @@ class HudBackgroundService : Service() {
                     roadCameraAlphaValue,
                     trafficLightAlphaValue,
                     speedometerAlphaValue,
+                    turnSignalsAlphaValue,
                     clockAlphaValue,
                     containerAlphaValue,
                     navEnabled,
@@ -266,6 +290,8 @@ class HudBackgroundService : Service() {
                     speedLimitAlertEnabled,
                     speedLimitAlertThreshold,
                     speedometerEnabled,
+                    speedometerShowUnitText,
+                    turnSignalsEnabled,
                     clockEnabled,
                     trafficLightMaxActive,
                     mapEnabled,

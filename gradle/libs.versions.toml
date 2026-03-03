@@ -10,6 +10,7 @@ material = "1.13.0"
 activity = "1.11.0"
 constraintlayout = "2.2.1"
 mapkit = "4.30.0-navikit"
+adblib = "1.3"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -21,6 +22,7 @@ material = { group = "com.google.android.material", name = "material", version.r
 androidx-activity = { group = "androidx.activity", name = "activity", version.ref = "activity" }
 androidx-constraintlayout = { group = "androidx.constraintlayout", name = "constraintlayout", version.ref = "constraintlayout" }
 yandex-mapkit = { group = "com.yandex.android", name = "maps.mobile", version.ref = "mapkit" }
+tananaev-adblib = { group = "com.tananaev", name = "adblib", version.ref = "adblib" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

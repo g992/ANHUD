@@ -28,6 +28,8 @@ object OverlayPrefs {
     private const val KEY_TRAFFIC_LIGHT_Y_DP = "overlay_traffic_light_y_dp"
     private const val KEY_SPEEDOMETER_X_DP = "overlay_speedometer_x_dp"
     private const val KEY_SPEEDOMETER_Y_DP = "overlay_speedometer_y_dp"
+    private const val KEY_TURN_SIGNALS_X_DP = "overlay_turn_signals_x_dp"
+    private const val KEY_TURN_SIGNALS_Y_DP = "overlay_turn_signals_y_dp"
     private const val KEY_CLOCK_X_DP = "overlay_clock_x_dp"
     private const val KEY_CLOCK_Y_DP = "overlay_clock_y_dp"
     private const val KEY_NAV_SCALE = "overlay_nav_scale"
@@ -39,6 +41,7 @@ object OverlayPrefs {
     private const val KEY_ROAD_CAMERA_SCALE = "overlay_road_camera_scale"
     private const val KEY_TRAFFIC_LIGHT_SCALE = "overlay_traffic_light_scale"
     private const val KEY_SPEEDOMETER_SCALE = "overlay_speedometer_scale"
+    private const val KEY_TURN_SIGNALS_SCALE = "overlay_turn_signals_scale"
     private const val KEY_CLOCK_SCALE = "overlay_clock_scale"
     private const val KEY_NAV_ALPHA = "overlay_nav_alpha"
     private const val KEY_ARROW_ALPHA = "overlay_arrow_alpha"
@@ -47,6 +50,7 @@ object OverlayPrefs {
     private const val KEY_ROAD_CAMERA_ALPHA = "overlay_road_camera_alpha"
     private const val KEY_TRAFFIC_LIGHT_ALPHA = "overlay_traffic_light_alpha"
     private const val KEY_SPEEDOMETER_ALPHA = "overlay_speedometer_alpha"
+    private const val KEY_TURN_SIGNALS_ALPHA = "overlay_turn_signals_alpha"
     private const val KEY_CLOCK_ALPHA = "overlay_clock_alpha"
     private const val KEY_CONTAINER_ALPHA = "overlay_container_alpha"
     private const val KEY_NAV_ENABLED = "overlay_nav_enabled"
@@ -64,6 +68,8 @@ object OverlayPrefs {
     private const val KEY_SPEED_LIMIT_ALERT_ENABLED = "overlay_speed_limit_alert_enabled"
     private const val KEY_SPEED_LIMIT_ALERT_THRESHOLD = "overlay_speed_limit_alert_threshold"
     private const val KEY_SPEEDOMETER_ENABLED = "overlay_speedometer_enabled"
+    private const val KEY_SPEEDOMETER_SHOW_UNIT_TEXT = "overlay_speedometer_show_unit_text"
+    private const val KEY_TURN_SIGNALS_ENABLED = "overlay_turn_signals_enabled"
     private const val KEY_CLOCK_ENABLED = "overlay_clock_enabled"
     private const val KEY_TRAFFIC_LIGHT_MAX_ACTIVE = "overlay_traffic_light_max_active"
     private const val KEY_NATIVE_NAV_ENABLED = "native_nav_enabled"
@@ -260,6 +266,25 @@ object OverlayPrefs {
             .apply()
     }
 
+    fun turnSignalsPositionDp(context: Context): PointF {
+        val prefs = prefs(context)
+        val containerHeightDp = containerSizeDp(context).y
+        val speedometerPos = speedometerPositionDp(context)
+        val maxY = (containerHeightDp - TURN_SIGNALS_BLOCK_HEIGHT_DP - DEFAULT_MARGIN_DP).coerceAtLeast(0f)
+        val defaultY = (speedometerPos.y + SPEEDOMETER_BLOCK_HEIGHT_DP + TURN_SIGNALS_BLOCK_GAP_DP)
+            .coerceIn(0f, maxY)
+        val x = prefs.getFloat(KEY_TURN_SIGNALS_X_DP, speedometerPos.x)
+        val y = prefs.getFloat(KEY_TURN_SIGNALS_Y_DP, defaultY)
+        return PointF(x, y)
+    }
+
+    fun setTurnSignalsPositionDp(context: Context, xDp: Float, yDp: Float) {
+        prefs(context).edit()
+            .putFloat(KEY_TURN_SIGNALS_X_DP, xDp)
+            .putFloat(KEY_TURN_SIGNALS_Y_DP, yDp)
+            .apply()
+    }
+
     fun clockPositionDp(context: Context): PointF {
         val prefs = prefs(context)
         val containerHeightDp = containerSizeDp(context).y
@@ -366,6 +391,16 @@ object OverlayPrefs {
             .apply()
     }
 
+    fun turnSignalsScale(context: Context): Float {
+        return prefs(context).getFloat(KEY_TURN_SIGNALS_SCALE, 1f)
+    }
+
+    fun setTurnSignalsScale(context: Context, scale: Float) {
+        prefs(context).edit()
+            .putFloat(KEY_TURN_SIGNALS_SCALE, scale)
+            .apply()
+    }
+
     fun clockScale(context: Context): Float {
         return prefs(context).getFloat(KEY_CLOCK_SCALE, 1f)
     }
@@ -443,6 +478,16 @@ object OverlayPrefs {
     fun setSpeedometerAlpha(context: Context, alpha: Float) {
         prefs(context).edit()
             .putFloat(KEY_SPEEDOMETER_ALPHA, alpha)
+            .apply()
+    }
+
+    fun turnSignalsAlpha(context: Context): Float {
+        return prefs(context).getFloat(KEY_TURN_SIGNALS_ALPHA, 1f)
+    }
+
+    fun setTurnSignalsAlpha(context: Context, alpha: Float) {
+        prefs(context).edit()
+            .putFloat(KEY_TURN_SIGNALS_ALPHA, alpha)
             .apply()
     }
 
@@ -645,6 +690,26 @@ object OverlayPrefs {
             .apply()
     }
 
+    fun speedometerShowUnitText(context: Context): Boolean {
+        return prefs(context).getBoolean(KEY_SPEEDOMETER_SHOW_UNIT_TEXT, false)
+    }
+
+    fun setSpeedometerShowUnitText(context: Context, enabled: Boolean) {
+        prefs(context).edit()
+            .putBoolean(KEY_SPEEDOMETER_SHOW_UNIT_TEXT, enabled)
+            .apply()
+    }
+
+    fun turnSignalsEnabled(context: Context): Boolean {
+        return prefs(context).getBoolean(KEY_TURN_SIGNALS_ENABLED, true)
+    }
+
+    fun setTurnSignalsEnabled(context: Context, enabled: Boolean) {
+        prefs(context).edit()
+            .putBoolean(KEY_TURN_SIGNALS_ENABLED, enabled)
+            .apply()
+    }
+
     fun clockEnabled(context: Context): Boolean {
         return prefs(context).getBoolean(KEY_CLOCK_ENABLED, true)
     }
@@ -842,6 +907,8 @@ object OverlayPrefs {
     private const val ROAD_CAMERA_BLOCK_GAP_DP = 8f
     private const val TRAFFIC_LIGHT_BLOCK_GAP_DP = 8f
     private const val SPEEDOMETER_BLOCK_HEIGHT_DP = 32f
+    private const val TURN_SIGNALS_BLOCK_HEIGHT_DP = 24f
+    private const val TURN_SIGNALS_BLOCK_GAP_DP = 8f
     private const val CLOCK_BLOCK_HEIGHT_DP = 24f
     private const val DEFAULT_MARGIN_DP = 16f
     private const val CONTAINER_DEFAULT_SIZE_PX = 255f

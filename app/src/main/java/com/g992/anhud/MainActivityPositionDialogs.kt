@@ -26,6 +26,7 @@ internal enum class OverlayTarget(val previewKey: String) {
     ROAD_CAMERA(OverlayBroadcasts.PREVIEW_TARGET_ROAD_CAMERA),
     TRAFFIC_LIGHT(OverlayBroadcasts.PREVIEW_TARGET_TRAFFIC_LIGHT),
     SPEEDOMETER(OverlayBroadcasts.PREVIEW_TARGET_SPEEDOMETER),
+    TURN_SIGNALS(OverlayBroadcasts.PREVIEW_TARGET_TURN_SIGNALS),
     CLOCK(OverlayBroadcasts.PREVIEW_TARGET_CLOCK),
     CONTAINER(OverlayBroadcasts.PREVIEW_TARGET_CONTAINER)
 }
@@ -53,6 +54,7 @@ internal fun MainActivity.openPositionDialog(
     val previewRoadCameraBlock = dialogView.findViewById<View>(R.id.dialogPreviewRoadCameraBlock)
     val previewTrafficLightBlock = dialogView.findViewById<LinearLayout>(R.id.dialogPreviewTrafficLightBlock)
     val previewSpeedometer = dialogView.findViewById<TextView>(R.id.dialogPreviewSpeedometer)
+    val previewTurnSignals = dialogView.findViewById<LinearLayout>(R.id.dialogPreviewTurnSignalsBlock)
     val previewClock = dialogView.findViewById<TextView>(R.id.dialogPreviewClock)
     val showOthersCheck = dialogView.findViewById<CheckBox>(R.id.dialogShowOthers)
     val hudSpeedGpsStatusCheck = dialogView.findViewById<CheckBox>(R.id.dialogHudSpeedShowGpsStatus)
@@ -82,6 +84,7 @@ internal fun MainActivity.openPositionDialog(
     val roadCameraPosition = OverlayPrefs.roadCameraPositionDp(this)
     val trafficLightPosition = OverlayPrefs.trafficLightPositionDp(this)
     val speedometerPosition = OverlayPrefs.speedometerPositionDp(this)
+    val turnSignalsPosition = OverlayPrefs.turnSignalsPositionDp(this)
     val clockPosition = OverlayPrefs.clockPositionDp(this)
     val containerPosition = OverlayPrefs.containerPositionDp(this)
     val containerSize = OverlayPrefs.containerSizeDp(this)
@@ -92,6 +95,7 @@ internal fun MainActivity.openPositionDialog(
     val roadCameraPoint = PointF(roadCameraPosition.x, roadCameraPosition.y)
     val trafficLightPoint = PointF(trafficLightPosition.x, trafficLightPosition.y)
     val speedometerPoint = PointF(speedometerPosition.x, speedometerPosition.y)
+    val turnSignalsPoint = PointF(turnSignalsPosition.x, turnSignalsPosition.y)
     val clockPoint = PointF(clockPosition.x, clockPosition.y)
     val containerPoint = PointF(containerPosition.x, containerPosition.y)
     var containerWidthDp = containerSize.x
@@ -105,6 +109,7 @@ internal fun MainActivity.openPositionDialog(
         OverlayTarget.ROAD_CAMERA -> (OverlayPrefs.roadCameraScale(this) * 100).toInt()
         OverlayTarget.TRAFFIC_LIGHT -> (OverlayPrefs.trafficLightScale(this) * 100).toInt()
         OverlayTarget.SPEEDOMETER -> (OverlayPrefs.speedometerScale(this) * 100).toInt()
+        OverlayTarget.TURN_SIGNALS -> (OverlayPrefs.turnSignalsScale(this) * 100).toInt()
         OverlayTarget.CLOCK -> (OverlayPrefs.clockScale(this) * 100).toInt()
         OverlayTarget.CONTAINER -> 100
     }
@@ -116,6 +121,7 @@ internal fun MainActivity.openPositionDialog(
         OverlayTarget.ROAD_CAMERA -> (OverlayPrefs.roadCameraAlpha(this) * 100).toInt()
         OverlayTarget.TRAFFIC_LIGHT -> (OverlayPrefs.trafficLightAlpha(this) * 100).toInt()
         OverlayTarget.SPEEDOMETER -> (OverlayPrefs.speedometerAlpha(this) * 100).toInt()
+        OverlayTarget.TURN_SIGNALS -> (OverlayPrefs.turnSignalsAlpha(this) * 100).toInt()
         OverlayTarget.CLOCK -> (OverlayPrefs.clockAlpha(this) * 100).toInt()
         OverlayTarget.CONTAINER -> (OverlayPrefs.containerAlpha(this) * 100).toInt()
     }.coerceIn(0, 100)
@@ -124,9 +130,14 @@ internal fun MainActivity.openPositionDialog(
     val navSecondaryBasePx = previewNavSecondary.textSize
     val navTimeBasePx = previewNavTime.textSize
     val speedLimitBasePx = previewSpeedLimit.textSize
+    val speedometerShowUnitText = OverlayPrefs.speedometerShowUnitText(this)
+    previewSpeedometer.text = buildSpeedometerPreviewText(speedometerShowUnitText)
     previewSpeedometer.gravity = Gravity.CENTER
     previewSpeedometer.textAlignment = View.TEXT_ALIGNMENT_CENTER
-    val previewSpeedometerWidthPx = previewSpeedometer.paint.measureText("888")
+    val previewSpeedometerWidthPx = max(
+        previewSpeedometer.paint.measureText(getString(R.string.preview_speedometer_text)),
+        previewSpeedometer.paint.measureText(getString(R.string.speedometer_unit_text))
+    )
         .roundToInt()
         .coerceAtLeast(1)
     previewSpeedometer.minWidth = previewSpeedometerWidthPx
@@ -150,6 +161,7 @@ internal fun MainActivity.openPositionDialog(
         OverlayTarget.ROAD_CAMERA -> getString(R.string.position_road_camera_block_label)
         OverlayTarget.TRAFFIC_LIGHT -> getString(R.string.position_traffic_light_block_label)
         OverlayTarget.SPEEDOMETER -> getString(R.string.position_speedometer_block_label)
+        OverlayTarget.TURN_SIGNALS -> getString(R.string.position_turn_signals_block_label)
         OverlayTarget.CLOCK -> getString(R.string.position_clock_block_label)
         OverlayTarget.CONTAINER -> getString(R.string.position_container_label)
     }
@@ -295,6 +307,7 @@ internal fun MainActivity.openPositionDialog(
         val showRoadCamera = target == OverlayTarget.ROAD_CAMERA
         val showTrafficLight = target == OverlayTarget.TRAFFIC_LIGHT
         val showSpeedometer = target == OverlayTarget.SPEEDOMETER
+        val showTurnSignals = target == OverlayTarget.TURN_SIGNALS
         val showClock = target == OverlayTarget.CLOCK
         previewNavBlock.visibility = if (showNav) View.VISIBLE else View.GONE
         previewArrowBlock.visibility = if (showArrow) View.VISIBLE else View.GONE
@@ -306,6 +319,7 @@ internal fun MainActivity.openPositionDialog(
         previewRoadCameraBlock.visibility = if (showRoadCamera) View.VISIBLE else View.GONE
         previewTrafficLightBlock.visibility = if (showTrafficLight) View.VISIBLE else View.GONE
         previewSpeedometer.visibility = if (showSpeedometer) View.VISIBLE else View.GONE
+        previewTurnSignals.visibility = if (showTurnSignals) View.VISIBLE else View.GONE
         previewClock.visibility = if (showClock) View.VISIBLE else View.GONE
         if (target == OverlayTarget.CONTAINER) {
             previewHudContainer.background = ContextCompat.getDrawable(activity, R.drawable.bg_hud_container_outline)
@@ -362,6 +376,11 @@ internal fun MainActivity.openPositionDialog(
             previewSpeedometer.background = ContextCompat.getDrawable(activity, R.drawable.bg_nav_block_outline)
         } else {
             previewSpeedometer.background = null
+        }
+        if (target == OverlayTarget.TURN_SIGNALS) {
+            previewTurnSignals.background = ContextCompat.getDrawable(activity, R.drawable.bg_nav_block_outline)
+        } else {
+            previewTurnSignals.background = null
         }
         if (showArrow) {
             positionPreviewView(
@@ -453,6 +472,21 @@ internal fun MainActivity.openPositionDialog(
                 OverlayPrefs.speedometerAlpha(activity).coerceIn(0f, 1f)
             }
         }
+        if (showTurnSignals) {
+            positionPreviewView(
+                previewHudContainer,
+                previewTurnSignals,
+                turnSignalsPoint.x,
+                turnSignalsPoint.y,
+                containerWidthPx,
+                containerHeightPx
+            )
+            previewTurnSignals.alpha = if (target == OverlayTarget.TURN_SIGNALS) {
+                brightnessSeek.progress.coerceIn(0, 100) / 100f
+            } else {
+                OverlayPrefs.turnSignalsAlpha(activity).coerceIn(0f, 1f)
+            }
+        }
         if (showClock) {
             positionPreviewView(
                 previewHudContainer,
@@ -479,6 +513,7 @@ internal fun MainActivity.openPositionDialog(
             OverlayTarget.ROAD_CAMERA -> previewRoadCameraBlock
             OverlayTarget.TRAFFIC_LIGHT -> previewTrafficLightBlock
             OverlayTarget.SPEEDOMETER -> previewSpeedometer
+            OverlayTarget.TURN_SIGNALS -> previewTurnSignals
             OverlayTarget.CLOCK -> previewClock
             OverlayTarget.CONTAINER -> previewHudContainer
         }
@@ -591,6 +626,19 @@ internal fun MainActivity.openPositionDialog(
                     previewShowOthers = showOthersCheck.isChecked
                 )
             }
+            OverlayTarget.TURN_SIGNALS -> {
+                if (persist) {
+                    OverlayPrefs.setTurnSignalsPositionDp(this, dpX, dpY)
+                    turnSignalsPoint.x = dpX
+                    turnSignalsPoint.y = dpY
+                }
+                notifyOverlaySettingsChanged(
+                    turnSignalsPosition = point,
+                    preview = true,
+                    previewTarget = target,
+                    previewShowOthers = showOthersCheck.isChecked
+                )
+            }
             OverlayTarget.CLOCK -> {
                 if (persist) {
                     OverlayPrefs.setClockPositionDp(this, dpX, dpY)
@@ -678,6 +726,7 @@ internal fun MainActivity.openPositionDialog(
             OverlayTarget.ROAD_CAMERA -> previewRoadCameraBlock
             OverlayTarget.TRAFFIC_LIGHT -> previewTrafficLightBlock
             OverlayTarget.SPEEDOMETER -> previewSpeedometer
+            OverlayTarget.TURN_SIGNALS -> previewTurnSignals
             OverlayTarget.CLOCK -> previewClock
             OverlayTarget.CONTAINER -> previewHudContainer
         },
@@ -814,6 +863,12 @@ internal fun MainActivity.openPositionDialog(
                     previewTarget = target,
                     previewShowOthers = showOthersCheck.isChecked
                 )
+                OverlayTarget.TURN_SIGNALS -> notifyOverlaySettingsChanged(
+                    turnSignalsScale = scale,
+                    preview = true,
+                    previewTarget = target,
+                    previewShowOthers = showOthersCheck.isChecked
+                )
                 OverlayTarget.CLOCK -> notifyOverlaySettingsChanged(
                     clockScale = scale,
                     preview = true,
@@ -892,6 +947,15 @@ internal fun MainActivity.openPositionDialog(
                     OverlayPrefs.setSpeedometerScale(activity, scale)
                     notifyOverlaySettingsChanged(
                         speedometerScale = scale,
+                        preview = true,
+                        previewTarget = target,
+                        previewShowOthers = showOthersCheck.isChecked
+                    )
+                }
+                OverlayTarget.TURN_SIGNALS -> {
+                    OverlayPrefs.setTurnSignalsScale(activity, scale)
+                    notifyOverlaySettingsChanged(
+                        turnSignalsScale = scale,
                         preview = true,
                         previewTarget = target,
                         previewShowOthers = showOthersCheck.isChecked
@@ -982,6 +1046,15 @@ internal fun MainActivity.openPositionDialog(
                         previewShowOthers = showOthersCheck.isChecked
                     )
                 }
+                OverlayTarget.TURN_SIGNALS -> {
+                    previewTurnSignals.alpha = alpha
+                    notifyOverlaySettingsChanged(
+                        turnSignalsAlpha = alpha,
+                        preview = true,
+                        previewTarget = target,
+                        previewShowOthers = showOthersCheck.isChecked
+                    )
+                }
                 OverlayTarget.CLOCK -> {
                     previewClock.alpha = alpha
                     notifyOverlaySettingsChanged(
@@ -1067,6 +1140,15 @@ internal fun MainActivity.openPositionDialog(
                     OverlayPrefs.setSpeedometerAlpha(activity, alpha)
                     notifyOverlaySettingsChanged(
                         speedometerAlpha = alpha,
+                        preview = true,
+                        previewTarget = target,
+                        previewShowOthers = showOthersCheck.isChecked
+                    )
+                }
+                OverlayTarget.TURN_SIGNALS -> {
+                    OverlayPrefs.setTurnSignalsAlpha(activity, alpha)
+                    notifyOverlaySettingsChanged(
+                        turnSignalsAlpha = alpha,
                         preview = true,
                         previewTarget = target,
                         previewShowOthers = showOthersCheck.isChecked

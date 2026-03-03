@@ -512,6 +512,137 @@
                     android:textStyle="bold" />
 
                 <LinearLayout
+                    android:id="@+id/sectionPerformance"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:background="@drawable/bg_log_section"
+                    android:orientation="vertical"
+                    android:padding="10dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/performance_title"
+                        android:textColor="@color/white"
+                        android:textSize="14sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:text="@string/performance_cpu_chart_title"
+                        android:textColor="#d0d0d0"
+                        android:textSize="12sp" />
+
+                    <com.g992.anhud.PerformanceGraphView
+                        android:id="@+id/cpuGraphView"
+                        android:layout_width="match_parent"
+                        android:layout_height="120dp"
+                        android:layout_marginTop="4dp"
+                        android:padding="4dp" />
+
+                    <TextView
+                        android:id="@+id/cpuGraphSummary"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:textColor="#c0c0c0"
+                        android:textSize="12sp" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="10dp"
+                        android:text="@string/performance_ram_chart_title"
+                        android:textColor="#d0d0d0"
+                        android:textSize="12sp" />
+
+                    <com.g992.anhud.PerformanceGraphView
+                        android:id="@+id/ramGraphView"
+                        android:layout_width="match_parent"
+                        android:layout_height="120dp"
+                        android:layout_marginTop="4dp"
+                        android:padding="4dp" />
+
+                    <TextView
+                        android:id="@+id/ramGraphSummary"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:textColor="#c0c0c0"
+                        android:textSize="12sp" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:text="@string/performance_top_apps_title"
+                        android:textColor="#d0d0d0"
+                        android:textSize="12sp"
+                        android:textStyle="bold" />
+
+                    <TableLayout
+                        android:id="@+id/topCpuTable"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:shrinkColumns="3"
+                        android:stretchColumns="3">
+
+                        <TableRow>
+                            <TextView
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="0.9"
+                                android:gravity="center"
+                                android:text="@string/performance_top_header_rank"
+                                android:textColor="@color/white"
+                                android:textSize="12sp"
+                                android:textStyle="bold" />
+
+                            <TextView
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1.1"
+                                android:gravity="end"
+                                android:text="@string/performance_top_header_cpu"
+                                android:textColor="@color/white"
+                                android:textSize="12sp"
+                                android:textStyle="bold" />
+
+                            <TextView
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1.0"
+                                android:gravity="end"
+                                android:text="@string/performance_top_header_pid"
+                                android:textColor="@color/white"
+                                android:textSize="12sp"
+                                android:textStyle="bold" />
+
+                            <TextView
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="4.0"
+                                android:text="@string/performance_top_header_process"
+                                android:textColor="@color/white"
+                                android:textSize="12sp"
+                                android:textStyle="bold" />
+                        </TableRow>
+                    </TableLayout>
+
+                    <TextView
+                        android:id="@+id/topCpuNote"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:textColor="#9fa8da"
+                        android:textSize="11sp" />
+                </LinearLayout>
+
+                <LinearLayout
                     android:id="@+id/sectionNavigation"
                     android:layout_width="match_parent"
                     android:layout_height="250dp"

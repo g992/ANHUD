@@ -170,6 +170,7 @@ class HudStatusReceiver : BroadcastReceiver() {
         val roadCameraPos = OverlayPrefs.roadCameraPositionDp(context)
         val trafficLightPos = OverlayPrefs.trafficLightPositionDp(context)
         val speedometerPos = OverlayPrefs.speedometerPositionDp(context)
+        val turnSignalsPos = OverlayPrefs.turnSignalsPositionDp(context)
         val clockPos = OverlayPrefs.clockPositionDp(context)
         val containerPos = OverlayPrefs.containerPositionDp(context)
         val containerSize = OverlayPrefs.containerSizeDp(context)
@@ -194,6 +195,8 @@ class HudStatusReceiver : BroadcastReceiver() {
             .putExtra(OverlayBroadcasts.EXTRA_TRAFFIC_LIGHT_Y_DP, trafficLightPos.y)
             .putExtra(OverlayBroadcasts.EXTRA_SPEEDOMETER_X_DP, speedometerPos.x)
             .putExtra(OverlayBroadcasts.EXTRA_SPEEDOMETER_Y_DP, speedometerPos.y)
+            .putExtra(OverlayBroadcasts.EXTRA_TURN_SIGNALS_X_DP, turnSignalsPos.x)
+            .putExtra(OverlayBroadcasts.EXTRA_TURN_SIGNALS_Y_DP, turnSignalsPos.y)
             .putExtra(OverlayBroadcasts.EXTRA_CLOCK_X_DP, clockPos.x)
             .putExtra(OverlayBroadcasts.EXTRA_CLOCK_Y_DP, clockPos.y)
             .putExtra(OverlayBroadcasts.EXTRA_NAV_SCALE, OverlayPrefs.navScale(context))
@@ -205,6 +208,7 @@ class HudStatusReceiver : BroadcastReceiver() {
             .putExtra(OverlayBroadcasts.EXTRA_ROAD_CAMERA_SCALE, OverlayPrefs.roadCameraScale(context))
             .putExtra(OverlayBroadcasts.EXTRA_TRAFFIC_LIGHT_SCALE, OverlayPrefs.trafficLightScale(context))
             .putExtra(OverlayBroadcasts.EXTRA_SPEEDOMETER_SCALE, OverlayPrefs.speedometerScale(context))
+            .putExtra(OverlayBroadcasts.EXTRA_TURN_SIGNALS_SCALE, OverlayPrefs.turnSignalsScale(context))
             .putExtra(OverlayBroadcasts.EXTRA_CLOCK_SCALE, OverlayPrefs.clockScale(context))
             .putExtra(OverlayBroadcasts.EXTRA_NAV_ALPHA, OverlayPrefs.navAlpha(context))
             .putExtra(OverlayBroadcasts.EXTRA_ARROW_ALPHA, OverlayPrefs.arrowAlpha(context))
@@ -213,6 +217,7 @@ class HudStatusReceiver : BroadcastReceiver() {
             .putExtra(OverlayBroadcasts.EXTRA_ROAD_CAMERA_ALPHA, OverlayPrefs.roadCameraAlpha(context))
             .putExtra(OverlayBroadcasts.EXTRA_TRAFFIC_LIGHT_ALPHA, OverlayPrefs.trafficLightAlpha(context))
             .putExtra(OverlayBroadcasts.EXTRA_SPEEDOMETER_ALPHA, OverlayPrefs.speedometerAlpha(context))
+            .putExtra(OverlayBroadcasts.EXTRA_TURN_SIGNALS_ALPHA, OverlayPrefs.turnSignalsAlpha(context))
             .putExtra(OverlayBroadcasts.EXTRA_CLOCK_ALPHA, OverlayPrefs.clockAlpha(context))
             .putExtra(OverlayBroadcasts.EXTRA_CONTAINER_ALPHA, OverlayPrefs.containerAlpha(context))
             .putExtra(OverlayBroadcasts.EXTRA_NAV_ENABLED, OverlayPrefs.navEnabled(context))
@@ -240,6 +245,14 @@ class HudStatusReceiver : BroadcastReceiver() {
                 OverlayPrefs.speedLimitAlertThreshold(context)
             )
             .putExtra(OverlayBroadcasts.EXTRA_SPEEDOMETER_ENABLED, OverlayPrefs.speedometerEnabled(context))
+            .putExtra(
+                OverlayBroadcasts.EXTRA_SPEEDOMETER_SHOW_UNIT_TEXT,
+                OverlayPrefs.speedometerShowUnitText(context)
+            )
+            .putExtra(
+                OverlayBroadcasts.EXTRA_TURN_SIGNALS_ENABLED,
+                OverlayPrefs.turnSignalsEnabled(context)
+            )
             .putExtra(OverlayBroadcasts.EXTRA_CLOCK_ENABLED, OverlayPrefs.clockEnabled(context))
             .putExtra(
                 OverlayBroadcasts.EXTRA_TRAFFIC_LIGHT_MAX_ACTIVE,

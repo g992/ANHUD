@@ -14,6 +14,7 @@ import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import android.os.SystemClock
+import android.util.Log
 import androidx.core.content.ContextCompat
 import java.util.Locale
 import kotlin.math.roundToInt
@@ -23,12 +24,24 @@ class SensorDataService : Service() {
     private var isLocationSubscribed = false
     private val gpsSpeedSamples = ArrayDeque<Location>()
     private var lastGpsSpeedUpdateElapsedMs: Long = 0L
+    private var lastTurnSignalState: TurnSignalState? = null
+    private var hasVehicleTurnSignalSource = false
+    private var turnSignalSourceLogSuppressed = false
+    private var invalidVehicleTurnSignalLogSuppressed = false
+    private var lastTurnSignalEventSignature: String? = null
 
     private val staleSpeedHandler = Handler(Looper.getMainLooper())
     private val staleSpeedRunnable = object : Runnable {
         override fun run() {
             clearStaleGpsSpeedIfNeeded()
             staleSpeedHandler.postDelayed(this, GPS_STALE_CHECK_INTERVAL_MS)
+        }
+    }
+    private val turnSignalPollHandler = Handler(Looper.getMainLooper())
+    private val turnSignalPollRunnable = object : Runnable {
+        override fun run() {
+            requestTurnSignalSnapshots()
+            turnSignalPollHandler.postDelayed(this, TURN_SIGNAL_POLL_INTERVAL_MS)
         }
     }
 
@@ -63,6 +76,59 @@ class SensorDataService : Service() {
         handleGpsLocation(location)
     }
 
+    private val turnSignalReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            val action = intent.action ?: return
+            if (action != ACTION_SENSOR_INT_CHANGED &&
+                action != ACTION_SENSOR_INT_RESULT &&
+                action != ACTION_PROPERTY_INT_CHANGED &&
+                action != ACTION_PROPERTY_INT_RESULT
+            ) {
+                return
+            }
+            val id = readIntExtra(intent, EXTRA_ID) ?: return
+            if (id !in TURN_SIGNAL_CANDIDATE_IDS) {
+                return
+            }
+            if (id == SENSOR_ID_LIGHT_STATE &&
+                (action == ACTION_PROPERTY_INT_CHANGED || action == ACTION_PROPERTY_INT_RESULT)
+            ) {
+                return
+            }
+            val rawValue = readIntExtraAllowZero(intent, EXTRA_VALUE) ?: return
+            val areaId = readIntExtraAllowZero(intent, EXTRA_AREA_ID)
+            logRawTurnSignalEventIfChanged(id = id, action = action, rawValue = rawValue, areaId = areaId)
+            val state = decodeTurnSignalState(id, rawValue)
+            if (state == null) {
+                onInvalidTurnSignalPayload(id, rawValue)
+                return
+            }
+            if (shouldIgnoreTurnSignalEvent(id)) {
+                return
+            }
+            if (id == VEHICLE_PROPERTY_TURN_SIGNAL_STATE) {
+                invalidVehicleTurnSignalLogSuppressed = false
+            }
+            val previous = lastTurnSignalState
+            if (previous == state) {
+                return
+            }
+            lastTurnSignalState = state
+            applyTurnSignalState(state)
+            val areaText = areaId?.let { " area=$it" }.orEmpty()
+            val sourceText = when (id) {
+                VEHICLE_PROPERTY_TURN_SIGNAL_STATE -> "vehicle_property"
+                SENSOR_ID_LIGHT_STATE -> "sensor_light"
+                else -> "unknown"
+            }
+            val message =
+                "Поворотники: left=${state.left} right=${state.right} hazard=${state.hazard} " +
+                    "(raw=$rawValue id=$id source=$sourceText action=$action$areaText)"
+            Log.i(TAG, message)
+            UiLogStore.append(LogCategory.SENSORS, message)
+        }
+    }
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
@@ -73,12 +139,23 @@ class SensorDataService : Service() {
             addAction(ACTION_SENSOR_FLOAT_RESULT)
         }
         ContextCompat.registerReceiver(this, speedReceiver, filter, ContextCompat.RECEIVER_EXPORTED)
+        val turnFilter = IntentFilter().apply {
+            addAction(ACTION_SENSOR_INT_CHANGED)
+            addAction(ACTION_SENSOR_INT_RESULT)
+            addAction(ACTION_PROPERTY_INT_CHANGED)
+            addAction(ACTION_PROPERTY_INT_RESULT)
+        }
+        ContextCompat.registerReceiver(this, turnSignalReceiver, turnFilter, ContextCompat.RECEIVER_EXPORTED)
         staleSpeedHandler.postDelayed(staleSpeedRunnable, GPS_STALE_CHECK_INTERVAL_MS)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         UiLogStore.append(LogCategory.SENSORS, "Сервис запущен")
         subscribeToSpeedSensor()
+        subscribeToTurnSignals()
+        requestTurnSignalSnapshots()
+        turnSignalPollHandler.removeCallbacks(turnSignalPollRunnable)
+        turnSignalPollHandler.postDelayed(turnSignalPollRunnable, TURN_SIGNAL_POLL_INTERVAL_MS)
         ensureLocationUpdates()
         return START_STICKY
     }
@@ -89,7 +166,12 @@ class SensorDataService : Service() {
             unregisterReceiver(speedReceiver)
         } catch (_: Exception) {
         }
+        try {
+            unregisterReceiver(turnSignalReceiver)
+        } catch (_: Exception) {
+        }
         staleSpeedHandler.removeCallbacks(staleSpeedRunnable)
+        turnSignalPollHandler.removeCallbacks(turnSignalPollRunnable)
         stopLocationUpdates()
         super.onDestroy()
     }
@@ -105,6 +187,57 @@ class SensorDataService : Service() {
             putExtra(EXTRA_ID, SENSOR_ID_CAR_SPEED)
         }
         sendBroadcast(getIntent)
+    }
+
+    private fun subscribeToTurnSignals() {
+        TURN_SIGNAL_CANDIDATE_IDS.forEach { id ->
+            sendBroadcast(
+                Intent(ACTION_LISTEN_SENSOR_CHANGES).apply {
+                    setPackage(GBINDER_PACKAGE)
+                    putExtra(EXTRA_ID, id)
+                }
+            )
+            sendBroadcast(
+                Intent(ACTION_GET_INT_SENSOR).apply {
+                    setPackage(GBINDER_PACKAGE)
+                    putExtra(EXTRA_ID, id)
+                }
+            )
+            sendBroadcast(
+                Intent(ACTION_LISTEN_PROPERTY_CHANGES).apply {
+                    setPackage(GBINDER_PACKAGE)
+                    putExtra(EXTRA_ID, id)
+                    putExtra(EXTRA_VALUE, "*")
+                }
+            )
+            sendBroadcast(
+                Intent(ACTION_GET_INT_PROPERTY).apply {
+                    setPackage(GBINDER_PACKAGE)
+                    putExtra(EXTRA_ID, id)
+                }
+            )
+        }
+        UiLogStore.append(
+            LogCategory.SENSORS,
+            "Поворотники: подписка на id=${TURN_SIGNAL_CANDIDATE_IDS.joinToString()}"
+        )
+    }
+
+    private fun requestTurnSignalSnapshots() {
+        TURN_SIGNAL_CANDIDATE_IDS.forEach { id ->
+            sendBroadcast(
+                Intent(ACTION_GET_INT_SENSOR).apply {
+                    setPackage(GBINDER_PACKAGE)
+                    putExtra(EXTRA_ID, id)
+                }
+            )
+            sendBroadcast(
+                Intent(ACTION_GET_INT_PROPERTY).apply {
+                    setPackage(GBINDER_PACKAGE)
+                    putExtra(EXTRA_ID, id)
+                }
+            )
+        }
     }
 
     private fun ensureLocationUpdates() {
@@ -311,25 +444,172 @@ class SensorDataService : Service() {
     }
 
     private fun readIntExtra(intent: Intent, key: String): Int? {
-        val intValue = intent.getIntExtra(key, 0)
-        if (intValue != 0) {
-            return intValue
+        val value = readIntExtraAllowZero(intent, key) ?: return null
+        return value.takeIf { it != 0 }
+    }
+
+    private fun readIntExtraAllowZero(intent: Intent, key: String): Int? {
+        val extras = intent.extras ?: return null
+        if (!extras.containsKey(key)) {
+            return null
         }
-        val stringValue = intent.getStringExtra(key) ?: return null
-        return stringValue.toIntOrNull()
+        return when (val raw = extras.get(key)) {
+            is Int -> raw
+            is Long -> raw.toInt()
+            is Float -> raw.toInt()
+            is Double -> raw.toInt()
+            is Number -> raw.toInt()
+            is String -> raw.toIntOrNull()
+            is Boolean -> if (raw) 1 else 0
+            else -> raw?.toString()?.toIntOrNull()
+        }
+    }
+
+    private fun logRawTurnSignalEventIfChanged(
+        id: Int,
+        action: String,
+        rawValue: Int,
+        areaId: Int?
+    ) {
+        val signature = "$id|$action|$rawValue|${areaId ?: "na"}"
+        if (signature == lastTurnSignalEventSignature) {
+            return
+        }
+        lastTurnSignalEventSignature = signature
+        val areaText = areaId?.let { " area=$it" }.orEmpty()
+        val message = "Поворотники(raw): id=$id action=$action raw=$rawValue$areaText"
+        Log.i(TAG, message)
+        UiLogStore.append(LogCategory.SENSORS, message)
+    }
+
+    private fun onInvalidTurnSignalPayload(id: Int, rawValue: Int) {
+        if (id != VEHICLE_PROPERTY_TURN_SIGNAL_STATE) {
+            return
+        }
+        if (invalidVehicleTurnSignalLogSuppressed) {
+            return
+        }
+        UiLogStore.append(
+            LogCategory.SENSORS,
+            "Поворотники: игнор невалидного vehicle_property значения raw=$rawValue"
+        )
+        invalidVehicleTurnSignalLogSuppressed = true
+    }
+
+    private fun shouldIgnoreTurnSignalEvent(id: Int): Boolean {
+        if (id == VEHICLE_PROPERTY_TURN_SIGNAL_STATE) {
+            if (!hasVehicleTurnSignalSource) {
+                UiLogStore.append(LogCategory.SENSORS, "Поворотники: источник переключен на vehicle_property")
+            }
+            hasVehicleTurnSignalSource = true
+            turnSignalSourceLogSuppressed = false
+            return false
+        }
+        if (id == SENSOR_ID_LIGHT_STATE && hasVehicleTurnSignalSource) {
+            if (!turnSignalSourceLogSuppressed) {
+                UiLogStore.append(
+                    LogCategory.SENSORS,
+                    "Поворотники: события sensor_light игнорируются (есть vehicle_property)"
+                )
+                turnSignalSourceLogSuppressed = true
+            }
+            return true
+        }
+        return false
+    }
+
+    private fun decodeTurnSignalState(id: Int, raw: Int): TurnSignalState? {
+        return when (id) {
+            VEHICLE_PROPERTY_TURN_SIGNAL_STATE -> decodeVehiclePropertyTurnSignalState(raw)
+            SENSOR_ID_LIGHT_STATE -> decodeLegacySensorLightTurnSignalState(raw)
+            else -> decodeBitmaskTurnSignalState(raw, 0x1, 0x2, 0x4)
+        }
+    }
+
+    private fun decodeVehiclePropertyTurnSignalState(raw: Int): TurnSignalState? {
+        if (raw < 0) {
+            return null
+        }
+        if ((raw and VEHICLE_TURN_SIGNAL_KNOWN_MASK.inv()) != 0) {
+            return null
+        }
+        // VehicleProperty TURN_SIGNAL_STATE (AOSP): RIGHT=0x1, LEFT=0x2, EMERGENCY=0x4.
+        return decodeBitmaskTurnSignalState(
+            raw = raw,
+            leftMask = VEHICLE_TURN_SIGNAL_LEFT_MASK,
+            rightMask = VEHICLE_TURN_SIGNAL_RIGHT_MASK,
+            hazardMask = VEHICLE_TURN_SIGNAL_HAZARD_MASK
+        )
+    }
+
+    private fun decodeLegacySensorLightTurnSignalState(raw: Int): TurnSignalState {
+        // Some gbinder builds expose SENSOR_ID_LIGHT_STATE as enum: 0=none, 1=left, 2=right, 3=hazard.
+        val normalizedRaw = normalizeLegacySensorLightState(raw)
+        return when (normalizedRaw) {
+            LEGACY_LIGHT_STATE_NONE -> TurnSignalState(left = false, right = false, hazard = false)
+            LEGACY_LIGHT_STATE_LEFT -> TurnSignalState(left = true, right = false, hazard = false)
+            LEGACY_LIGHT_STATE_RIGHT -> TurnSignalState(left = false, right = true, hazard = false)
+            LEGACY_LIGHT_STATE_HAZARD -> TurnSignalState(left = true, right = true, hazard = true)
+            else -> decodeBitmaskTurnSignalState(normalizedRaw, 0x1, 0x2, 0x4)
+        }
+    }
+
+    private fun normalizeLegacySensorLightState(raw: Int): Int {
+        if (raw >= SENSOR_ID_LIGHT_STATE && raw <= SENSOR_ID_LIGHT_STATE + LEGACY_LIGHT_STATE_MAX_DELTA) {
+            return raw - SENSOR_ID_LIGHT_STATE
+        }
+        if (raw in 0..LEGACY_LIGHT_STATE_MAX_DELTA) {
+            return raw
+        }
+        return raw and 0xFF
+    }
+
+    private fun decodeBitmaskTurnSignalState(
+        raw: Int,
+        leftMask: Int,
+        rightMask: Int,
+        hazardMask: Int
+    ): TurnSignalState {
+        val hazardBit = (raw and hazardMask) != 0
+        val leftBit = (raw and leftMask) != 0
+        val rightBit = (raw and rightMask) != 0
+        return TurnSignalState(
+            left = leftBit || hazardBit,
+            right = rightBit || hazardBit,
+            hazard = hazardBit
+        )
+    }
+
+    private fun applyTurnSignalState(state: TurnSignalState) {
+        NavigationHudStore.update { current ->
+            if (current.turnSignalLeft == state.left &&
+                current.turnSignalRight == state.right &&
+                current.turnSignalHazard == state.hazard
+            ) {
+                current
+            } else {
+                current.copy(
+                    turnSignalLeft = state.left,
+                    turnSignalRight = state.right,
+                    turnSignalHazard = state.hazard
+                )
+            }
+        }
     }
 
     private fun readFloatExtra(intent: Intent, key: String): Float? {
-        val floatValue = intent.getFloatExtra(key, Float.NaN)
-        if (!floatValue.isNaN()) {
-            return floatValue
+        val extras = intent.extras ?: return null
+        if (!extras.containsKey(key)) {
+            return null
         }
-        val doubleValue = intent.getDoubleExtra(key, Double.NaN)
-        if (!doubleValue.isNaN()) {
-            return doubleValue.toFloat()
+        return when (val raw = extras.get(key)) {
+            is Float -> raw
+            is Double -> raw.toFloat()
+            is Number -> raw.toFloat()
+            is String -> raw.toFloatOrNull()
+            is Boolean -> if (raw) 1f else 0f
+            else -> raw?.toString()?.toFloatOrNull()
         }
-        val stringValue = intent.getStringExtra(key) ?: return null
-        return stringValue.toFloatOrNull()
     }
 
     private data class GpsWindowStats(
@@ -339,15 +619,46 @@ class SensorDataService : Service() {
         val points: Int
     )
 
+    private data class TurnSignalState(
+        val left: Boolean,
+        val right: Boolean,
+        val hazard: Boolean
+    )
+
     companion object {
+        private const val TAG = "SensorDataService"
         private const val GBINDER_PACKAGE = "com.salat.gbinder"
         private const val ACTION_GET_FLOAT_SENSOR = "com.salat.gbinder.GET_FLOAT_SENSOR"
+        private const val ACTION_GET_INT_SENSOR = "com.salat.gbinder.GET_INT_SENSOR"
+        private const val ACTION_GET_INT_PROPERTY = "com.salat.gbinder.GET_INT_PROPERTY"
         private const val ACTION_LISTEN_SENSOR_CHANGES = "com.salat.gbinder.LISTEN_SENSOR_CHANGES"
+        private const val ACTION_LISTEN_PROPERTY_CHANGES = "com.salat.gbinder.LISTEN_PROPERTY_CHANGES"
         private const val ACTION_SENSOR_FLOAT_RESULT = "com.salat.gbinder.SENSOR_FLOAT_RESULT"
         private const val ACTION_SENSOR_FLOAT_CHANGED = "com.salat.gbinder.SENSOR_FLOAT_CHANGED"
+        private const val ACTION_SENSOR_INT_RESULT = "com.salat.gbinder.SENSOR_INT_RESULT"
+        private const val ACTION_SENSOR_INT_CHANGED = "com.salat.gbinder.SENSOR_INT_CHANGED"
+        private const val ACTION_PROPERTY_INT_RESULT = "com.salat.gbinder.PROPERTY_INT_RESULT"
+        private const val ACTION_PROPERTY_INT_CHANGED = "com.salat.gbinder.PROPERTY_INT_CHANGED"
         private const val EXTRA_ID = "id"
         private const val EXTRA_VALUE = "value"
+        private const val EXTRA_AREA_ID = "area"
         private const val SENSOR_ID_CAR_SPEED = 1055232
+        private const val SENSOR_ID_LIGHT_STATE = 2_100_992
+        private const val VEHICLE_PROPERTY_TURN_SIGNAL_STATE = 289_408_008
+        private const val VEHICLE_TURN_SIGNAL_RIGHT_MASK = 0x1
+        private const val VEHICLE_TURN_SIGNAL_LEFT_MASK = 0x2
+        private const val VEHICLE_TURN_SIGNAL_HAZARD_MASK = 0x4
+        private const val VEHICLE_TURN_SIGNAL_KNOWN_MASK = 0x7
+        private const val LEGACY_LIGHT_STATE_NONE = 0
+        private const val LEGACY_LIGHT_STATE_LEFT = 1
+        private const val LEGACY_LIGHT_STATE_RIGHT = 2
+        private const val LEGACY_LIGHT_STATE_HAZARD = 3
+        private const val LEGACY_LIGHT_STATE_MAX_DELTA = 0xFF
+        private val TURN_SIGNAL_CANDIDATE_IDS = intArrayOf(
+            SENSOR_ID_LIGHT_STATE,
+            VEHICLE_PROPERTY_TURN_SIGNAL_STATE
+        )
+        private const val TURN_SIGNAL_POLL_INTERVAL_MS = 1000L
         private const val MS_TO_KMH = 3.6f
         private const val GPS_SPEED_WINDOW_POINTS = 3
         private const val GPS_MIN_UPDATE_INTERVAL_MS = 400L

@@ -10,6 +10,9 @@ import android.graphics.PointF
 import android.os.Bundle
 import android.os.Build
 import android.provider.Settings
+import android.text.SpannableStringBuilder
+import android.text.Spanned
+import android.text.style.RelativeSizeSpan
 import android.view.View
 import android.widget.Button
 import android.widget.CheckBox
@@ -33,6 +36,7 @@ import kotlin.math.roundToInt
 class MainActivity : ScaledActivity() {
     companion object {
         internal const val CONTAINER_OUTLINE_PREVIEW_MIN_ALPHA = 0.35f
+        internal const val SPEEDOMETER_UNIT_RELATIVE_SIZE = 1f / 3f
         const val EXTRA_START_GUIDE = "extra_start_guide"
     }
 
@@ -83,6 +87,7 @@ class MainActivity : ScaledActivity() {
     private lateinit var positionRoadCameraCard: View
     private lateinit var positionTrafficLightCard: View
     private lateinit var positionSpeedometerCard: View
+    private lateinit var positionTurnSignalsCard: View
     private lateinit var positionClockCard: View
     internal lateinit var navProjectionSwitch: SwitchCompat
     internal lateinit var arrowProjectionSwitch: SwitchCompat
@@ -91,10 +96,13 @@ class MainActivity : ScaledActivity() {
     internal lateinit var roadCameraProjectionSwitch: SwitchCompat
     internal lateinit var trafficLightProjectionSwitch: SwitchCompat
     internal lateinit var speedometerProjectionSwitch: SwitchCompat
+    internal lateinit var turnSignalsProjectionSwitch: SwitchCompat
     internal lateinit var clockProjectionSwitch: SwitchCompat
+    internal lateinit var speedometerShowUnitTextCheck: CheckBox
     internal lateinit var speedLimitFromHudSpeedCheck: CheckBox
     internal lateinit var arrowOnlyWhenNoIconCheck: CheckBox
     private lateinit var arrowOnlyWhenNoIconDesc: TextView
+    internal lateinit var speedometerCardPreviewText: TextView
     internal lateinit var speedLimitAlertCheck: CheckBox
     internal lateinit var speedLimitAlertThresholdRow: View
     internal lateinit var speedLimitAlertThresholdSeek: SeekBar
@@ -165,6 +173,7 @@ class MainActivity : ScaledActivity() {
         positionRoadCameraCard = findViewById(R.id.positionRoadCameraCard)
         positionTrafficLightCard = findViewById(R.id.positionTrafficLightCard)
         positionSpeedometerCard = findViewById(R.id.positionSpeedometerCard)
+        positionTurnSignalsCard = findViewById(R.id.positionTurnSignalsCard)
         positionClockCard = findViewById(R.id.positionClockCard)
         navProjectionSwitch = findViewById(R.id.navProjectionSwitch)
         arrowProjectionSwitch = findViewById(R.id.arrowProjectionSwitch)
@@ -173,10 +182,13 @@ class MainActivity : ScaledActivity() {
         roadCameraProjectionSwitch = findViewById(R.id.roadCameraProjectionSwitch)
         trafficLightProjectionSwitch = findViewById(R.id.trafficLightProjectionSwitch)
         speedometerProjectionSwitch = findViewById(R.id.speedometerProjectionSwitch)
+        turnSignalsProjectionSwitch = findViewById(R.id.turnSignalsProjectionSwitch)
         clockProjectionSwitch = findViewById(R.id.clockProjectionSwitch)
+        speedometerShowUnitTextCheck = findViewById(R.id.speedometerShowUnitTextCheck)
         speedLimitFromHudSpeedCheck = findViewById(R.id.speedLimitFromHudSpeedCheck)
         arrowOnlyWhenNoIconCheck = findViewById(R.id.arrowOnlyWhenNoIconCheck)
         arrowOnlyWhenNoIconDesc = findViewById(R.id.arrowOnlyWhenNoIconDesc)
+        speedometerCardPreviewText = findViewById(R.id.speedometerCardPreviewText)
         speedLimitAlertCheck = findViewById(R.id.speedLimitAlertCheck)
         speedLimitAlertThresholdRow = findViewById(R.id.speedLimitAlertThresholdRow)
         speedLimitAlertThresholdSeek = findViewById(R.id.speedLimitAlertThresholdSeek)
@@ -278,6 +290,9 @@ class MainActivity : ScaledActivity() {
         positionSpeedometerCard.setOnClickListener {
             openPositionDialog(OverlayTarget.SPEEDOMETER)
         }
+        positionTurnSignalsCard.setOnClickListener {
+            openPositionDialog(OverlayTarget.TURN_SIGNALS)
+        }
         positionClockCard.setOnClickListener {
             openPositionDialog(OverlayTarget.CLOCK)
         }
@@ -292,7 +307,10 @@ class MainActivity : ScaledActivity() {
         roadCameraProjectionSwitch.isChecked = OverlayPrefs.roadCameraEnabled(this)
         trafficLightProjectionSwitch.isChecked = OverlayPrefs.trafficLightEnabled(this)
         speedometerProjectionSwitch.isChecked = OverlayPrefs.speedometerEnabled(this)
+        turnSignalsProjectionSwitch.isChecked = OverlayPrefs.turnSignalsEnabled(this)
         clockProjectionSwitch.isChecked = OverlayPrefs.clockEnabled(this)
+        speedometerShowUnitTextCheck.isChecked = OverlayPrefs.speedometerShowUnitText(this)
+        updateSpeedometerCardPreviewText(speedometerShowUnitTextCheck.isChecked)
         speedLimitFromHudSpeedCheck.isChecked = OverlayPrefs.speedLimitFromHudSpeed(this)
         arrowOnlyWhenNoIconCheck.isChecked = OverlayPrefs.arrowOnlyWhenNoIcon(this)
         navProjectionSwitch.setOnCheckedChangeListener { _, isChecked ->
@@ -343,6 +361,21 @@ class MainActivity : ScaledActivity() {
             }
             OverlayPrefs.setSpeedometerEnabled(this, isChecked)
             notifyOverlaySettingsChanged(speedometerEnabled = isChecked)
+        }
+        turnSignalsProjectionSwitch.setOnCheckedChangeListener { _, isChecked ->
+            if (isSyncingUi) {
+                return@setOnCheckedChangeListener
+            }
+            OverlayPrefs.setTurnSignalsEnabled(this, isChecked)
+            notifyOverlaySettingsChanged(turnSignalsEnabled = isChecked)
+        }
+        speedometerShowUnitTextCheck.setOnCheckedChangeListener { _, isChecked ->
+            if (isSyncingUi) {
+                return@setOnCheckedChangeListener
+            }
+            OverlayPrefs.setSpeedometerShowUnitText(this, isChecked)
+            updateSpeedometerCardPreviewText(isChecked)
+            notifyOverlaySettingsChanged(speedometerShowUnitText = isChecked)
         }
         clockProjectionSwitch.setOnCheckedChangeListener { _, isChecked ->
             if (isSyncingUi) {
@@ -726,6 +759,7 @@ class MainActivity : ScaledActivity() {
         roadCameraPosition: PointF? = null,
         trafficLightPosition: PointF? = null,
         speedometerPosition: PointF? = null,
+        turnSignalsPosition: PointF? = null,
         clockPosition: PointF? = null,
         navScale: Float? = null,
         navTextScale: Float? = null,
@@ -736,6 +770,7 @@ class MainActivity : ScaledActivity() {
         roadCameraScale: Float? = null,
         trafficLightScale: Float? = null,
         speedometerScale: Float? = null,
+        turnSignalsScale: Float? = null,
         clockScale: Float? = null,
         navAlpha: Float? = null,
         arrowAlpha: Float? = null,
@@ -744,6 +779,7 @@ class MainActivity : ScaledActivity() {
         roadCameraAlpha: Float? = null,
         trafficLightAlpha: Float? = null,
         speedometerAlpha: Float? = null,
+        turnSignalsAlpha: Float? = null,
         clockAlpha: Float? = null,
         containerAlpha: Float? = null,
         navEnabled: Boolean? = null,
@@ -759,6 +795,8 @@ class MainActivity : ScaledActivity() {
         speedLimitAlertEnabled: Boolean? = null,
         speedLimitAlertThreshold: Int? = null,
         speedometerEnabled: Boolean? = null,
+        speedometerShowUnitText: Boolean? = null,
+        turnSignalsEnabled: Boolean? = null,
         clockEnabled: Boolean? = null,
         trafficLightMaxActive: Int? = null,
         mapEnabled: Boolean? = null,
@@ -809,6 +847,10 @@ class MainActivity : ScaledActivity() {
             intent.putExtra(OverlayBroadcasts.EXTRA_SPEEDOMETER_X_DP, speedometerPosition.x)
             intent.putExtra(OverlayBroadcasts.EXTRA_SPEEDOMETER_Y_DP, speedometerPosition.y)
         }
+        if (turnSignalsPosition != null) {
+            intent.putExtra(OverlayBroadcasts.EXTRA_TURN_SIGNALS_X_DP, turnSignalsPosition.x)
+            intent.putExtra(OverlayBroadcasts.EXTRA_TURN_SIGNALS_Y_DP, turnSignalsPosition.y)
+        }
         if (clockPosition != null) {
             intent.putExtra(OverlayBroadcasts.EXTRA_CLOCK_X_DP, clockPosition.x)
             intent.putExtra(OverlayBroadcasts.EXTRA_CLOCK_Y_DP, clockPosition.y)
@@ -840,6 +882,9 @@ class MainActivity : ScaledActivity() {
         if (speedometerScale != null) {
             intent.putExtra(OverlayBroadcasts.EXTRA_SPEEDOMETER_SCALE, speedometerScale)
         }
+        if (turnSignalsScale != null) {
+            intent.putExtra(OverlayBroadcasts.EXTRA_TURN_SIGNALS_SCALE, turnSignalsScale)
+        }
         if (clockScale != null) {
             intent.putExtra(OverlayBroadcasts.EXTRA_CLOCK_SCALE, clockScale)
         }
@@ -863,6 +908,9 @@ class MainActivity : ScaledActivity() {
         }
         if (speedometerAlpha != null) {
             intent.putExtra(OverlayBroadcasts.EXTRA_SPEEDOMETER_ALPHA, speedometerAlpha)
+        }
+        if (turnSignalsAlpha != null) {
+            intent.putExtra(OverlayBroadcasts.EXTRA_TURN_SIGNALS_ALPHA, turnSignalsAlpha)
         }
         if (clockAlpha != null) {
             intent.putExtra(OverlayBroadcasts.EXTRA_CLOCK_ALPHA, clockAlpha)
@@ -909,6 +957,12 @@ class MainActivity : ScaledActivity() {
         if (speedometerEnabled != null) {
             intent.putExtra(OverlayBroadcasts.EXTRA_SPEEDOMETER_ENABLED, speedometerEnabled)
         }
+        if (speedometerShowUnitText != null) {
+            intent.putExtra(OverlayBroadcasts.EXTRA_SPEEDOMETER_SHOW_UNIT_TEXT, speedometerShowUnitText)
+        }
+        if (turnSignalsEnabled != null) {
+            intent.putExtra(OverlayBroadcasts.EXTRA_TURN_SIGNALS_ENABLED, turnSignalsEnabled)
+        }
         if (clockEnabled != null) {
             intent.putExtra(OverlayBroadcasts.EXTRA_CLOCK_ENABLED, clockEnabled)
         }
@@ -937,6 +991,28 @@ class MainActivity : ScaledActivity() {
     internal fun updateHudSpeedPreviewLayout(showLimit: Boolean) {
         hudSpeedPreviewFull.visibility = if (showLimit) View.VISIBLE else View.GONE
         hudSpeedPreviewCompact.visibility = if (showLimit) View.GONE else View.VISIBLE
+    }
+
+    internal fun updateSpeedometerCardPreviewText(showUnitText: Boolean) {
+        speedometerCardPreviewText.text = buildSpeedometerPreviewText(showUnitText)
+    }
+
+    internal fun buildSpeedometerPreviewText(showUnitText: Boolean): CharSequence {
+        val speedText = getString(R.string.preview_speedometer_text)
+        if (!showUnitText) {
+            return speedText
+        }
+        val unitText = getString(R.string.speedometer_unit_text)
+        val fullText = "$speedText\n$unitText"
+        val unitStart = speedText.length + 1
+        return SpannableStringBuilder(fullText).apply {
+            setSpan(
+                RelativeSizeSpan(SPEEDOMETER_UNIT_RELATIVE_SIZE),
+                unitStart,
+                fullText.length,
+                Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+            )
+        }
     }
 
 

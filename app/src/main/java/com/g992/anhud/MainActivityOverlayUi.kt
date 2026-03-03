@@ -66,7 +66,10 @@ internal fun MainActivity.syncUiFromPrefs() {
         roadCameraProjectionSwitch.isChecked = OverlayPrefs.roadCameraEnabled(this)
         trafficLightProjectionSwitch.isChecked = OverlayPrefs.trafficLightEnabled(this)
         speedometerProjectionSwitch.isChecked = OverlayPrefs.speedometerEnabled(this)
+        turnSignalsProjectionSwitch.isChecked = OverlayPrefs.turnSignalsEnabled(this)
         clockProjectionSwitch.isChecked = OverlayPrefs.clockEnabled(this)
+        speedometerShowUnitTextCheck.isChecked = OverlayPrefs.speedometerShowUnitText(this)
+        updateSpeedometerCardPreviewText(speedometerShowUnitTextCheck.isChecked)
         speedLimitFromHudSpeedCheck.isChecked = OverlayPrefs.speedLimitFromHudSpeed(this)
         arrowOnlyWhenNoIconCheck.isChecked = OverlayPrefs.arrowOnlyWhenNoIcon(this)
 

@@ -941,6 +941,7 @@
             </LinearLayout>
 
             <TextView
+                android:id="@+id/speedometerCardPreviewText"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
@@ -948,6 +949,78 @@
                 android:textColor="@color/white"
                 android:textSize="20sp"
                 android:textStyle="bold" />
+
+            <CheckBox
+                android:id="@+id/speedometerShowUnitTextCheck"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="@string/speedometer_show_unit_text_label"
+                android:textColor="@color/white"
+                android:textSize="16sp" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/positionTurnSignalsCard"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:background="@drawable/bg_log_section"
+            android:clickable="true"
+            android:focusable="true"
+            android:foreground="?attr/selectableItemBackground"
+            android:orientation="vertical"
+            android:padding="16dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/position_turn_signals_block_label"
+                    android:textColor="@color/white"
+                    android:textSize="16sp"
+                    android:textStyle="bold" />
+
+                <androidx.appcompat.widget.SwitchCompat
+                    android:id="@+id/turnSignalsProjectionSwitch"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/projection_toggle_label"
+                    android:textColor="@color/white" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <ImageView
+                    android:layout_width="24dp"
+                    android:layout_height="24dp"
+                    android:layout_marginEnd="8dp"
+                    android:contentDescription="@string/position_turn_signals_block_label"
+                    android:scaleType="fitCenter"
+                    android:src="@drawable/keyboard_double_arrow_left_24dp_e3e3e3_fill0_wght400_grad0_opsz24"
+                    android:tint="@color/traffic_light_green_primary" />
+
+                <ImageView
+                    android:layout_width="24dp"
+                    android:layout_height="24dp"
+                    android:contentDescription="@string/position_turn_signals_block_label"
+                    android:rotation="180"
+                    android:scaleType="fitCenter"
+                    android:src="@drawable/keyboard_double_arrow_left_24dp_e3e3e3_fill0_wght400_grad0_opsz24"
+                    android:tint="@color/traffic_light_green_primary" />
+            </LinearLayout>
+
         </LinearLayout>
 
         <LinearLayout

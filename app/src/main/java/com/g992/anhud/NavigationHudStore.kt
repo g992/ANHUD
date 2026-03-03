@@ -53,7 +53,10 @@ data class NavigationHudState(
     val roadCameraIcon: Bitmap? = null,
     val trafficLightColor: String = "",
     val trafficLightCountdown: String = "",
-    val trafficLights: List<TrafficLightInfo> = emptyList()
+    val trafficLights: List<TrafficLightInfo> = emptyList(),
+    val turnSignalLeft: Boolean = false,
+    val turnSignalRight: Boolean = false,
+    val turnSignalHazard: Boolean = false
 ) {
     fun isEmpty(): Boolean {
         return primaryText.isBlank() &&
@@ -69,7 +72,10 @@ data class NavigationHudState(
             maneuverType.isBlank() &&
             !hudSpeedHasCamera &&
             !hudSpeedHasGps &&
-            trafficLights.isEmpty()
+            trafficLights.isEmpty() &&
+            !turnSignalLeft &&
+            !turnSignalRight &&
+            !turnSignalHazard
     }
 }
 
@@ -148,7 +154,10 @@ object NavigationHudStore {
                 roadCameraIcon = if (preserveRoadCamera) current.roadCameraIcon else null,
                 trafficLightColor = "",
                 trafficLightCountdown = "",
-                trafficLights = emptyList()
+                trafficLights = emptyList(),
+                turnSignalLeft = false,
+                turnSignalRight = false,
+                turnSignalHazard = false
             )
         }
     }
