@@ -25,7 +25,10 @@ class SensorDataService : Service() {
     private val gpsSpeedSamples = ArrayDeque<Location>()
     private var lastGpsSpeedUpdateElapsedMs: Long = 0L
     private var lastTurnSignalState: TurnSignalState? = null
+    private var lastLeftTurnState: Boolean? = null  // Для отдельных Geely/Ecarx сенсоров
+    private var lastRightTurnState: Boolean? = null // Для отдельных Geely/Ecarx сенсоров
     private var hasVehicleTurnSignalSource = false
+    private var hasGeelyTurnSignalSource = false
     private var turnSignalSourceLogSuppressed = false
     private var invalidVehicleTurnSignalLogSuppressed = false
     private var lastTurnSignalEventSignature: String? = null
@@ -90,7 +93,14 @@ class SensorDataService : Service() {
             if (id !in TURN_SIGNAL_CANDIDATE_IDS) {
                 return
             }
+            // Игнорируем SENSOR_ID_LIGHT_STATE если он приходит как property (должен быть sensor)
             if (id == SENSOR_ID_LIGHT_STATE &&
+                (action == ACTION_PROPERTY_INT_CHANGED || action == ACTION_PROPERTY_INT_RESULT)
+            ) {
+                return
+            }
+            // Geely/Ecarx sensor ID работают только как sensors, не properties
+            if ((id == SENSOR_ID_LEFT_TURN || id == SENSOR_ID_RIGHT_TURN) &&
                 (action == ACTION_PROPERTY_INT_CHANGED || action == ACTION_PROPERTY_INT_RESULT)
             ) {
                 return
@@ -109,20 +119,43 @@ class SensorDataService : Service() {
             if (id == VEHICLE_PROPERTY_TURN_SIGNAL_STATE) {
                 invalidVehicleTurnSignalLogSuppressed = false
             }
+
+            // Для Geely/Ecarx объединяем состояние от отдельных сенсоров
+            val finalState = if (id == SENSOR_ID_LEFT_TURN || id == SENSOR_ID_RIGHT_TURN) {
+                if (id == SENSOR_ID_LEFT_TURN) {
+                    lastLeftTurnState = state.left
+                }
+                if (id == SENSOR_ID_RIGHT_TURN) {
+                    lastRightTurnState = state.right
+                }
+                val combinedLeft = lastLeftTurnState ?: false
+                val combinedRight = lastRightTurnState ?: false
+                val combinedHazard = combinedLeft && combinedRight
+                TurnSignalState(
+                    left = combinedLeft,
+                    right = combinedRight,
+                    hazard = combinedHazard
+                )
+            } else {
+                state
+            }
+
             val previous = lastTurnSignalState
-            if (previous == state) {
+            if (previous == finalState) {
                 return
             }
-            lastTurnSignalState = state
-            applyTurnSignalState(state)
+            lastTurnSignalState = finalState
+            applyTurnSignalState(finalState)
             val areaText = areaId?.let { " area=$it" }.orEmpty()
             val sourceText = when (id) {
+                SENSOR_ID_LEFT_TURN -> "geely_left"
+                SENSOR_ID_RIGHT_TURN -> "geely_right"
                 VEHICLE_PROPERTY_TURN_SIGNAL_STATE -> "vehicle_property"
                 SENSOR_ID_LIGHT_STATE -> "sensor_light"
                 else -> "unknown"
             }
             val message =
-                "Поворотники: left=${state.left} right=${state.right} hazard=${state.hazard} " +
+                "Поворотники: left=${finalState.left} right=${finalState.right} hazard=${finalState.hazard} " +
                     "(raw=$rawValue id=$id source=$sourceText action=$action$areaText)"
             Log.i(TAG, message)
             UiLogStore.append(LogCategory.SENSORS, message)
@@ -497,7 +530,30 @@ class SensorDataService : Service() {
     }
 
     private fun shouldIgnoreTurnSignalEvent(id: Int): Boolean {
+        // Приоритет 1: Geely/Ecarx отдельные сенсоры (самый надежный)
+        if (id == SENSOR_ID_LEFT_TURN || id == SENSOR_ID_RIGHT_TURN) {
+            if (!hasGeelyTurnSignalSource) {
+                UiLogStore.append(LogCategory.SENSORS, "Поворотники: источник переключен на geely/ecarx sensors")
+            }
+            hasGeelyTurnSignalSource = true
+            hasVehicleTurnSignalSource = false
+            turnSignalSourceLogSuppressed = false
+            return false
+        }
+
+        // Приоритет 2: VehicleProperty (стандартный AOSP)
         if (id == VEHICLE_PROPERTY_TURN_SIGNAL_STATE) {
+            // Игнорируем если уже работают Geely сенсоры
+            if (hasGeelyTurnSignalSource) {
+                if (!turnSignalSourceLogSuppressed) {
+                    UiLogStore.append(
+                        LogCategory.SENSORS,
+                        "Поворотники: события vehicle_property игнорируются (есть geely/ecarx)"
+                    )
+                    turnSignalSourceLogSuppressed = true
+                }
+                return true
+            }
             if (!hasVehicleTurnSignalSource) {
                 UiLogStore.append(LogCategory.SENSORS, "Поворотники: источник переключен на vehicle_property")
             }
@@ -505,21 +561,39 @@ class SensorDataService : Service() {
             turnSignalSourceLogSuppressed = false
             return false
         }
-        if (id == SENSOR_ID_LIGHT_STATE && hasVehicleTurnSignalSource) {
-            if (!turnSignalSourceLogSuppressed) {
-                UiLogStore.append(
-                    LogCategory.SENSORS,
-                    "Поворотники: события sensor_light игнорируются (есть vehicle_property)"
-                )
-                turnSignalSourceLogSuppressed = true
+
+        // Приоритет 3: Legacy SENSOR_ID_LIGHT_STATE (fallback)
+        if (id == SENSOR_ID_LIGHT_STATE) {
+            // Игнорируем если уже работают более приоритетные источники
+            if (hasGeelyTurnSignalSource || hasVehicleTurnSignalSource) {
+                if (!turnSignalSourceLogSuppressed) {
+                    val activeSource = if (hasGeelyTurnSignalSource) "geely/ecarx" else "vehicle_property"
+                    UiLogStore.append(
+                        LogCategory.SENSORS,
+                        "Поворотники: события sensor_light игнорируются (есть $activeSource)"
+                    )
+                    turnSignalSourceLogSuppressed = true
+                }
+                return true
             }
-            return true
+            return false
         }
+
         return false
     }
 
     private fun decodeTurnSignalState(id: Int, raw: Int): TurnSignalState? {
         return when (id) {
+            SENSOR_ID_LEFT_TURN -> {
+                // Geely/Ecarx левый поворотник: 0=выкл, 1=вкл
+                val isActive = raw != 0
+                TurnSignalState(left = isActive, right = false, hazard = false)
+            }
+            SENSOR_ID_RIGHT_TURN -> {
+                // Geely/Ecarx правый поворотник: 0=выкл, 1=вкл
+                val isActive = raw != 0
+                TurnSignalState(left = false, right = isActive, hazard = false)
+            }
             VEHICLE_PROPERTY_TURN_SIGNAL_STATE -> decodeVehiclePropertyTurnSignalState(raw)
             SENSOR_ID_LIGHT_STATE -> decodeLegacySensorLightTurnSignalState(raw)
             else -> decodeBitmaskTurnSignalState(raw, 0x1, 0x2, 0x4)
@@ -645,6 +719,8 @@ class SensorDataService : Service() {
         private const val SENSOR_ID_CAR_SPEED = 1055232
         private const val SENSOR_ID_LIGHT_STATE = 2_100_992
         private const val VEHICLE_PROPERTY_TURN_SIGNAL_STATE = 289_408_008
+        private const val SENSOR_ID_LEFT_TURN = 0x22010102  // 570491138 - Geely/Ecarx left turn signal
+        private const val SENSOR_ID_RIGHT_TURN = 0x22010103 // 570491139 - Geely/Ecarx right turn signal
         private const val VEHICLE_TURN_SIGNAL_RIGHT_MASK = 0x1
         private const val VEHICLE_TURN_SIGNAL_LEFT_MASK = 0x2
         private const val VEHICLE_TURN_SIGNAL_HAZARD_MASK = 0x4
@@ -655,8 +731,10 @@ class SensorDataService : Service() {
         private const val LEGACY_LIGHT_STATE_HAZARD = 3
         private const val LEGACY_LIGHT_STATE_MAX_DELTA = 0xFF
         private val TURN_SIGNAL_CANDIDATE_IDS = intArrayOf(
-            SENSOR_ID_LIGHT_STATE,
-            VEHICLE_PROPERTY_TURN_SIGNAL_STATE
+            SENSOR_ID_LEFT_TURN,        // Geely/Ecarx left turn (приоритет)
+            SENSOR_ID_RIGHT_TURN,       // Geely/Ecarx right turn (приоритет)
+            VEHICLE_PROPERTY_TURN_SIGNAL_STATE,  // AOSP VehicleProperty fallback
+            SENSOR_ID_LIGHT_STATE       // Legacy gbinder fallback
         )
         private const val TURN_SIGNAL_POLL_INTERVAL_MS = 1000L
         private const val MS_TO_KMH = 3.6f
