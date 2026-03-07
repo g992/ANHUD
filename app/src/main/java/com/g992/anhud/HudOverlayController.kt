@@ -179,6 +179,7 @@ class HudOverlayController(private val context: Context) {
     private var turnSignalsEnabled: Boolean = OverlayPrefs.turnSignalsEnabled(context)
     private var clockEnabled: Boolean = OverlayPrefs.clockEnabled(context)
     private var mapEnabled: Boolean = OverlayPrefs.mapEnabled(context)
+    private var infoMirrorStarsheep7Enabled: Boolean = OverlayPrefs.infoMirrorStarsheep7Enabled(context)
     private var previewMode: Boolean = false
     private var previewTarget: String? = null
     private var previewShowOthers: Boolean = false
@@ -483,7 +484,8 @@ class HudOverlayController(private val context: Context) {
         mapEnabled: Boolean?,
         preview: Boolean? = null,
         previewTarget: String? = null,
-        previewShowOthers: Boolean? = null
+        previewShowOthers: Boolean? = null,
+        infoMirrorStarsheep7Enabled: Boolean? = null
     ) {
         handler.post {
             val shouldClearForPreviewTransition = (preview != null && previewMode != preview) ||
@@ -648,6 +650,9 @@ class HudOverlayController(private val context: Context) {
             }
             if (mapEnabled != null) {
                 this.mapEnabled = mapEnabled
+            }
+            if (infoMirrorStarsheep7Enabled != null) {
+                this.infoMirrorStarsheep7Enabled = infoMirrorStarsheep7Enabled
             }
             if (preview != null) {
                 previewMode = preview
@@ -1128,21 +1133,17 @@ class HudOverlayController(private val context: Context) {
         }
         val turnArrowSize = (24 * metrics.density).roundToInt().coerceAtLeast(1)
         val turnArrowGap = (8 * metrics.density).roundToInt()
-        val turnArrowColor = ContextCompat.getColor(displayContext, R.color.traffic_light_green_primary)
         val turnSignalLeft = ImageView(displayContext).apply {
             layoutParams = LinearLayout.LayoutParams(turnArrowSize, turnArrowSize).apply {
                 marginEnd = turnArrowGap
             }
             scaleType = ImageView.ScaleType.FIT_CENTER
-            setImageResource(R.drawable.keyboard_double_arrow_left_24dp_e3e3e3_fill0_wght400_grad0_opsz24)
-            setColorFilter(turnArrowColor)
+            setImageResource(R.drawable.ic_turn_signal_left)
         }
         val turnSignalRight = ImageView(displayContext).apply {
             layoutParams = LinearLayout.LayoutParams(turnArrowSize, turnArrowSize)
             scaleType = ImageView.ScaleType.FIT_CENTER
-            rotation = 180f
-            setImageResource(R.drawable.keyboard_double_arrow_left_24dp_e3e3e3_fill0_wght400_grad0_opsz24)
-            setColorFilter(turnArrowColor)
+            setImageResource(R.drawable.ic_turn_signal_right)
         }
         turnSignalsBlock.addView(turnSignalLeft)
         turnSignalsBlock.addView(turnSignalRight)
@@ -2479,12 +2480,20 @@ class HudOverlayController(private val context: Context) {
         params.height = containerHeightPx
         params.x = xPx.coerceIn(0, maxX)
         params.y = yPx.coerceIn(0, maxY)
+        applyInfoMirrorMode(view, containerWidthPx, containerHeightPx)
         updateContainerOutlineAlpha(view)
         try {
             wm.updateViewLayout(view, params)
         } catch (e: Exception) {
             UiLogStore.append(LogCategory.SYSTEM, "Оверлей: ошибка обновления: ${e.message}")
         }
+    }
+
+    private fun applyInfoMirrorMode(container: FrameLayout, containerWidthPx: Int, containerHeightPx: Int) {
+        container.pivotX = containerWidthPx / 2f
+        container.pivotY = containerHeightPx / 2f
+        container.scaleX = 1f
+        container.scaleY = if (infoMirrorStarsheep7Enabled) -1f else 1f
     }
 
     private fun updateContainerOutlineAlpha(container: FrameLayout) {

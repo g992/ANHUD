@@ -222,6 +222,7 @@ object PrefsJson {
         putInt("road_camera_timeout", OverlayPrefs.roadCameraTimeout(context))
         putInt("speed_correction", OverlayPrefs.speedCorrection(context))
         putBoolean("speed_from_gps", OverlayPrefs.speedFromGps(context))
+        putBoolean("info_mirror_starsheep7", OverlayPrefs.infoMirrorStarsheep7Enabled(context))
         putBoolean("guide_shown", OverlayPrefs.guideShown(context))
 
         return items

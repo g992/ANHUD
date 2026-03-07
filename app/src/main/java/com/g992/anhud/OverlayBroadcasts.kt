@@ -65,6 +65,7 @@ object OverlayBroadcasts {
     const val EXTRA_HUDSPEED_LIMIT_ALERT_THRESHOLD = "extra_hudspeed_limit_alert_threshold"
     const val EXTRA_SPEEDOMETER_SHOW_UNIT_TEXT = "extra_speedometer_show_unit_text"
     const val EXTRA_MAP_ENABLED = "extra_map_enabled"
+    const val EXTRA_INFO_MIRROR_STARSHEEP7 = "extra_info_mirror_starsheep7"
     const val EXTRA_PREVIEW = "extra_preview"
     const val EXTRA_PREVIEW_TARGET = "extra_preview_target"
     const val EXTRA_PREVIEW_SHOW_OTHERS = "extra_preview_show_others"

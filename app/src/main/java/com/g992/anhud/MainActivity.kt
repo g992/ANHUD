@@ -972,6 +972,10 @@ class MainActivity : ScaledActivity() {
         if (mapEnabled != null) {
             intent.putExtra(OverlayBroadcasts.EXTRA_MAP_ENABLED, mapEnabled)
         }
+        intent.putExtra(
+            OverlayBroadcasts.EXTRA_INFO_MIRROR_STARSHEEP7,
+            OverlayPrefs.infoMirrorStarsheep7Enabled(this)
+        )
         intent.putExtra(OverlayBroadcasts.EXTRA_PREVIEW, preview)
         if (previewTarget != null) {
             intent.putExtra(OverlayBroadcasts.EXTRA_PREVIEW_TARGET, previewTarget.previewKey)

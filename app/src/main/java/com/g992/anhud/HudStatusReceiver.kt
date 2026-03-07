@@ -159,6 +159,10 @@ class HudStatusReceiver : BroadcastReceiver() {
         if (clockEnabled != null) {
             updateIntent.putExtra(OverlayBroadcasts.EXTRA_CLOCK_ENABLED, clockEnabled)
         }
+        updateIntent.putExtra(
+            OverlayBroadcasts.EXTRA_INFO_MIRROR_STARSHEEP7,
+            OverlayPrefs.infoMirrorStarsheep7Enabled(context)
+        )
         context.sendBroadcast(updateIntent)
     }
 
@@ -259,6 +263,10 @@ class HudStatusReceiver : BroadcastReceiver() {
                 OverlayPrefs.trafficLightMaxActive(context)
             )
             .putExtra(OverlayBroadcasts.EXTRA_MAP_ENABLED, OverlayPrefs.mapEnabled(context))
+            .putExtra(
+                OverlayBroadcasts.EXTRA_INFO_MIRROR_STARSHEEP7,
+                OverlayPrefs.infoMirrorStarsheep7Enabled(context)
+            )
             .putExtra(OverlayBroadcasts.EXTRA_PREVIEW, false)
         context.sendBroadcast(updateIntent)
     }

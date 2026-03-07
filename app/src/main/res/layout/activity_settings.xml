@@ -352,6 +352,15 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="12dp"
                     android:text="@string/settings_import_button" />
+
+                <androidx.appcompat.widget.SwitchCompat
+                    android:id="@+id/infoMirrorStarsheep7Switch"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="20dp"
+                    android:text="@string/info_mirror_starsheep7_label"
+                    android:textColor="@color/white"
+                    android:textSize="14sp" />
             </LinearLayout>
 
             <!-- Повороты навигатора -->

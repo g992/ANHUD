@@ -71,6 +71,7 @@ class SettingsActivity : ScaledActivity() {
     private lateinit var speedCorrectionSeek: SeekBar
     private lateinit var speedCorrectionValue: TextView
     private lateinit var speedFromGpsCheck: SwitchCompat
+    private lateinit var infoMirrorStarsheep7Switch: SwitchCompat
     private lateinit var hideTurnWhenFarSwitch: SwitchCompat
     private lateinit var hideTurnWhenFarDistanceSeek: SeekBar
     private lateinit var hideTurnWhenFarDistanceValue: TextView
@@ -222,6 +223,7 @@ class SettingsActivity : ScaledActivity() {
         speedCorrectionSeek = findViewById(R.id.speedCorrectionSeek)
         speedCorrectionValue = findViewById(R.id.speedCorrectionValue)
         speedFromGpsCheck = findViewById(R.id.speedFromGpsCheck)
+        infoMirrorStarsheep7Switch = findViewById(R.id.infoMirrorStarsheep7Switch)
         hideTurnWhenFarSwitch = findViewById(R.id.hideTurnWhenFarSwitch)
         hideTurnWhenFarDistanceSeek = findViewById(R.id.hideTurnWhenFarDistanceSeek)
         hideTurnWhenFarDistanceValue = findViewById(R.id.hideTurnWhenFarDistanceValue)
@@ -456,6 +458,12 @@ class SettingsActivity : ScaledActivity() {
             startService(Intent(this, SensorDataService::class.java))
         }
 
+        infoMirrorStarsheep7Switch.setOnCheckedChangeListener { _, isChecked ->
+            if (isSyncingUi) return@setOnCheckedChangeListener
+            OverlayPrefs.setInfoMirrorStarsheep7Enabled(this, isChecked)
+            broadcastInfoMirrorStarsheep7(isChecked)
+        }
+
         hideTurnWhenFarSwitch.setOnCheckedChangeListener { _, isChecked ->
             if (isSyncingUi) return@setOnCheckedChangeListener
             OverlayPrefs.setHideTurnWhenFarEnabled(this, isChecked)
@@ -676,6 +684,17 @@ class SettingsActivity : ScaledActivity() {
             OverlayBroadcasts.EXTRA_HUDSPEED_LIMIT_ALERT_THRESHOLD,
             OverlayPrefs.hudSpeedLimitAlertThreshold(this)
         )
+        intent.putExtra(
+            OverlayBroadcasts.EXTRA_INFO_MIRROR_STARSHEEP7,
+            OverlayPrefs.infoMirrorStarsheep7Enabled(this)
+        )
+        sendBroadcast(intent)
+    }
+
+    private fun broadcastInfoMirrorStarsheep7(enabled: Boolean) {
+        val intent = Intent(OverlayBroadcasts.ACTION_OVERLAY_SETTINGS_CHANGED)
+            .setPackage(packageName)
+            .putExtra(OverlayBroadcasts.EXTRA_INFO_MIRROR_STARSHEEP7, enabled)
         sendBroadcast(intent)
     }
 
@@ -1198,6 +1217,7 @@ class SettingsActivity : ScaledActivity() {
             speedCorrectionSeek.progress = correction + 10
             speedCorrectionValue.text = getString(R.string.speed_correction_value, correction)
             speedFromGpsCheck.isChecked = OverlayPrefs.speedFromGps(this)
+            infoMirrorStarsheep7Switch.isChecked = OverlayPrefs.infoMirrorStarsheep7Enabled(this)
             val hideTurnWhenFarEnabled = OverlayPrefs.hideTurnWhenFarEnabled(this)
             hideTurnWhenFarSwitch.isChecked = hideTurnWhenFarEnabled
             val hideDistance = OverlayPrefs.hideTurnWhenFarDistanceMeters(this)
