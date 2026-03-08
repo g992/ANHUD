@@ -39,7 +39,7 @@ android {
 
     defaultConfig {
         applicationId = "com.g992.anhud"
-        minSdk = 30
+        minSdk = 28
         targetSdk = 36
         versionCode = versionCodeProp
         versionName = versionNameProp

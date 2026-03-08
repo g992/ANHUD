@@ -738,7 +738,7 @@ class HudOverlayController(private val context: Context) {
             clipToPadding = false
         }
 
-        val navWidthPx = (navWidthDp * metrics.density).roundToInt()
+        val navWidthPx = resolveScaledLayoutWidthPx(navWidthDp, navScale, metrics.density)
         val navBlock = LinearLayout(displayContext).apply {
             orientation = LinearLayout.HORIZONTAL
             setPadding(0, 0, 0, 0)
@@ -2408,7 +2408,7 @@ class HudOverlayController(private val context: Context) {
         val containerWidth = containerWidthPx.toFloat()
         val containerHeight = resolvedHeightPx.toFloat()
         navContainer?.let {
-            val navWidthPx = (navWidthDp * metrics.density).roundToInt()
+            val navWidthPx = resolveScaledLayoutWidthPx(navWidthDp, navScale, metrics.density)
             it.layoutParams = (it.layoutParams as? FrameLayout.LayoutParams)?.apply {
                 width = navWidthPx
             } ?: FrameLayout.LayoutParams(navWidthPx, FrameLayout.LayoutParams.WRAP_CONTENT)
@@ -2550,6 +2550,12 @@ class HudOverlayController(private val context: Context) {
             return containerHeightPx
         }
         return max(containerHeightPx, scaledHeight.roundToInt())
+    }
+
+    private fun resolveScaledLayoutWidthPx(widthDp: Float, scale: Float, density: Float): Int {
+        val safeScale = scale.coerceAtLeast(0.01f)
+        val visibleWidthPx = (widthDp * density).coerceAtLeast(1f)
+        return (visibleWidthPx / safeScale).roundToInt().coerceAtLeast(1)
     }
 
     private fun positionView(

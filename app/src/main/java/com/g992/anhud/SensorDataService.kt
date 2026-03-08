@@ -3,9 +3,11 @@ package com.g992.anhud
 import android.Manifest
 import android.app.Service
 import android.content.BroadcastReceiver
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.ServiceConnection
 import android.content.pm.PackageManager
 import android.location.Location
 import android.location.LocationListener
@@ -16,6 +18,8 @@ import android.os.Looper
 import android.os.SystemClock
 import android.util.Log
 import androidx.core.content.ContextCompat
+import dalvik.system.PathClassLoader
+import java.lang.reflect.Method
 import java.util.Locale
 import kotlin.math.roundToInt
 
@@ -33,6 +37,55 @@ class SensorDataService : Service() {
     private var invalidVehicleTurnSignalLogSuppressed = false
     private var lastTurnSignalEventSignature: String? = null
 
+    // AutoLink CarProxyService — прямое подключение к BCM поворотникам
+    private var autoLinkServiceProxy: Any? = null
+    private var autoLinkGetIntPropMethod: Method? = null
+    private var autoLinkIsActive = false
+
+    private val autoLinkPollHandler = Handler(Looper.getMainLooper())
+    private val autoLinkPollRunnable = object : Runnable {
+        override fun run() {
+            pollAutoLinkTurnSignals()
+            autoLinkPollHandler.postDelayed(this, AUTO_LINK_POLL_MS)
+        }
+    }
+
+    private val autoLinkConnection = object : ServiceConnection {
+        override fun onServiceConnected(name: ComponentName, service: IBinder) {
+            UiLogStore.append(LogCategory.SENSORS, "AutoLink: подключен к CarProxyService")
+            try {
+                val apkInfo = packageManager.getApplicationInfo(AUTO_LINK_PACKAGE, 0)
+                val classLoader = PathClassLoader(apkInfo.sourceDir, ClassLoader.getSystemClassLoader())
+                val stubClass = classLoader.loadClass("com.autolink.adapterbinder.ICarProxyService\$Stub")
+                val asInterfaceMethod = stubClass.getMethod("asInterface", IBinder::class.java)
+                val proxy = asInterfaceMethod.invoke(null, service)
+                    ?: throw IllegalStateException("asInterface returned null")
+                autoLinkServiceProxy = proxy
+                autoLinkGetIntPropMethod = proxy.javaClass.methods.firstOrNull {
+                    it.name == "getIntProperty" && it.parameterTypes.size == 1
+                }
+                autoLinkSubscribe(proxy, BCM_LEFT_TURN)
+                autoLinkSubscribe(proxy, BCM_RIGHT_TURN)
+                autoLinkPollHandler.post(autoLinkPollRunnable)
+                UiLogStore.append(LogCategory.SENSORS, "AutoLink: подписка на BCM поворотники активна")
+            } catch (e: Exception) {
+                UiLogStore.append(
+                    LogCategory.SENSORS,
+                    "AutoLink: ошибка инициализации: ${e::class.simpleName}: ${e.message}"
+                )
+                Log.e(TAG, "AutoLink init error", e)
+            }
+        }
+
+        override fun onServiceDisconnected(name: ComponentName) {
+            UiLogStore.append(LogCategory.SENSORS, "AutoLink: отключен")
+            autoLinkServiceProxy = null
+            autoLinkGetIntPropMethod = null
+            autoLinkIsActive = false
+            autoLinkPollHandler.removeCallbacks(autoLinkPollRunnable)
+        }
+    }
+
     private val staleSpeedHandler = Handler(Looper.getMainLooper())
     private val staleSpeedRunnable = object : Runnable {
         override fun run() {
@@ -45,6 +98,38 @@ class SensorDataService : Service() {
         override fun run() {
             requestTurnSignalSnapshots()
             turnSignalPollHandler.postDelayed(this, TURN_SIGNAL_POLL_INTERVAL_MS)
+        }
+    }
+
+    private val diagReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            val action = intent.action ?: return
+            // Логируем gmc.ecarx.xsf.hud.update — здесь живут поворотники
+            if (action == ACTION_GMC_HUD_UPDATE) {
+                val extras = intent.extras ?: run {
+                    Log.i(TAG, "GMC HUD: extras=empty")
+                    return
+                }
+                val sb = StringBuilder("GMC HUD:")
+                for (key in extras.keySet()) {
+                    sb.append(" $key=${extras.get(key)}")
+                }
+                val msg = sb.toString()
+                Log.i(TAG, msg)
+                UiLogStore.append(LogCategory.SENSORS, msg)
+                return
+            }
+            // Логируем только CHANGED события (не RESULT от polling)
+            if (!action.contains("CHANGED")) return
+            val id = readIntExtraAllowZero(intent, EXTRA_ID) ?: return
+            val extras = intent.extras ?: return
+            val rawObj = extras.get(EXTRA_VALUE)
+            val rawStr = rawObj?.toString() ?: "null"
+            val area = readIntExtraAllowZero(intent, EXTRA_AREA_ID)
+            val areaText = area?.let { " area=$it" }.orEmpty()
+            val msg = "ДИАГНОСТИКА id=$id raw=$rawStr action=${action.substringAfterLast('.')}$areaText"
+            Log.i(TAG, msg)
+            UiLogStore.append(LogCategory.SENSORS, msg)
         }
     }
 
@@ -99,9 +184,15 @@ class SensorDataService : Service() {
             ) {
                 return
             }
-            // Geely/Ecarx sensor ID работают только как sensors, не properties
+            // Старые Geely/Ecarx sensor ID работают только как sensors, не properties
             if ((id == SENSOR_ID_LEFT_TURN || id == SENSOR_ID_RIGHT_TURN) &&
                 (action == ACTION_PROPERTY_INT_CHANGED || action == ACTION_PROPERTY_INT_RESULT)
+            ) {
+                return
+            }
+            // BCM поворотники работают только как property, не sensor
+            if ((id == BCM_LEFT_TURN || id == BCM_RIGHT_TURN) &&
+                (action == ACTION_SENSOR_INT_CHANGED || action == ACTION_SENSOR_INT_RESULT)
             ) {
                 return
             }
@@ -120,24 +211,21 @@ class SensorDataService : Service() {
                 invalidVehicleTurnSignalLogSuppressed = false
             }
 
-            // Для Geely/Ecarx объединяем состояние от отдельных сенсоров
-            val finalState = if (id == SENSOR_ID_LEFT_TURN || id == SENSOR_ID_RIGHT_TURN) {
-                if (id == SENSOR_ID_LEFT_TURN) {
+            // BCM и Geely отдают отдельные сенсоры для левого/правого — объединяем
+            val finalState = when (id) {
+                BCM_LEFT_TURN, SENSOR_ID_LEFT_TURN -> {
                     lastLeftTurnState = state.left
+                    val r = lastRightTurnState ?: false
+                    val combinedHazard = state.left && r
+                    TurnSignalState(left = state.left, right = r, hazard = combinedHazard)
                 }
-                if (id == SENSOR_ID_RIGHT_TURN) {
+                BCM_RIGHT_TURN, SENSOR_ID_RIGHT_TURN -> {
                     lastRightTurnState = state.right
+                    val l = lastLeftTurnState ?: false
+                    val combinedHazard = l && state.right
+                    TurnSignalState(left = l, right = state.right, hazard = combinedHazard)
                 }
-                val combinedLeft = lastLeftTurnState ?: false
-                val combinedRight = lastRightTurnState ?: false
-                val combinedHazard = combinedLeft && combinedRight
-                TurnSignalState(
-                    left = combinedLeft,
-                    right = combinedRight,
-                    hazard = combinedHazard
-                )
-            } else {
-                state
+                else -> state
             }
 
             val previous = lastTurnSignalState
@@ -148,6 +236,8 @@ class SensorDataService : Service() {
             applyTurnSignalState(finalState)
             val areaText = areaId?.let { " area=$it" }.orEmpty()
             val sourceText = when (id) {
+                BCM_LEFT_TURN -> "bcm_left"
+                BCM_RIGHT_TURN -> "bcm_right"
                 SENSOR_ID_LEFT_TURN -> "geely_left"
                 SENSOR_ID_RIGHT_TURN -> "geely_right"
                 VEHICLE_PROPERTY_TURN_SIGNAL_STATE -> "vehicle_property"
@@ -167,6 +257,14 @@ class SensorDataService : Service() {
     override fun onCreate() {
         super.onCreate()
         UiLogStore.append(LogCategory.SENSORS, "Сервис создан")
+        val diagFilter = IntentFilter().apply {
+            addAction(ACTION_GMC_HUD_UPDATE)        // главный источник поворотников!
+            addAction(ACTION_SENSOR_INT_CHANGED)
+            addAction(ACTION_SENSOR_FLOAT_CHANGED)
+            addAction(ACTION_PROPERTY_INT_CHANGED)
+            addAction("com.salat.gbinder.PROPERTY_FLOAT_CHANGED")
+        }
+        ContextCompat.registerReceiver(this, diagReceiver, diagFilter, ContextCompat.RECEIVER_EXPORTED)
         val filter = IntentFilter().apply {
             addAction(ACTION_SENSOR_FLOAT_CHANGED)
             addAction(ACTION_SENSOR_FLOAT_RESULT)
@@ -180,6 +278,7 @@ class SensorDataService : Service() {
         }
         ContextCompat.registerReceiver(this, turnSignalReceiver, turnFilter, ContextCompat.RECEIVER_EXPORTED)
         staleSpeedHandler.postDelayed(staleSpeedRunnable, GPS_STALE_CHECK_INTERVAL_MS)
+        bindAutoLinkService()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -196,6 +295,10 @@ class SensorDataService : Service() {
     override fun onDestroy() {
         UiLogStore.append(LogCategory.SENSORS, "Сервис остановлен")
         try {
+            unregisterReceiver(diagReceiver)
+        } catch (_: Exception) {
+        }
+        try {
             unregisterReceiver(speedReceiver)
         } catch (_: Exception) {
         }
@@ -205,6 +308,7 @@ class SensorDataService : Service() {
         }
         staleSpeedHandler.removeCallbacks(staleSpeedRunnable)
         turnSignalPollHandler.removeCallbacks(turnSignalPollRunnable)
+        unbindAutoLinkService()
         stopLocationUpdates()
         super.onDestroy()
     }
@@ -530,10 +634,25 @@ class SensorDataService : Service() {
     }
 
     private fun shouldIgnoreTurnSignalEvent(id: Int): Boolean {
-        // Приоритет 1: Geely/Ecarx отдельные сенсоры (самый надежный)
-        if (id == SENSOR_ID_LEFT_TURN || id == SENSOR_ID_RIGHT_TURN) {
+        // Приоритет 1: BCM property (самый надежный для Ecarx)
+        if (id == BCM_LEFT_TURN || id == BCM_RIGHT_TURN) {
             if (!hasGeelyTurnSignalSource) {
-                UiLogStore.append(LogCategory.SENSORS, "Поворотники: источник переключен на geely/ecarx sensors")
+                UiLogStore.append(LogCategory.SENSORS, "Поворотники: источник переключен на BCM property")
+            }
+            hasGeelyTurnSignalSource = true
+            hasVehicleTurnSignalSource = false
+            turnSignalSourceLogSuppressed = false
+            return false
+        }
+
+        // Приоритет 2: Geely/Ecarx отдельные сенсоры (старый формат)
+        if (id == SENSOR_ID_LEFT_TURN || id == SENSOR_ID_RIGHT_TURN) {
+            if (hasGeelyTurnSignalSource) {
+                // BCM уже работает и надёжнее — игнорируем старый формат
+                return true
+            }
+            if (!hasGeelyTurnSignalSource) {
+                UiLogStore.append(LogCategory.SENSORS, "Поворотники: источник переключен на geely/ecarx sensor")
             }
             hasGeelyTurnSignalSource = true
             hasVehicleTurnSignalSource = false
@@ -584,15 +703,25 @@ class SensorDataService : Service() {
 
     private fun decodeTurnSignalState(id: Int, raw: Int): TurnSignalState? {
         return when (id) {
+            BCM_LEFT_TURN -> {
+                // BCM_FUNC_LIGHT_LEFT_TRUN_SIGNAL: 0=выкл, 1=вкл, 255/-1=нет данных
+                if (raw < 0 || raw == 255) return null
+                TurnSignalState(left = raw != 0, right = false, hazard = false)
+            }
+            BCM_RIGHT_TURN -> {
+                // BCM_FUNC_LIGHT_RIGHT_TRUN_SIGNAL: 0=выкл, 1=вкл, 255/-1=нет данных
+                if (raw < 0 || raw == 255) return null
+                TurnSignalState(left = false, right = raw != 0, hazard = false)
+            }
             SENSOR_ID_LEFT_TURN -> {
-                // Geely/Ecarx левый поворотник: 0=выкл, 1=вкл
-                val isActive = raw != 0
-                TurnSignalState(left = isActive, right = false, hazard = false)
+                // Geely/Ecarx старый формат: 0=выкл, 1=вкл, -1=нет данных
+                if (raw < 0) return null
+                TurnSignalState(left = raw != 0, right = false, hazard = false)
             }
             SENSOR_ID_RIGHT_TURN -> {
-                // Geely/Ecarx правый поворотник: 0=выкл, 1=вкл
-                val isActive = raw != 0
-                TurnSignalState(left = false, right = isActive, hazard = false)
+                // Geely/Ecarx старый формат: 0=выкл, 1=вкл, -1=нет данных
+                if (raw < 0) return null
+                TurnSignalState(left = false, right = raw != 0, hazard = false)
             }
             VEHICLE_PROPERTY_TURN_SIGNAL_STATE -> decodeVehiclePropertyTurnSignalState(raw)
             SENSOR_ID_LIGHT_STATE -> decodeLegacySensorLightTurnSignalState(raw)
@@ -616,26 +745,17 @@ class SensorDataService : Service() {
         )
     }
 
-    private fun decodeLegacySensorLightTurnSignalState(raw: Int): TurnSignalState {
+    private fun decodeLegacySensorLightTurnSignalState(raw: Int): TurnSignalState? {
         // Some gbinder builds expose SENSOR_ID_LIGHT_STATE as enum: 0=none, 1=left, 2=right, 3=hazard.
-        val normalizedRaw = normalizeLegacySensorLightState(raw)
-        return when (normalizedRaw) {
+        // Values outside [0..3] are "no data" (gbinder returns ID+offset when sensor is unavailable).
+        if (raw < 0 || raw > LEGACY_LIGHT_STATE_HAZARD) return null
+        return when (raw) {
             LEGACY_LIGHT_STATE_NONE -> TurnSignalState(left = false, right = false, hazard = false)
             LEGACY_LIGHT_STATE_LEFT -> TurnSignalState(left = true, right = false, hazard = false)
             LEGACY_LIGHT_STATE_RIGHT -> TurnSignalState(left = false, right = true, hazard = false)
             LEGACY_LIGHT_STATE_HAZARD -> TurnSignalState(left = true, right = true, hazard = true)
-            else -> decodeBitmaskTurnSignalState(normalizedRaw, 0x1, 0x2, 0x4)
+            else -> null
         }
-    }
-
-    private fun normalizeLegacySensorLightState(raw: Int): Int {
-        if (raw >= SENSOR_ID_LIGHT_STATE && raw <= SENSOR_ID_LIGHT_STATE + LEGACY_LIGHT_STATE_MAX_DELTA) {
-            return raw - SENSOR_ID_LIGHT_STATE
-        }
-        if (raw in 0..LEGACY_LIGHT_STATE_MAX_DELTA) {
-            return raw
-        }
-        return raw and 0xFF
     }
 
     private fun decodeBitmaskTurnSignalState(
@@ -669,6 +789,86 @@ class SensorDataService : Service() {
                 )
             }
         }
+    }
+
+    private fun bindAutoLinkService() {
+        try {
+            packageManager.getApplicationInfo(AUTO_LINK_PACKAGE, 0)
+        } catch (_: PackageManager.NameNotFoundException) {
+            UiLogStore.append(LogCategory.SENSORS, "AutoLink: $AUTO_LINK_PACKAGE не установлен")
+            return
+        }
+        try {
+            val intent = Intent().apply {
+                component = ComponentName(AUTO_LINK_PACKAGE, "$AUTO_LINK_PACKAGE.CarProxyService")
+            }
+            val bound = bindService(intent, autoLinkConnection, Context.BIND_AUTO_CREATE)
+            UiLogStore.append(LogCategory.SENSORS, "AutoLink: bindService=$bound")
+        } catch (e: Exception) {
+            UiLogStore.append(LogCategory.SENSORS, "AutoLink: bindService ошибка: ${e.message}")
+        }
+    }
+
+    private fun unbindAutoLinkService() {
+        autoLinkPollHandler.removeCallbacks(autoLinkPollRunnable)
+        try { unbindService(autoLinkConnection) } catch (_: Exception) {}
+        autoLinkServiceProxy = null
+        autoLinkGetIntPropMethod = null
+        autoLinkIsActive = false
+    }
+
+    private fun autoLinkSubscribe(proxy: Any, propId: Int) {
+        try {
+            val m2 = proxy.javaClass.methods.firstOrNull { it.name == "addEventProId" && it.parameterTypes.size == 2 }
+            val m1 = proxy.javaClass.methods.firstOrNull { it.name == "addEventProId" && it.parameterTypes.size == 1 }
+            when {
+                m2 != null -> m2.invoke(proxy, propId, java.lang.Boolean.TRUE)
+                m1 != null -> m1.invoke(proxy, propId)
+                else -> Log.w(TAG, "AutoLink: addEventProId не найден для propId=$propId")
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "AutoLink: subscribe $propId ошибка: ${e.message}")
+        }
+    }
+
+    private fun pollAutoLinkTurnSignals() {
+        val proxy = autoLinkServiceProxy ?: return
+        val method = autoLinkGetIntPropMethod ?: return
+
+        val leftRaw = try { (method.invoke(proxy, BCM_LEFT_TURN) as? Number)?.toInt() } catch (_: Exception) { null }
+        val rightRaw = try { (method.invoke(proxy, BCM_RIGHT_TURN) as? Number)?.toInt() } catch (_: Exception) { null }
+
+        val leftValid = leftRaw != null && leftRaw >= 0 && leftRaw != 255
+        val rightValid = rightRaw != null && rightRaw >= 0 && rightRaw != 255
+
+        if (!leftValid && !rightValid) {
+            if (autoLinkIsActive) {
+                autoLinkIsActive = false
+                UiLogStore.append(LogCategory.SENSORS, "AutoLink: нет данных от BCM (l=$leftRaw r=$rightRaw)")
+            }
+            return
+        }
+
+        if (!autoLinkIsActive) {
+            autoLinkIsActive = true
+            UiLogStore.append(LogCategory.SENSORS, "AutoLink: BCM данные доступны")
+        }
+
+        if (leftValid) lastLeftTurnState = leftRaw != 0
+        if (rightValid) lastRightTurnState = rightRaw != 0
+
+        val left = lastLeftTurnState ?: false
+        val right = lastRightTurnState ?: false
+        val hazard = left && right
+        val state = TurnSignalState(left = left, right = right, hazard = hazard)
+
+        if (state == lastTurnSignalState) return
+        lastTurnSignalState = state
+        applyTurnSignalState(state)
+        UiLogStore.append(
+            LogCategory.SENSORS,
+            "AutoLink BCM: left=$left right=$right hazard=$hazard (l_raw=$leftRaw r_raw=$rightRaw)"
+        )
     }
 
     private fun readFloatExtra(intent: Intent, key: String): Float? {
@@ -716,11 +916,15 @@ class SensorDataService : Service() {
         private const val EXTRA_ID = "id"
         private const val EXTRA_VALUE = "value"
         private const val EXTRA_AREA_ID = "area"
+        private const val ACTION_GMC_HUD_UPDATE = "gmc.ecarx.xsf.hud.update"
         private const val SENSOR_ID_CAR_SPEED = 1055232
         private const val SENSOR_ID_LIGHT_STATE = 2_100_992
         private const val VEHICLE_PROPERTY_TURN_SIGNAL_STATE = 289_408_008
-        private const val SENSOR_ID_LEFT_TURN = 0x22010102  // 570491138 - Geely/Ecarx left turn signal
-        private const val SENSOR_ID_RIGHT_TURN = 0x22010103 // 570491139 - Geely/Ecarx right turn signal
+        private const val SENSOR_ID_LEFT_TURN = 0x22010102  // 570491138 - Geely/Ecarx sensor (старый формат)
+        private const val SENSOR_ID_RIGHT_TURN = 0x22010103 // 570491139 - Geely/Ecarx sensor (старый формат)
+        // BCM property IDs — правильные ID поворотников Ecarx (BCM_FUNC_LIGHT_LEFT/RIGHT_TRUN_SIGNAL)
+        private const val BCM_LEFT_TURN = 0x21051100   // 553980160
+        private const val BCM_RIGHT_TURN = 0x21051200  // 553980672
         private const val VEHICLE_TURN_SIGNAL_RIGHT_MASK = 0x1
         private const val VEHICLE_TURN_SIGNAL_LEFT_MASK = 0x2
         private const val VEHICLE_TURN_SIGNAL_HAZARD_MASK = 0x4
@@ -731,11 +935,15 @@ class SensorDataService : Service() {
         private const val LEGACY_LIGHT_STATE_HAZARD = 3
         private const val LEGACY_LIGHT_STATE_MAX_DELTA = 0xFF
         private val TURN_SIGNAL_CANDIDATE_IDS = intArrayOf(
-            SENSOR_ID_LEFT_TURN,        // Geely/Ecarx left turn (приоритет)
-            SENSOR_ID_RIGHT_TURN,       // Geely/Ecarx right turn (приоритет)
-            VEHICLE_PROPERTY_TURN_SIGNAL_STATE,  // AOSP VehicleProperty fallback
-            SENSOR_ID_LIGHT_STATE       // Legacy gbinder fallback
+            BCM_LEFT_TURN,              // BCM property — правильный источник (приоритет 1)
+            BCM_RIGHT_TURN,             // BCM property — правильный источник (приоритет 1)
+            SENSOR_ID_LEFT_TURN,        // Geely/Ecarx sensor (fallback)
+            SENSOR_ID_RIGHT_TURN,       // Geely/Ecarx sensor (fallback)
+            VEHICLE_PROPERTY_TURN_SIGNAL_STATE,  // AOSP VehicleProperty (fallback)
+            SENSOR_ID_LIGHT_STATE       // Legacy gbinder (fallback)
         )
+        private const val AUTO_LINK_PACKAGE = "com.autolink.carproxyservice"
+        private const val AUTO_LINK_POLL_MS = 300L
         private const val TURN_SIGNAL_POLL_INTERVAL_MS = 1000L
         private const val MS_TO_KMH = 3.6f
         private const val GPS_SPEED_WINDOW_POINTS = 3

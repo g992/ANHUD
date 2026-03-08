@@ -101,6 +101,7 @@ internal fun MainActivity.openPositionDialog(
     var containerWidthDp = containerSize.x
     var containerHeightDp = containerSize.y
     var navWidthDp = OverlayPrefs.navWidthDp(this)
+    var currentScale = 1f
     val scalePercent = when (target) {
         OverlayTarget.NAVIGATION -> (OverlayPrefs.navScale(this) * 100).toInt()
         OverlayTarget.ARROW -> (OverlayPrefs.arrowScale(this) * 100).toInt()
@@ -340,18 +341,22 @@ internal fun MainActivity.openPositionDialog(
         val containerWidthPx = containerWidthDp * density
         val containerHeightPx = containerHeightDp * density
         if (showNav) {
-            val navWidthPx = navWidthDp * density
+            val navWidthPx = resolveScaledLayoutWidthPx(navWidthDp * density, currentScale)
             val iconSizePx = (48 * density).roundToInt()
             val iconMarginPx = (8 * density).roundToInt()
-            val textColumnWidthPx = (navWidthPx.roundToInt() - iconSizePx - iconMarginPx).coerceAtLeast(0)
+            val textColumnWidthPx = (navWidthPx - iconSizePx - iconMarginPx).coerceAtLeast(0)
 
             previewNavBlock.layoutParams = (previewNavBlock.layoutParams as? FrameLayout.LayoutParams)?.apply {
-                width = navWidthPx.roundToInt()
-            } ?: FrameLayout.LayoutParams(navWidthPx.roundToInt(), FrameLayout.LayoutParams.WRAP_CONTENT)
+                width = navWidthPx
+            } ?: FrameLayout.LayoutParams(navWidthPx, FrameLayout.LayoutParams.WRAP_CONTENT)
 
             previewNavTextColumn.layoutParams = (previewNavTextColumn.layoutParams as? LinearLayout.LayoutParams)?.apply {
                 width = textColumnWidthPx
             } ?: LinearLayout.LayoutParams(textColumnWidthPx, LinearLayout.LayoutParams.WRAP_CONTENT)
+            previewNavBlock.pivotX = 0f
+            previewNavBlock.pivotY = 0f
+            previewNavBlock.scaleX = currentScale
+            previewNavBlock.scaleY = currentScale
 
             if (target == OverlayTarget.NAVIGATION) {
                 previewNavBlock.background = ContextCompat.getDrawable(activity, R.drawable.bg_nav_block_outline)
@@ -809,6 +814,7 @@ internal fun MainActivity.openPositionDialog(
     }
     val scaleRange = (scaleMaxPercent - scaleMinPercent).coerceAtLeast(0)
     val resolvedScalePercent = scalePercent.coerceIn(scaleMinPercent, scaleMaxPercent)
+    currentScale = resolvedScalePercent / 100f
     scaleSeek.max = scaleRange
     scaleSeek.progress = (resolvedScalePercent - scaleMinPercent).coerceIn(0, scaleRange)
     scaleValue.text = getString(R.string.scale_percent_format, resolvedScalePercent)
@@ -819,7 +825,9 @@ internal fun MainActivity.openPositionDialog(
             }
             val percent = (progress + scaleMinPercent).coerceIn(scaleMinPercent, scaleMaxPercent)
             val scale = percent / 100f
+            currentScale = scale
             scaleValue.text = getString(R.string.scale_percent_format, percent)
+            updateDialogVisibility()
             when (target) {
                 OverlayTarget.NAVIGATION -> notifyOverlaySettingsChanged(
                     navScale = scale,
@@ -888,6 +896,8 @@ internal fun MainActivity.openPositionDialog(
             val percent = ((seekBar?.progress ?: 0) + scaleMinPercent)
                 .coerceIn(scaleMinPercent, scaleMaxPercent)
             val scale = percent / 100f
+            currentScale = scale
+            updateDialogVisibility()
             when (target) {
                 OverlayTarget.NAVIGATION -> {
                     OverlayPrefs.setNavScale(activity, scale)
@@ -1224,6 +1234,11 @@ private fun MainActivity.setupDialogDrag(
 
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
+                val localX = event.rawX - containerLocation[0] - v.x
+                val localY = event.rawY - containerLocation[1] - v.y
+                if (localX < 0f || localY < 0f || localX > previewViewWidth(v) || localY > previewViewHeight(v)) {
+                    return@setOnTouchListener false
+                }
                 // Запрещаем ScrollView перехватывать вертикальные движения
                 scrollParent?.requestDisallowInterceptTouchEvent(true)
                 v.parent?.requestDisallowInterceptTouchEvent(true)
@@ -1301,11 +1316,24 @@ private fun MainActivity.positionDpFromPreview(
 }
 
 private fun MainActivity.maxPreviewX(container: FrameLayout, view: View): Float {
-    return (container.width - view.width).toFloat().coerceAtLeast(0f)
+    return (container.width - previewViewWidth(view)).coerceAtLeast(0f)
 }
 
 private fun MainActivity.maxPreviewY(container: FrameLayout, view: View): Float {
-    return (container.height - view.height).toFloat().coerceAtLeast(0f)
+    return (container.height - previewViewHeight(view)).coerceAtLeast(0f)
+}
+
+private fun previewViewWidth(view: View): Float {
+    return (view.width * view.scaleX.coerceAtLeast(0f)).coerceAtLeast(0f)
+}
+
+private fun previewViewHeight(view: View): Float {
+    return (view.height * view.scaleY.coerceAtLeast(0f)).coerceAtLeast(0f)
+}
+
+private fun resolveScaledLayoutWidthPx(visibleWidthPx: Float, scale: Float): Int {
+    val safeScale = scale.coerceAtLeast(0.01f)
+    return (visibleWidthPx / safeScale).roundToInt().coerceAtLeast(1)
 }
 
 private fun MainActivity.updatePreviewContainerSize(
