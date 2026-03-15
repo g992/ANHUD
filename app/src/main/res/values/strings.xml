@@ -120,6 +120,10 @@
     <string name="tab_debug">Отладка</string>
     <string name="tab_help">Помощь</string>
 
+    <string name="settings_timeouts_section_title">Таймауты</string>
+    <string name="settings_timeouts_section_hint">Камеры, светофоры и завершение поездки</string>
+    <string name="settings_section_expand">Показать</string>
+    <string name="settings_section_collapse">Скрыть</string>
     <string name="camera_timeout_near_label">Таймаут камер (HUD Speed, расстояние &lt; 50м)</string>
     <string name="camera_timeout_far_label">Таймаут камер (HUD Speed, расстояние ≥ 50м)</string>
     <string name="camera_timeout_hint">0 - отключить таймаут, 1-360 секунд</string>
@@ -137,6 +141,7 @@
     <string name="speed_from_gps_hint">Скорость рассчитывается по дельте координат GPS, корректировка не применяется.</string>
     <string name="speed_from_gps_permission_denied">Для скорости по GPS нужен доступ к геопозиции.</string>
     <string name="info_mirror_starsheep7_label">Отражение информации (Starsheep 7)</string>
+    <string name="feature_in_development">В разработке</string>
     <string name="hide_turn_when_far_enabled_label">Скрывать поворот если до манёвра более 1 км</string>
     <string name="hide_turn_when_far_enabled_label_value">Скрывать поворот если до манёвра более %1$s</string>
     <string name="hide_turn_when_far_enabled_hint">Если включено, поворот будет скрываться, когда расстояние больше выбранного порога.</string>

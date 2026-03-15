@@ -62,6 +62,9 @@ class SettingsActivity : ScaledActivity() {
     private lateinit var tabUpdatesContent: View
     private lateinit var tabDebugContent: View
     private lateinit var tabHelpContent: View
+    private lateinit var timeoutSettingsToggle: View
+    private lateinit var timeoutSettingsContent: View
+    private lateinit var timeoutSettingsToggleLabel: TextView
     private lateinit var cameraTimeoutNearInput: EditText
     private lateinit var cameraTimeoutFarInput: EditText
     private lateinit var trafficLightTimeoutInput: EditText
@@ -102,6 +105,7 @@ class SettingsActivity : ScaledActivity() {
     private var isCheckingUpdates = false
 
     private var isSyncingUi = false
+    private var areTimeoutSettingsExpanded = false
 
     private val storagePermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -214,6 +218,9 @@ class SettingsActivity : ScaledActivity() {
         tabUpdatesContent = findViewById(R.id.tabUpdatesContent)
         tabDebugContent = findViewById(R.id.tabDebugContent)
         tabHelpContent = findViewById(R.id.tabHelpContent)
+        timeoutSettingsToggle = findViewById(R.id.timeoutSettingsToggle)
+        timeoutSettingsContent = findViewById(R.id.timeoutSettingsContent)
+        timeoutSettingsToggleLabel = findViewById(R.id.timeoutSettingsToggleLabel)
         cameraTimeoutNearInput = findViewById(R.id.cameraTimeoutNearInput)
         cameraTimeoutFarInput = findViewById(R.id.cameraTimeoutFarInput)
         trafficLightTimeoutInput = findViewById(R.id.trafficLightTimeoutInput)
@@ -253,7 +260,14 @@ class SettingsActivity : ScaledActivity() {
         setupUpdatesTab()
         setupDebugTab()
         setupHelpTab()
+        areTimeoutSettingsExpanded = savedInstanceState?.getBoolean(STATE_TIMEOUTS_EXPANDED, false) ?: false
+        updateTimeoutSettingsSection()
         syncUiFromPrefs()
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        outState.putBoolean(STATE_TIMEOUTS_EXPANDED, areTimeoutSettingsExpanded)
+        super.onSaveInstanceState(outState)
     }
 
     override fun onDestroy() {
@@ -353,6 +367,11 @@ class SettingsActivity : ScaledActivity() {
     }
 
     private fun setupGeneralSettings() {
+        timeoutSettingsToggle.setOnClickListener {
+            areTimeoutSettingsExpanded = !areTimeoutSettingsExpanded
+            updateTimeoutSettingsSection()
+        }
+
         exportSettingsButton.setOnClickListener {
             if (needsStoragePermission()) {
                 requestStoragePermission()
@@ -1230,6 +1249,17 @@ class SettingsActivity : ScaledActivity() {
         }
     }
 
+    private fun updateTimeoutSettingsSection() {
+        timeoutSettingsContent.visibility = if (areTimeoutSettingsExpanded) View.VISIBLE else View.GONE
+        timeoutSettingsToggleLabel.setText(
+            if (areTimeoutSettingsExpanded) {
+                R.string.settings_section_collapse
+            } else {
+                R.string.settings_section_expand
+            }
+        )
+    }
+
     private fun updateHideTurnDistanceControls(enabled: Boolean) {
         hideTurnWhenFarDistanceSeek.isEnabled = enabled
         hideTurnWhenFarDistanceSeek.alpha = if (enabled) 1f else 0.5f
@@ -1384,6 +1414,7 @@ class SettingsActivity : ScaledActivity() {
     }
 
     companion object {
+        private const val STATE_TIMEOUTS_EXPANDED = "state_timeouts_expanded"
         private const val DEFAULT_BASIC_ICON_ID = "101"
         private const val MAX_BASIC_ICON_INDEX = 150
         private const val MANEUVER_PREFS_NAME = "maneuver_match_prefs"

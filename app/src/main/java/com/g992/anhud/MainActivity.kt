@@ -369,6 +369,7 @@ class MainActivity : ScaledActivity() {
             OverlayPrefs.setTurnSignalsEnabled(this, isChecked)
             notifyOverlaySettingsChanged(turnSignalsEnabled = isChecked)
         }
+        applyTurnSignalsUiDisabledState()
         speedometerShowUnitTextCheck.setOnCheckedChangeListener { _, isChecked ->
             if (isSyncingUi) {
                 return@setOnCheckedChangeListener

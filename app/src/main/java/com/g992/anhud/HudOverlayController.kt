@@ -58,6 +58,7 @@ class HudOverlayController(private val context: Context) {
         private const val PREVIEW_SPEED_LIMIT_TEXT_SCALE = 1.3f
         private const val SPEEDOMETER_UNIT_RELATIVE_SIZE = 1f / 3f
         private const val TURN_SIGNAL_BLINK_INTERVAL_MS = 450L
+        private const val CLEAR_BEFORE_REDRAW_DELAY_MS = 32L
     }
     private val handler = Handler(Looper.getMainLooper())
     private val displayManager = context.getSystemService(DisplayManager::class.java)
@@ -184,6 +185,8 @@ class HudOverlayController(private val context: Context) {
     private var previewTarget: String? = null
     private var previewShowOthers: Boolean = false
     private var clearOnDisablePending: Boolean = false
+    private var clearBeforeRedrawPending: Boolean = false
+    private var delayedRedrawRunnable: Runnable? = null
     private val speedLimitNumberRegex = Regex("\\d+")
     private var hudSpeedHideRunnable: Runnable? = null
     private var turnSignalBlinkRunnable: Runnable? = null
@@ -218,12 +221,22 @@ class HudOverlayController(private val context: Context) {
             }
             clearDisplayRetry()
             if (overlayView != null && currentDisplayId == display.displayId) {
+                if (clearBeforeRedrawPending) {
+                    applyLayoutInternal()
+                    clearOverlayForRedraw()
+                    return@post
+                }
                 applyLayout()
                 applyState(lastState)
                 return@post
             }
             removeOverlay()
             createOverlay(display)
+            if (clearBeforeRedrawPending) {
+                applyLayoutInternal()
+                clearOverlayForRedraw()
+                return@post
+            }
             applyLayout()
             applyState(lastState)
         }
@@ -231,12 +244,16 @@ class HudOverlayController(private val context: Context) {
 
     fun updateNavigation(state: NavigationHudState) {
         handler.post {
+            lastState = state
+            if (clearBeforeRedrawPending) {
+                lastRenderSignature = null
+                return@post
+            }
             val signature = buildRenderSignature(state)
             if (signature == lastRenderSignature) {
                 return@post
             }
             lastRenderSignature = signature
-            lastState = state
             applyState(state)
         }
     }
@@ -663,8 +680,8 @@ class HudOverlayController(private val context: Context) {
             if (previewShowOthers != null) {
                 this.previewShowOthers = previewShowOthers
             }
-            if (shouldClearForPreviewTransition) {
-                clearOverlayForRedraw()
+            if (shouldClearForPreviewTransition && scheduleClearBeforeRedraw()) {
+                return@post
             }
             applyLayout()
             applyState(lastState)
@@ -1278,6 +1295,7 @@ class HudOverlayController(private val context: Context) {
     }
 
     private fun removeOverlay() {
+        cancelDelayedRedraw()
         cancelHudSpeedHide()
         stopTurnSignalBlinking()
         removeMapView()
@@ -1336,6 +1354,7 @@ class HudOverlayController(private val context: Context) {
     }
 
     private fun clearOverlayForDisable() {
+        cancelDelayedRedraw()
         cancelHudSpeedHide()
         stopTurnSignalBlinking()
         val container = overlayView
@@ -1383,6 +1402,33 @@ class HudOverlayController(private val context: Context) {
         container.setBackgroundColor(Color.TRANSPARENT)
         container.visibility = View.VISIBLE
         container.invalidate()
+        container.postInvalidateOnAnimation()
+    }
+
+    private fun scheduleClearBeforeRedraw(): Boolean {
+        val container = overlayView ?: return false
+        cancelDelayedRedraw()
+        clearBeforeRedrawPending = true
+        applyLayoutInternal()
+        clearOverlayForRedraw()
+        val redrawRunnable = Runnable {
+            delayedRedrawRunnable = null
+            clearBeforeRedrawPending = false
+            val view = overlayView ?: return@Runnable
+            applyLayoutInternal()
+            lastRenderSignature = buildRenderSignature(lastState)
+            applyState(lastState)
+            view.postInvalidateOnAnimation()
+        }
+        delayedRedrawRunnable = redrawRunnable
+        container.postDelayed(redrawRunnable, CLEAR_BEFORE_REDRAW_DELAY_MS)
+        return true
+    }
+
+    private fun cancelDelayedRedraw() {
+        delayedRedrawRunnable?.let { handler.removeCallbacks(it) }
+        delayedRedrawRunnable = null
+        clearBeforeRedrawPending = false
     }
 
     private fun applyState(state: NavigationHudState) {

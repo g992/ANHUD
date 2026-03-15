@@ -109,9 +109,25 @@ internal fun MainActivity.syncUiFromPrefs() {
             trafficLightMaxActive
         )
         renderTrafficLightPreview(trafficLightPreviewContainer, trafficLightMaxActive)
+        applyTurnSignalsUiDisabledState()
     } finally {
         isSyncingUi = false
     }
+}
+
+internal fun MainActivity.applyTurnSignalsUiDisabledState() {
+    val turnSignalsCard = findViewById<View>(R.id.positionTurnSignalsCard)
+    if (OverlayPrefs.turnSignalsEnabled(this)) {
+        OverlayPrefs.setTurnSignalsEnabled(this, false)
+        notifyOverlaySettingsChanged(turnSignalsEnabled = false)
+    }
+    turnSignalsProjectionSwitch.isChecked = false
+    turnSignalsProjectionSwitch.isEnabled = false
+    turnSignalsProjectionSwitch.isClickable = false
+    turnSignalsCard.isEnabled = false
+    turnSignalsCard.isClickable = false
+    turnSignalsCard.isFocusable = false
+    turnSignalsCard.alpha = 0.5f
 }
 
 internal fun MainActivity.openOverlaySettings() {
