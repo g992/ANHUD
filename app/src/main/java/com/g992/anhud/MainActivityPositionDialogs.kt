@@ -9,6 +9,7 @@ import android.view.ViewGroup
 import android.view.WindowManager
 import android.widget.CheckBox
 import android.widget.FrameLayout
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.SeekBar
 import android.widget.TextView
@@ -55,6 +56,7 @@ internal fun MainActivity.openPositionDialog(
     val previewTrafficLightBlock = dialogView.findViewById<LinearLayout>(R.id.dialogPreviewTrafficLightBlock)
     val previewSpeedometer = dialogView.findViewById<TextView>(R.id.dialogPreviewSpeedometer)
     val previewTurnSignals = dialogView.findViewById<LinearLayout>(R.id.dialogPreviewTurnSignalsBlock)
+    val previewTurnSignalsLeft = dialogView.findViewById<ImageView>(R.id.dialogPreviewTurnSignalsLeft)
     val previewClock = dialogView.findViewById<TextView>(R.id.dialogPreviewClock)
     val showOthersCheck = dialogView.findViewById<CheckBox>(R.id.dialogShowOthers)
     val hudSpeedGpsStatusCheck = dialogView.findViewById<CheckBox>(R.id.dialogHudSpeedShowGpsStatus)
@@ -74,6 +76,10 @@ internal fun MainActivity.openPositionDialog(
     val navWidthLabel = dialogView.findViewById<TextView>(R.id.dialogNavWidthLabel)
     val navWidthRow = dialogView.findViewById<View>(R.id.dialogNavWidthRow)
     val navWidthSeek = dialogView.findViewById<SeekBar>(R.id.dialogNavWidthSeek)
+    val turnSignalsSpacingLabel = dialogView.findViewById<TextView>(R.id.dialogTurnSignalsSpacingLabel)
+    val turnSignalsSpacingRow = dialogView.findViewById<View>(R.id.dialogTurnSignalsSpacingRow)
+    val turnSignalsSpacingSeek = dialogView.findViewById<SeekBar>(R.id.dialogTurnSignalsSpacingSeek)
+    val turnSignalsSpacingValue = dialogView.findViewById<TextView>(R.id.dialogTurnSignalsSpacingValue)
     val brightnessSeek = dialogView.findViewById<SeekBar>(R.id.dialogBrightnessSeek)
     val brightnessValue = dialogView.findViewById<TextView>(R.id.dialogBrightnessValue)
 
@@ -101,7 +107,9 @@ internal fun MainActivity.openPositionDialog(
     var containerWidthDp = containerSize.x
     var containerHeightDp = containerSize.y
     var navWidthDp = OverlayPrefs.navWidthDp(this)
+    var turnSignalsSpacingDp = OverlayPrefs.turnSignalsSpacingDp(this)
     var currentScale = 1f
+    val density = displayDensity.takeIf { it > 0f } ?: resources.displayMetrics.density
     val scalePercent = when (target) {
         OverlayTarget.NAVIGATION -> (OverlayPrefs.navScale(this) * 100).toInt()
         OverlayTarget.ARROW -> (OverlayPrefs.arrowScale(this) * 100).toInt()
@@ -152,6 +160,41 @@ internal fun MainActivity.openPositionDialog(
 
     fun applySpeedTextScale(scale: Float) {
         previewSpeedLimit.setTextSize(TypedValue.COMPLEX_UNIT_PX, speedLimitBasePx * scale)
+    }
+
+    fun applyPreviewTurnSignalsSpacing(spacingDp: Float) {
+        val marginDp = (spacingDp - OverlayPrefs.TURN_SIGNALS_ICON_SIZE_DP).coerceAtLeast(0f)
+        val marginPx = (marginDp * density).roundToInt()
+        val params = previewTurnSignalsLeft.layoutParams as? LinearLayout.LayoutParams ?: return
+        previewTurnSignalsLeft.layoutParams = params.apply {
+            marginEnd = marginPx
+        }
+    }
+
+    fun formatTurnSignalsSpacingValue(spacingDp: Float): String {
+        return getString(R.string.position_turn_signals_spacing_value, spacingDp.roundToInt())
+    }
+
+    fun resolveTurnSignalsMaxSpacingDp(scale: Float = currentScale): Float {
+        val safeScale = scale.coerceAtLeast(0.01f)
+        return ((containerWidthDp / safeScale) - OverlayPrefs.TURN_SIGNALS_ICON_SIZE_DP)
+            .coerceAtLeast(OverlayPrefs.TURN_SIGNALS_ICON_SIZE_DP)
+    }
+
+    var updatingTurnSignalsSpacingSeek = false
+
+    fun syncTurnSignalsSpacingControls() {
+        if (target != OverlayTarget.TURN_SIGNALS) return
+        val minSpacingInt = OverlayPrefs.TURN_SIGNALS_ICON_SIZE_DP.roundToInt()
+        val maxSpacingInt = resolveTurnSignalsMaxSpacingDp().roundToInt().coerceAtLeast(minSpacingInt)
+        turnSignalsSpacingDp = turnSignalsSpacingDp.coerceIn(minSpacingInt.toFloat(), maxSpacingInt.toFloat())
+        updatingTurnSignalsSpacingSeek = true
+        turnSignalsSpacingSeek.max = (maxSpacingInt - minSpacingInt).coerceAtLeast(0)
+        turnSignalsSpacingSeek.progress = (turnSignalsSpacingDp.roundToInt() - minSpacingInt)
+            .coerceIn(0, turnSignalsSpacingSeek.max)
+        turnSignalsSpacingValue.text = formatTurnSignalsSpacingValue(turnSignalsSpacingDp)
+        applyPreviewTurnSignalsSpacing(turnSignalsSpacingDp)
+        updatingTurnSignalsSpacingSeek = false
     }
 
     val dialogTitle = when (target) {
@@ -282,9 +325,16 @@ internal fun MainActivity.openPositionDialog(
         })
     }
 
+    if (target != OverlayTarget.TURN_SIGNALS) {
+        turnSignalsSpacingLabel.visibility = View.GONE
+        turnSignalsSpacingRow.visibility = View.GONE
+    } else {
+        turnSignalsSpacingLabel.visibility = View.VISIBLE
+        turnSignalsSpacingRow.visibility = View.VISIBLE
+    }
+
     renderTrafficLightPreview(previewTrafficLightBlock, OverlayPrefs.trafficLightMaxActive(this))
 
-    val density = displayDensity.takeIf { it > 0f } ?: resources.displayMetrics.density
     val minContainerSizeDp = OverlayPrefs.CONTAINER_MIN_SIZE_PX / density
     val maxWidthDp = (displaySize.x.coerceAtLeast(1) / density).coerceAtLeast(minContainerSizeDp)
     val maxHeightDp = (displaySize.y.coerceAtLeast(1) / density).coerceAtLeast(minContainerSizeDp)
@@ -478,6 +528,7 @@ internal fun MainActivity.openPositionDialog(
             }
         }
         if (showTurnSignals) {
+            applyPreviewTurnSignalsSpacing(turnSignalsSpacingDp)
             positionPreviewView(
                 previewHudContainer,
                 previewTurnSignals,
@@ -712,6 +763,47 @@ internal fun MainActivity.openPositionDialog(
         })
     }
 
+    if (target == OverlayTarget.TURN_SIGNALS) {
+        syncTurnSignalsSpacingControls()
+        turnSignalsSpacingSeek.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                if (updatingTurnSignalsSpacingSeek) return
+                val minSpacingInt = OverlayPrefs.TURN_SIGNALS_ICON_SIZE_DP.roundToInt()
+                val maxSpacingInt = resolveTurnSignalsMaxSpacingDp().roundToInt().coerceAtLeast(minSpacingInt)
+                val spacing = (progress + minSpacingInt).coerceIn(minSpacingInt, maxSpacingInt).toFloat()
+                turnSignalsSpacingDp = spacing
+                turnSignalsSpacingValue.text = formatTurnSignalsSpacingValue(spacing)
+                updateDialogVisibility()
+                notifyOverlaySettingsChanged(
+                    turnSignalsSpacingDp = spacing,
+                    preview = true,
+                    previewTarget = target,
+                    previewShowOthers = showOthersCheck.isChecked
+                )
+            }
+
+            override fun onStartTrackingTouch(seekBar: SeekBar?) = Unit
+
+            override fun onStopTrackingTouch(seekBar: SeekBar?) {
+                if (updatingTurnSignalsSpacingSeek) return
+                val minSpacingInt = OverlayPrefs.TURN_SIGNALS_ICON_SIZE_DP.roundToInt()
+                val maxSpacingInt = resolveTurnSignalsMaxSpacingDp().roundToInt().coerceAtLeast(minSpacingInt)
+                val spacing = ((seekBar?.progress ?: 0) + minSpacingInt)
+                    .coerceIn(minSpacingInt, maxSpacingInt)
+                    .toFloat()
+                turnSignalsSpacingDp = spacing
+                OverlayPrefs.setTurnSignalsSpacingDp(activity, spacing)
+                updateDialogVisibility()
+                notifyOverlaySettingsChanged(
+                    turnSignalsSpacingDp = spacing,
+                    preview = true,
+                    previewTarget = target,
+                    previewShowOthers = showOthersCheck.isChecked
+                )
+            }
+        })
+    }
+
     clampContainerSize()
     containerWidthSeek.max = (maxWidthInt - minSizeInt).coerceAtLeast(0)
     containerHeightSeek.max = (maxHeightInt - minSizeInt).coerceAtLeast(0)
@@ -827,6 +919,9 @@ internal fun MainActivity.openPositionDialog(
             val scale = percent / 100f
             currentScale = scale
             scaleValue.text = getString(R.string.scale_percent_format, percent)
+            if (target == OverlayTarget.TURN_SIGNALS) {
+                syncTurnSignalsSpacingControls()
+            }
             updateDialogVisibility()
             when (target) {
                 OverlayTarget.NAVIGATION -> notifyOverlaySettingsChanged(
@@ -873,6 +968,7 @@ internal fun MainActivity.openPositionDialog(
                 )
                 OverlayTarget.TURN_SIGNALS -> notifyOverlaySettingsChanged(
                     turnSignalsScale = scale,
+                    turnSignalsSpacingDp = turnSignalsSpacingDp,
                     preview = true,
                     previewTarget = target,
                     previewShowOthers = showOthersCheck.isChecked
@@ -897,6 +993,9 @@ internal fun MainActivity.openPositionDialog(
                 .coerceIn(scaleMinPercent, scaleMaxPercent)
             val scale = percent / 100f
             currentScale = scale
+            if (target == OverlayTarget.TURN_SIGNALS) {
+                syncTurnSignalsSpacingControls()
+            }
             updateDialogVisibility()
             when (target) {
                 OverlayTarget.NAVIGATION -> {
@@ -964,8 +1063,10 @@ internal fun MainActivity.openPositionDialog(
                 }
                 OverlayTarget.TURN_SIGNALS -> {
                     OverlayPrefs.setTurnSignalsScale(activity, scale)
+                    OverlayPrefs.setTurnSignalsSpacingDp(activity, turnSignalsSpacingDp)
                     notifyOverlaySettingsChanged(
                         turnSignalsScale = scale,
+                        turnSignalsSpacingDp = turnSignalsSpacingDp,
                         preview = true,
                         previewTarget = target,
                         previewShowOthers = showOthersCheck.isChecked

@@ -7,6 +7,7 @@
     <string name="donate_button_content_desc">Поддержать проект</string>
     <string name="settings_button_content_desc">Открыть настройки</string>
     <string name="donate_thanks_text">Отдельное спасибо dizz74 (GeeOption) за помощь в исследовании функционала штатной навигации</string>
+    <string name="donate_turn_signals_thanks_text">Также выражаю благодарность Александу (@GeelyButton) за помощь с функционалом поворотников</string>
     <string name="donate_support_text">Вы можете поддержать проект, перейдя по QR-коду.</string>
     <string name="donate_qr_content_desc">QR-код для доната</string>
     <string name="donate_dialog_close">Закрыть</string>
@@ -72,6 +73,7 @@
     <string name="position_traffic_light_block_label">Блок светофоров</string>
     <string name="position_speedometer_block_label">Спидометр</string>
     <string name="position_turn_signals_block_label">Блок поворотников</string>
+    <string name="position_turn_signals_tested_note">Функционал протестирован только на Geely Atlas (2024)</string>
     <string name="position_clock_block_label">Блок часов</string>
     <string name="projection_toggle_label">Проекция</string>
     <string name="position_scale_label">Масштаб</string>
@@ -81,6 +83,9 @@
     <string name="position_container_width_label">Ширина</string>
     <string name="position_container_height_label">Высота</string>
     <string name="position_nav_width_label">Ширина блока навигации</string>
+    <string name="position_turn_signals_spacing_label">Расстояние между иконками</string>
+    <string name="position_turn_signals_spacing_value">%1$d dp</string>
+    <string name="position_turn_signals_spacing_value_default">32 dp</string>
     <string name="position_show_others">Отображать другие элементы на проекции</string>
     <string name="position_hudspeed_show_gps_status">Отображать статус GPS</string>
     <string name="position_dialog_hint">Перетаскивайте блок в окне, изменения сохраняются сразу.</string>
@@ -141,7 +146,6 @@
     <string name="speed_from_gps_hint">Скорость рассчитывается по дельте координат GPS, корректировка не применяется.</string>
     <string name="speed_from_gps_permission_denied">Для скорости по GPS нужен доступ к геопозиции.</string>
     <string name="info_mirror_starsheep7_label">Отражение информации (Starsheep 7)</string>
-    <string name="feature_in_development">В разработке</string>
     <string name="hide_turn_when_far_enabled_label">Скрывать поворот если до манёвра более 1 км</string>
     <string name="hide_turn_when_far_enabled_label_value">Скрывать поворот если до манёвра более %1$s</string>
     <string name="hide_turn_when_far_enabled_hint">Если включено, поворот будет скрываться, когда расстояние больше выбранного порога.</string>

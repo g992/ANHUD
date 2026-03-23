@@ -57,7 +57,7 @@ class HudOverlayController(private val context: Context) {
         private const val HUDSPEED_OVERSPEED_PADDING_DP = 8f
         private const val PREVIEW_SPEED_LIMIT_TEXT_SCALE = 1.3f
         private const val SPEEDOMETER_UNIT_RELATIVE_SIZE = 1f / 3f
-        private const val TURN_SIGNAL_BLINK_INTERVAL_MS = 450L
+        private const val TURN_SIGNAL_BLINK_INTERVAL_MS = 400L
         private const val CLEAR_BEFORE_REDRAW_DELAY_MS = 32L
     }
     private val handler = Handler(Looper.getMainLooper())
@@ -151,6 +151,7 @@ class HudOverlayController(private val context: Context) {
     private var trafficLightScale: Float = OverlayPrefs.trafficLightScale(context)
     private var speedometerScale: Float = OverlayPrefs.speedometerScale(context)
     private var turnSignalsScale: Float = OverlayPrefs.turnSignalsScale(context)
+    private var turnSignalsSpacingDp: Float = OverlayPrefs.turnSignalsSpacingDp(context)
     private var clockScale: Float = OverlayPrefs.clockScale(context)
     private var navAlpha: Float = OverlayPrefs.navAlpha(context)
     private var arrowAlpha: Float = OverlayPrefs.arrowAlpha(context)
@@ -470,6 +471,7 @@ class HudOverlayController(private val context: Context) {
         trafficLightScale: Float?,
         speedometerScale: Float?,
         turnSignalsScale: Float?,
+        turnSignalsSpacingDp: Float?,
         clockScale: Float?,
         navAlpha: Float?,
         arrowAlpha: Float?,
@@ -579,6 +581,13 @@ class HudOverlayController(private val context: Context) {
             if (turnSignalsScale != null) {
                 this.turnSignalsScale = turnSignalsScale.coerceAtLeast(0f)
             }
+            if (turnSignalsSpacingDp != null) {
+                this.turnSignalsSpacingDp = turnSignalsSpacingDp.coerceAtLeast(OverlayPrefs.TURN_SIGNALS_ICON_SIZE_DP)
+            }
+            this.turnSignalsSpacingDp = this.turnSignalsSpacingDp.coerceIn(
+                OverlayPrefs.TURN_SIGNALS_ICON_SIZE_DP,
+                resolveTurnSignalsMaxSpacingDp()
+            )
             if (clockScale != null) {
                 this.clockScale = clockScale.coerceAtLeast(0f)
             }
@@ -1148,8 +1157,8 @@ class HudOverlayController(private val context: Context) {
             )
             visibility = View.GONE
         }
-        val turnArrowSize = (24 * metrics.density).roundToInt().coerceAtLeast(1)
-        val turnArrowGap = (8 * metrics.density).roundToInt()
+        val turnArrowSize = (OverlayPrefs.TURN_SIGNALS_ICON_SIZE_DP * metrics.density).roundToInt().coerceAtLeast(1)
+        val turnArrowGap = resolveTurnSignalsGapPx(metrics.density)
         val turnSignalLeft = ImageView(displayContext).apply {
             layoutParams = LinearLayout.LayoutParams(turnArrowSize, turnArrowSize).apply {
                 marginEnd = turnArrowGap
@@ -1243,6 +1252,7 @@ class HudOverlayController(private val context: Context) {
             turnSignalRightView = turnSignalRight
             clockView = clockText
             currentDisplayId = display.displayId
+            applyTurnSignalsSpacing(metrics.density)
             applyNavTextScale()
             UiLogStore.append(LogCategory.SYSTEM, "Оверлей: показан на экране ${display.displayId}")
             startClockTicker()
@@ -2489,6 +2499,7 @@ class HudOverlayController(private val context: Context) {
             positionView(it, speedometerPositionDp, speedometerScale, speedometerAlpha, metrics.density, containerWidth, containerHeight)
         }
         turnSignalsContainer?.let {
+            applyTurnSignalsSpacing(metrics.density)
             if (previewMode && previewTarget == OverlayBroadcasts.PREVIEW_TARGET_TURN_SIGNALS) {
                 it.background = ContextCompat.getDrawable(it.context, R.drawable.bg_nav_block_outline)
             } else {
@@ -2508,6 +2519,29 @@ class HudOverlayController(private val context: Context) {
             positionView(it, clockPositionDp, clockScale, clockAlpha, metrics.density, containerWidth, containerHeight)
         }
         updateMapView(displayContext, containerWidthPx, resolvedHeightPx)
+    }
+
+    private fun applyTurnSignalsSpacing(density: Float) {
+        val left = turnSignalLeftView ?: return
+        val params = left.layoutParams as? LinearLayout.LayoutParams ?: return
+        val marginPx = resolveTurnSignalsGapPx(density)
+        if (params.marginEnd == marginPx) {
+            return
+        }
+        left.layoutParams = params.apply {
+            marginEnd = marginPx
+        }
+    }
+
+    private fun resolveTurnSignalsGapPx(density: Float): Int {
+        val gapDp = (turnSignalsSpacingDp - OverlayPrefs.TURN_SIGNALS_ICON_SIZE_DP).coerceAtLeast(0f)
+        return (gapDp * density).roundToInt()
+    }
+
+    private fun resolveTurnSignalsMaxSpacingDp(): Float {
+        val safeScale = turnSignalsScale.coerceAtLeast(0.01f)
+        return ((containerWidthDp / safeScale) - OverlayPrefs.TURN_SIGNALS_ICON_SIZE_DP)
+            .coerceAtLeast(OverlayPrefs.TURN_SIGNALS_ICON_SIZE_DP)
     }
 
     private fun updateContainerLayout(

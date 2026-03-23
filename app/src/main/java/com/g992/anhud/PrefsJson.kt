@@ -182,6 +182,7 @@ object PrefsJson {
         putFloat("overlay_traffic_light_scale", OverlayPrefs.trafficLightScale(context))
         putFloat("overlay_speedometer_scale", OverlayPrefs.speedometerScale(context))
         putFloat("overlay_turn_signals_scale", OverlayPrefs.turnSignalsScale(context))
+        putFloat("overlay_turn_signals_spacing_dp", OverlayPrefs.turnSignalsSpacingDp(context))
         putFloat("overlay_clock_scale", OverlayPrefs.clockScale(context))
         putFloat("overlay_nav_alpha", OverlayPrefs.navAlpha(context))
         putFloat("overlay_arrow_alpha", OverlayPrefs.arrowAlpha(context))

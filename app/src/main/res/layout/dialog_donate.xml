@@ -18,6 +18,16 @@
             android:textSize="16sp"
             android:textStyle="bold" />
 
+        <TextView
+            android:id="@+id/donateTurnSignalsThanks"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="@string/donate_turn_signals_thanks_text"
+            android:textColor="@color/dialog_text_primary"
+            android:textSize="16sp"
+            android:textStyle="bold" />
+
         <ImageView
             android:id="@+id/donateQr"
             android:layout_width="match_parent"

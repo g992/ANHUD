@@ -42,6 +42,7 @@ object OverlayPrefs {
     private const val KEY_TRAFFIC_LIGHT_SCALE = "overlay_traffic_light_scale"
     private const val KEY_SPEEDOMETER_SCALE = "overlay_speedometer_scale"
     private const val KEY_TURN_SIGNALS_SCALE = "overlay_turn_signals_scale"
+    private const val KEY_TURN_SIGNALS_SPACING_DP = "overlay_turn_signals_spacing_dp"
     private const val KEY_CLOCK_SCALE = "overlay_clock_scale"
     private const val KEY_NAV_ALPHA = "overlay_nav_alpha"
     private const val KEY_ARROW_ALPHA = "overlay_arrow_alpha"
@@ -89,6 +90,7 @@ object OverlayPrefs {
     private const val KEY_NAV_WIDTH_DP = "overlay_nav_width_dp"
 
     const val ICON_SIZE_DP = 48f
+    const val TURN_SIGNALS_ICON_SIZE_DP = 24f
     const val NAV_WIDTH_MIN_DP = ICON_SIZE_DP * 2
     const val CONTAINER_MIN_SIZE_PX = 100f
     const val SPEED_LIMIT_ALERT_THRESHOLD_MAX = 20
@@ -399,6 +401,34 @@ object OverlayPrefs {
     fun setTurnSignalsScale(context: Context, scale: Float) {
         prefs(context).edit()
             .putFloat(KEY_TURN_SIGNALS_SCALE, scale)
+            .apply()
+    }
+
+    fun turnSignalsMaxSpacingDp(context: Context, scale: Float = turnSignalsScale(context)): Float {
+        val containerWidthDp = containerSizeDp(context).x
+        val safeScale = scale.coerceAtLeast(0.01f)
+        return ((containerWidthDp / safeScale) - TURN_SIGNALS_ICON_SIZE_DP)
+            .coerceAtLeast(TURN_SIGNALS_ICON_SIZE_DP)
+    }
+
+    fun turnSignalsSpacingDp(context: Context): Float {
+        val maxSpacingDp = turnSignalsMaxSpacingDp(context)
+        val defaultSpacingDp = TURN_SIGNALS_SPACING_DEFAULT_DP.coerceIn(
+            TURN_SIGNALS_ICON_SIZE_DP,
+            maxSpacingDp
+        )
+        return prefs(context)
+            .getFloat(KEY_TURN_SIGNALS_SPACING_DP, defaultSpacingDp)
+            .coerceIn(TURN_SIGNALS_ICON_SIZE_DP, maxSpacingDp)
+    }
+
+    fun setTurnSignalsSpacingDp(context: Context, spacingDp: Float) {
+        val maxSpacingDp = turnSignalsMaxSpacingDp(context)
+        prefs(context).edit()
+            .putFloat(
+                KEY_TURN_SIGNALS_SPACING_DP,
+                spacingDp.coerceIn(TURN_SIGNALS_ICON_SIZE_DP, maxSpacingDp)
+            )
             .apply()
     }
 
@@ -920,6 +950,7 @@ object OverlayPrefs {
     private const val SPEEDOMETER_BLOCK_HEIGHT_DP = 32f
     private const val TURN_SIGNALS_BLOCK_HEIGHT_DP = 24f
     private const val TURN_SIGNALS_BLOCK_GAP_DP = 8f
+    private const val TURN_SIGNALS_SPACING_DEFAULT_DP = TURN_SIGNALS_ICON_SIZE_DP + TURN_SIGNALS_BLOCK_GAP_DP
     private const val CLOCK_BLOCK_HEIGHT_DP = 24f
     private const val DEFAULT_MARGIN_DP = 16f
     private const val CONTAINER_DEFAULT_SIZE_PX = 255f

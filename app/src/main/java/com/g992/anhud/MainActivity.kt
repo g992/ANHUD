@@ -369,7 +369,6 @@ class MainActivity : ScaledActivity() {
             OverlayPrefs.setTurnSignalsEnabled(this, isChecked)
             notifyOverlaySettingsChanged(turnSignalsEnabled = isChecked)
         }
-        applyTurnSignalsUiDisabledState()
         speedometerShowUnitTextCheck.setOnCheckedChangeListener { _, isChecked ->
             if (isSyncingUi) {
                 return@setOnCheckedChangeListener
@@ -772,6 +771,7 @@ class MainActivity : ScaledActivity() {
         trafficLightScale: Float? = null,
         speedometerScale: Float? = null,
         turnSignalsScale: Float? = null,
+        turnSignalsSpacingDp: Float? = null,
         clockScale: Float? = null,
         navAlpha: Float? = null,
         arrowAlpha: Float? = null,
@@ -885,6 +885,9 @@ class MainActivity : ScaledActivity() {
         }
         if (turnSignalsScale != null) {
             intent.putExtra(OverlayBroadcasts.EXTRA_TURN_SIGNALS_SCALE, turnSignalsScale)
+        }
+        if (turnSignalsSpacingDp != null) {
+            intent.putExtra(OverlayBroadcasts.EXTRA_TURN_SIGNALS_SPACING_DP, turnSignalsSpacingDp)
         }
         if (clockScale != null) {
             intent.putExtra(OverlayBroadcasts.EXTRA_CLOCK_SCALE, clockScale)

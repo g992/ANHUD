@@ -213,6 +213,7 @@ class HudStatusReceiver : BroadcastReceiver() {
             .putExtra(OverlayBroadcasts.EXTRA_TRAFFIC_LIGHT_SCALE, OverlayPrefs.trafficLightScale(context))
             .putExtra(OverlayBroadcasts.EXTRA_SPEEDOMETER_SCALE, OverlayPrefs.speedometerScale(context))
             .putExtra(OverlayBroadcasts.EXTRA_TURN_SIGNALS_SCALE, OverlayPrefs.turnSignalsScale(context))
+            .putExtra(OverlayBroadcasts.EXTRA_TURN_SIGNALS_SPACING_DP, OverlayPrefs.turnSignalsSpacingDp(context))
             .putExtra(OverlayBroadcasts.EXTRA_CLOCK_SCALE, OverlayPrefs.clockScale(context))
             .putExtra(OverlayBroadcasts.EXTRA_NAV_ALPHA, OverlayPrefs.navAlpha(context))
             .putExtra(OverlayBroadcasts.EXTRA_ARROW_ALPHA, OverlayPrefs.arrowAlpha(context))

@@ -57,6 +57,7 @@ class HudBackgroundService : Service() {
                 val trafficLightScale = intent.getFloatExtra(OverlayBroadcasts.EXTRA_TRAFFIC_LIGHT_SCALE, Float.NaN)
                 val speedometerScale = intent.getFloatExtra(OverlayBroadcasts.EXTRA_SPEEDOMETER_SCALE, Float.NaN)
                 val turnSignalsScale = intent.getFloatExtra(OverlayBroadcasts.EXTRA_TURN_SIGNALS_SCALE, Float.NaN)
+                val turnSignalsSpacingDp = intent.getFloatExtra(OverlayBroadcasts.EXTRA_TURN_SIGNALS_SPACING_DP, Float.NaN)
                 val clockScale = intent.getFloatExtra(OverlayBroadcasts.EXTRA_CLOCK_SCALE, Float.NaN)
                 val navAlpha = intent.getFloatExtra(OverlayBroadcasts.EXTRA_NAV_ALPHA, Float.NaN)
                 val arrowAlpha = intent.getFloatExtra(OverlayBroadcasts.EXTRA_ARROW_ALPHA, Float.NaN)
@@ -236,6 +237,7 @@ class HudBackgroundService : Service() {
                 val trafficLightScaleValue = trafficLightScale.takeIf { !it.isNaN() }
                 val speedometerScaleValue = speedometerScale.takeIf { !it.isNaN() }
                 val turnSignalsScaleValue = turnSignalsScale.takeIf { !it.isNaN() }
+                val turnSignalsSpacingValue = turnSignalsSpacingDp.takeIf { !it.isNaN() }
                 val clockScaleValue = clockScale.takeIf { !it.isNaN() }
                 val navAlphaValue = navAlpha.takeIf { !it.isNaN() }
                 val arrowAlphaValue = arrowAlpha.takeIf { !it.isNaN() }
@@ -271,6 +273,7 @@ class HudBackgroundService : Service() {
                     trafficLightScaleValue,
                     speedometerScaleValue,
                     turnSignalsScaleValue,
+                    turnSignalsSpacingValue,
                     clockScaleValue,
                     navAlphaValue,
                     arrowAlphaValue,
