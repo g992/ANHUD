@@ -152,6 +152,7 @@ class HudOverlayController(private val context: Context) {
     private var speedometerScale: Float = OverlayPrefs.speedometerScale(context)
     private var turnSignalsScale: Float = OverlayPrefs.turnSignalsScale(context)
     private var turnSignalsSpacingDp: Float = OverlayPrefs.turnSignalsSpacingDp(context)
+    private var turnSignalsIconStyle: Int = OverlayPrefs.turnSignalsIconStyle(context)
     private var clockScale: Float = OverlayPrefs.clockScale(context)
     private var navAlpha: Float = OverlayPrefs.navAlpha(context)
     private var arrowAlpha: Float = OverlayPrefs.arrowAlpha(context)
@@ -472,6 +473,7 @@ class HudOverlayController(private val context: Context) {
         speedometerScale: Float?,
         turnSignalsScale: Float?,
         turnSignalsSpacingDp: Float?,
+        turnSignalsIconStyle: Int?,
         clockScale: Float?,
         navAlpha: Float?,
         arrowAlpha: Float?,
@@ -588,6 +590,10 @@ class HudOverlayController(private val context: Context) {
                 OverlayPrefs.TURN_SIGNALS_ICON_SIZE_DP,
                 resolveTurnSignalsMaxSpacingDp()
             )
+            if (turnSignalsIconStyle != null) {
+                this.turnSignalsIconStyle = TurnSignalIcons.sanitize(turnSignalsIconStyle)
+                applyTurnSignalsIconStyle()
+            }
             if (clockScale != null) {
                 this.clockScale = clockScale.coerceAtLeast(0f)
             }
@@ -1164,13 +1170,12 @@ class HudOverlayController(private val context: Context) {
                 marginEnd = turnArrowGap
             }
             scaleType = ImageView.ScaleType.FIT_CENTER
-            setImageResource(R.drawable.ic_turn_signal_left)
         }
         val turnSignalRight = ImageView(displayContext).apply {
             layoutParams = LinearLayout.LayoutParams(turnArrowSize, turnArrowSize)
             scaleType = ImageView.ScaleType.FIT_CENTER
-            setImageResource(R.drawable.ic_turn_signal_right)
         }
+        TurnSignalIcons.applyPair(turnSignalLeft, turnSignalRight, turnSignalsIconStyle)
         turnSignalsBlock.addView(turnSignalLeft)
         turnSignalsBlock.addView(turnSignalRight)
 
@@ -1873,6 +1878,10 @@ class HudOverlayController(private val context: Context) {
         right.visibility = if (turnSignalRightActive && onPhase) View.VISIBLE else View.INVISIBLE
     }
 
+    private fun applyTurnSignalsIconStyle() {
+        TurnSignalIcons.applyPair(turnSignalLeftView, turnSignalRightView, turnSignalsIconStyle)
+    }
+
     private fun startTurnSignalBlinking() {
         if (turnSignalBlinkRunnable != null) {
             return
@@ -2125,6 +2134,7 @@ class HudOverlayController(private val context: Context) {
                 distance.visibility = if (clearOnly) View.INVISIBLE else View.GONE
                 direction.setImageDrawable(null)
                 direction.visibility = if (clearOnly) View.INVISIBLE else View.GONE
+                syncHudSpeedMeasuredSize()
                 return
             }
             gpsBadge?.setImageDrawable(null)
@@ -2156,6 +2166,7 @@ class HudOverlayController(private val context: Context) {
                 direction.setImageResource(directionIcon)
                 direction.visibility = View.VISIBLE
             }
+            syncHudSpeedMeasuredSize()
             return
         }
         val icon = hudSpeedCompactIcon ?: return
@@ -2185,6 +2196,7 @@ class HudOverlayController(private val context: Context) {
             direction.visibility = if (clearOnly) View.INVISIBLE else View.GONE
             distance.visibility = if (clearOnly) View.INVISIBLE else View.GONE
             rightColumn?.visibility = if (clearOnly) View.INVISIBLE else View.GONE
+            syncHudSpeedMeasuredSize()
             return
         }
         gpsBadge?.setImageDrawable(null)
@@ -2210,6 +2222,34 @@ class HudOverlayController(private val context: Context) {
         }
         if (rightColumn != null) {
             rightColumn.visibility = if (directionVisible) View.VISIBLE else View.GONE
+        }
+        syncHudSpeedMeasuredSize()
+    }
+
+    private fun syncHudSpeedMeasuredSize() {
+        val container = hudSpeedContainer ?: return
+        val content = hudSpeedContent ?: return
+        content.measure(
+            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
+            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
+        )
+        val measuredWidth = content.measuredWidth.coerceAtLeast(1)
+        val measuredHeight = content.measuredHeight.coerceAtLeast(1)
+        val contentParams = (content.layoutParams as? FrameLayout.LayoutParams)
+            ?: FrameLayout.LayoutParams(measuredWidth, measuredHeight)
+        if (contentParams.width != measuredWidth || contentParams.height != measuredHeight) {
+            content.layoutParams = contentParams.apply {
+                width = measuredWidth
+                height = measuredHeight
+            }
+        }
+        val containerParams = (container.layoutParams as? FrameLayout.LayoutParams)
+            ?: FrameLayout.LayoutParams(measuredWidth, measuredHeight)
+        if (containerParams.width != measuredWidth || containerParams.height != measuredHeight) {
+            container.layoutParams = containerParams.apply {
+                width = measuredWidth
+                height = measuredHeight
+            }
         }
     }
 

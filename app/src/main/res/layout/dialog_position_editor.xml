@@ -280,7 +280,7 @@
                     android:layout_marginEnd="8dp"
                     android:contentDescription="@string/position_turn_signals_block_label"
                     android:scaleType="fitCenter"
-                    android:src="@drawable/ic_turn_signal_left" />
+                    android:src="@drawable/turn_signal_style_1" />
 
                 <ImageView
                     android:id="@+id/dialogPreviewTurnSignalsRight"
@@ -288,7 +288,7 @@
                     android:layout_height="24dp"
                     android:contentDescription="@string/position_turn_signals_block_label"
                     android:scaleType="fitCenter"
-                    android:src="@drawable/ic_turn_signal_right" />
+                    android:src="@drawable/turn_signal_style_1" />
             </LinearLayout>
 
             <TextView

@@ -37,6 +37,7 @@ object OverlayBroadcasts {
     const val EXTRA_SPEEDOMETER_SCALE = "extra_speedometer_scale"
     const val EXTRA_TURN_SIGNALS_SCALE = "extra_turn_signals_scale"
     const val EXTRA_TURN_SIGNALS_SPACING_DP = "extra_turn_signals_spacing_dp"
+    const val EXTRA_TURN_SIGNALS_ICON_STYLE = "extra_turn_signals_icon_style"
     const val EXTRA_CLOCK_SCALE = "extra_clock_scale"
     const val EXTRA_NAV_ALPHA = "extra_nav_alpha"
     const val EXTRA_ARROW_ALPHA = "extra_arrow_alpha"

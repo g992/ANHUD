@@ -43,6 +43,8 @@ object OverlayPrefs {
     private const val KEY_SPEEDOMETER_SCALE = "overlay_speedometer_scale"
     private const val KEY_TURN_SIGNALS_SCALE = "overlay_turn_signals_scale"
     private const val KEY_TURN_SIGNALS_SPACING_DP = "overlay_turn_signals_spacing_dp"
+    private const val KEY_TURN_SIGNALS_ICON_STYLE = "overlay_turn_signals_icon_style"
+    private const val KEY_TURN_SIGNALS_ICON_STYLE_MIGRATED = "overlay_turn_signals_icon_style_migrated_v2"
     private const val KEY_CLOCK_SCALE = "overlay_clock_scale"
     private const val KEY_NAV_ALPHA = "overlay_nav_alpha"
     private const val KEY_ARROW_ALPHA = "overlay_arrow_alpha"
@@ -82,6 +84,7 @@ object OverlayPrefs {
     private const val KEY_NAV_UPDATES_END_TIMEOUT = "nav_updates_end_timeout"
     private const val KEY_ROAD_CAMERA_TIMEOUT = "road_camera_timeout"
     private const val KEY_SPEED_CORRECTION = "speed_correction"
+    private const val KEY_SPEEDOMETER_FREEZE_TIMEOUT = "speedometer_freeze_timeout"
     private const val KEY_SPEED_FROM_GPS = "speed_from_gps"
     private const val KEY_INFO_MIRROR_STARSHEEP7 = "info_mirror_starsheep7"
     private const val KEY_HIDE_TURN_WHEN_FAR_ENABLED = "hide_turn_when_far_enabled"
@@ -91,6 +94,7 @@ object OverlayPrefs {
 
     const val ICON_SIZE_DP = 48f
     const val TURN_SIGNALS_ICON_SIZE_DP = 24f
+    const val TURN_SIGNALS_ICON_STYLE_DEFAULT = 1
     const val NAV_WIDTH_MIN_DP = ICON_SIZE_DP * 2
     const val CONTAINER_MIN_SIZE_PX = 100f
     const val SPEED_LIMIT_ALERT_THRESHOLD_MAX = 20
@@ -430,6 +434,39 @@ object OverlayPrefs {
                 spacingDp.coerceIn(TURN_SIGNALS_ICON_SIZE_DP, maxSpacingDp)
             )
             .apply()
+    }
+
+    fun turnSignalsIconStyle(context: Context): Int {
+        val preferences = prefs(context)
+        val migrated = preferences.getBoolean(KEY_TURN_SIGNALS_ICON_STYLE_MIGRATED, false)
+        val stored = preferences.getInt(KEY_TURN_SIGNALS_ICON_STYLE, TURN_SIGNALS_ICON_STYLE_DEFAULT)
+        val resolved = if (migrated) {
+            TurnSignalIcons.sanitize(stored)
+        } else {
+            migrateLegacyTurnSignalsIconStyle(stored)
+        }
+        if (!migrated || resolved != stored) {
+            preferences.edit()
+                .putInt(KEY_TURN_SIGNALS_ICON_STYLE, resolved)
+                .putBoolean(KEY_TURN_SIGNALS_ICON_STYLE_MIGRATED, true)
+                .apply()
+        }
+        return resolved
+    }
+
+    fun setTurnSignalsIconStyle(context: Context, styleId: Int) {
+        prefs(context).edit()
+            .putInt(KEY_TURN_SIGNALS_ICON_STYLE, TurnSignalIcons.sanitize(styleId))
+            .putBoolean(KEY_TURN_SIGNALS_ICON_STYLE_MIGRATED, true)
+            .apply()
+    }
+
+    private fun migrateLegacyTurnSignalsIconStyle(styleId: Int): Int {
+        return when (styleId) {
+            12 -> 2
+            in 2..11 -> styleId + 1
+            else -> TurnSignalIcons.sanitize(styleId)
+        }
     }
 
     fun clockScale(context: Context): Float {
@@ -845,6 +882,17 @@ object OverlayPrefs {
     fun setSpeedCorrection(context: Context, correction: Int) {
         prefs(context).edit()
             .putInt(KEY_SPEED_CORRECTION, correction.coerceIn(SPEED_CORRECTION_MIN, SPEED_CORRECTION_MAX))
+            .apply()
+    }
+
+    fun speedometerFreezeTimeout(context: Context): Int {
+        return prefs(context).getInt(KEY_SPEEDOMETER_FREEZE_TIMEOUT, 0)
+            .coerceIn(0, TIMEOUT_MAX)
+    }
+
+    fun setSpeedometerFreezeTimeout(context: Context, timeout: Int) {
+        prefs(context).edit()
+            .putInt(KEY_SPEEDOMETER_FREEZE_TIMEOUT, timeout.coerceIn(0, TIMEOUT_MAX))
             .apply()
     }
 

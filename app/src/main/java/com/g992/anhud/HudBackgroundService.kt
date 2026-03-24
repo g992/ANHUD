@@ -58,6 +58,14 @@ class HudBackgroundService : Service() {
                 val speedometerScale = intent.getFloatExtra(OverlayBroadcasts.EXTRA_SPEEDOMETER_SCALE, Float.NaN)
                 val turnSignalsScale = intent.getFloatExtra(OverlayBroadcasts.EXTRA_TURN_SIGNALS_SCALE, Float.NaN)
                 val turnSignalsSpacingDp = intent.getFloatExtra(OverlayBroadcasts.EXTRA_TURN_SIGNALS_SPACING_DP, Float.NaN)
+                val turnSignalsIconStyle = if (intent.hasExtra(OverlayBroadcasts.EXTRA_TURN_SIGNALS_ICON_STYLE)) {
+                    intent.getIntExtra(
+                        OverlayBroadcasts.EXTRA_TURN_SIGNALS_ICON_STYLE,
+                        OverlayPrefs.TURN_SIGNALS_ICON_STYLE_DEFAULT
+                    )
+                } else {
+                    null
+                }
                 val clockScale = intent.getFloatExtra(OverlayBroadcasts.EXTRA_CLOCK_SCALE, Float.NaN)
                 val navAlpha = intent.getFloatExtra(OverlayBroadcasts.EXTRA_NAV_ALPHA, Float.NaN)
                 val arrowAlpha = intent.getFloatExtra(OverlayBroadcasts.EXTRA_ARROW_ALPHA, Float.NaN)
@@ -274,6 +282,7 @@ class HudBackgroundService : Service() {
                     speedometerScaleValue,
                     turnSignalsScaleValue,
                     turnSignalsSpacingValue,
+                    turnSignalsIconStyle,
                     clockScaleValue,
                     navAlphaValue,
                     arrowAlphaValue,

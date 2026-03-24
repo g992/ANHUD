@@ -4,16 +4,19 @@ import android.content.Intent
 import android.content.ComponentName
 import android.content.Context
 import android.content.pm.PackageManager
+import android.graphics.Color
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.provider.Settings
 import android.view.LayoutInflater
 import android.view.View
+import android.view.ViewGroup
 import android.view.WindowManager
 import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
+import android.widget.ScrollView
 import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
 import androidx.core.content.ContextCompat
@@ -70,6 +73,7 @@ internal fun MainActivity.syncUiFromPrefs() {
         clockProjectionSwitch.isChecked = OverlayPrefs.clockEnabled(this)
         speedometerShowUnitTextCheck.isChecked = OverlayPrefs.speedometerShowUnitText(this)
         updateSpeedometerCardPreviewText(speedometerShowUnitTextCheck.isChecked)
+        updateTurnSignalsIconPreview()
         speedLimitFromHudSpeedCheck.isChecked = OverlayPrefs.speedLimitFromHudSpeed(this)
         arrowOnlyWhenNoIconCheck.isChecked = OverlayPrefs.arrowOnlyWhenNoIcon(this)
 
@@ -224,5 +228,104 @@ internal fun MainActivity.showDonateDialog() {
         val width = (resources.displayMetrics.widthPixels * 0.8f).roundToInt()
         dialog.window?.setLayout(width, WindowManager.LayoutParams.WRAP_CONTENT)
     }
+    dialog.show()
+}
+
+internal fun MainActivity.updateTurnSignalsIconPreview() {
+    val styleId = OverlayPrefs.turnSignalsIconStyle(this)
+    turnSignalsIconValue.text = TurnSignalIcons.label(this, styleId)
+    TurnSignalIcons.applyPair(turnSignalsCardPreviewLeft, turnSignalsCardPreviewRight, styleId)
+}
+
+internal fun MainActivity.showTurnSignalIconDialog() {
+    val density = resources.displayMetrics.density
+    fun dp(value: Int): Int = (value * density).roundToInt()
+
+    val currentStyleId = OverlayPrefs.turnSignalsIconStyle(this)
+    lateinit var dialog: AlertDialog
+    val content = LinearLayout(this).apply {
+        orientation = LinearLayout.VERTICAL
+        setPadding(dp(16), dp(8), dp(16), 0)
+    }
+
+    TurnSignalIcons.all().forEachIndexed { index, style ->
+        val isSelected = style.id == currentStyleId
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = android.view.Gravity.CENTER_VERTICAL
+            background = ContextCompat.getDrawable(this@showTurnSignalIconDialog, R.drawable.rounded_menu_item_ripple)
+            setPadding(dp(12), dp(12), dp(12), dp(12))
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply {
+                if (index < TurnSignalIcons.all().lastIndex) {
+                    bottomMargin = dp(8)
+                }
+            }
+            isClickable = true
+            isFocusable = true
+        }
+
+        val preview = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = android.view.Gravity.CENTER_VERTICAL
+        }
+        val left = ImageView(this).apply {
+            layoutParams = LinearLayout.LayoutParams(dp(24), dp(24)).apply {
+                marginEnd = dp(8)
+            }
+            scaleType = ImageView.ScaleType.FIT_CENTER
+        }
+        val right = ImageView(this).apply {
+            layoutParams = LinearLayout.LayoutParams(dp(24), dp(24))
+            scaleType = ImageView.ScaleType.FIT_CENTER
+        }
+        TurnSignalIcons.applyPair(left, right, style.id)
+        preview.addView(left)
+        preview.addView(right)
+
+        val textColumn = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
+                marginStart = dp(12)
+            }
+        }
+        val title = TextView(this).apply {
+            text = TurnSignalIcons.label(this@showTurnSignalIconDialog, style.id)
+            setTextColor(Color.WHITE)
+            textSize = 16f
+            paint.isFakeBoldText = true
+        }
+        val subtitle = TextView(this).apply {
+            text = if (isSelected) {
+                getString(R.string.turn_signal_icon_selected)
+            } else {
+                getString(R.string.turn_signal_icon_dialog_hint)
+            }
+            setTextColor(Color.parseColor(if (isSelected) "#B3FFFFFF" else "#80FFFFFF"))
+            textSize = 12f
+        }
+        textColumn.addView(title)
+        textColumn.addView(subtitle)
+
+        row.addView(preview)
+        row.addView(textColumn)
+        content.addView(row)
+
+        row.setOnClickListener {
+            OverlayPrefs.setTurnSignalsIconStyle(this, style.id)
+            updateTurnSignalsIconPreview()
+            notifyOverlaySettingsChanged(turnSignalsIconStyle = style.id)
+            dialog.dismiss()
+        }
+    }
+
+    dialog = AlertDialog.Builder(this, R.style.ThemeOverlay_ANHUD_Dialog)
+        .setTitle(R.string.turn_signal_icon_dialog_title)
+        .setView(ScrollView(this).apply { addView(content) })
+        .setNegativeButton(android.R.string.cancel, null)
+        .create()
+
     dialog.show()
 }

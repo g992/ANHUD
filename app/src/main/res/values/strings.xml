@@ -73,7 +73,13 @@
     <string name="position_traffic_light_block_label">Блок светофоров</string>
     <string name="position_speedometer_block_label">Спидометр</string>
     <string name="position_turn_signals_block_label">Блок поворотников</string>
-    <string name="position_turn_signals_tested_note">Функционал протестирован только на Geely Atlas (2024)</string>
+    <string name="position_turn_signals_tested_note">Функционал протестирован только на Geely Atlas (2024) и Geely Monjaro</string>
+    <string name="turn_signal_icon_label">Иконка поворотников</string>
+    <string name="turn_signal_icon_dialog_title">Выбор иконки поворотников</string>
+    <string name="turn_signal_icon_dialog_hint">Нажмите, чтобы выбрать</string>
+    <string name="turn_signal_icon_selected">Текущая иконка</string>
+    <string name="turn_signal_icon_option_value">Вариант %1$d</string>
+    <string name="turn_signal_icon_option_value_default">Вариант 1</string>
     <string name="position_clock_block_label">Блок часов</string>
     <string name="projection_toggle_label">Проекция</string>
     <string name="position_scale_label">Масштаб</string>
@@ -142,6 +148,8 @@
     <string name="nav_updates_end_timeout_hint">0 - отключить, 1-360 секунд. Завершает поездку, если нет интентов навигатора, даже при активном уведомлении</string>
     <string name="speed_correction_label">Корректировка скорости спидометра</string>
     <string name="speed_correction_value">%1$+d км/ч</string>
+    <string name="speedometer_freeze_timeout_label">Таймаут зависания спидометра (gbinder)</string>
+    <string name="speedometer_freeze_timeout_hint">0 - отключить, 1-360 секунд. Если скорость не меняется, выполняется переподписка на датчик.</string>
     <string name="speed_from_gps_label">Брать скорость по GPS</string>
     <string name="speed_from_gps_hint">Скорость рассчитывается по дельте координат GPS, корректировка не применяется.</string>
     <string name="speed_from_gps_permission_denied">Для скорости по GPS нужен доступ к геопозиции.</string>

@@ -71,6 +71,7 @@ class SettingsActivity : ScaledActivity() {
     private lateinit var roadCameraTimeoutInput: EditText
     private lateinit var navNotificationEndTimeoutInput: EditText
     private lateinit var navUpdatesEndTimeoutInput: EditText
+    private lateinit var speedometerFreezeTimeoutInput: EditText
     private lateinit var speedCorrectionSeek: SeekBar
     private lateinit var speedCorrectionValue: TextView
     private lateinit var speedFromGpsCheck: SwitchCompat
@@ -227,6 +228,7 @@ class SettingsActivity : ScaledActivity() {
         roadCameraTimeoutInput = findViewById(R.id.roadCameraTimeoutInput)
         navNotificationEndTimeoutInput = findViewById(R.id.navNotificationEndTimeoutInput)
         navUpdatesEndTimeoutInput = findViewById(R.id.navUpdatesEndTimeoutInput)
+        speedometerFreezeTimeoutInput = findViewById(R.id.speedometerFreezeTimeoutInput)
         speedCorrectionSeek = findViewById(R.id.speedCorrectionSeek)
         speedCorrectionValue = findViewById(R.id.speedCorrectionValue)
         speedFromGpsCheck = findViewById(R.id.speedFromGpsCheck)
@@ -446,6 +448,17 @@ class SettingsActivity : ScaledActivity() {
                 val value = s?.toString()?.toIntOrNull() ?: 0
                 val clamped = value.coerceIn(0, OverlayPrefs.TIMEOUT_MAX)
                 OverlayPrefs.setNavUpdatesEndTimeout(this@SettingsActivity, clamped)
+            }
+        })
+
+        speedometerFreezeTimeoutInput.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+            override fun afterTextChanged(s: Editable?) {
+                if (isSyncingUi) return
+                val value = s?.toString()?.toIntOrNull() ?: 0
+                val clamped = value.coerceIn(0, OverlayPrefs.TIMEOUT_MAX)
+                OverlayPrefs.setSpeedometerFreezeTimeout(this@SettingsActivity, clamped)
             }
         })
 
@@ -1232,6 +1245,7 @@ class SettingsActivity : ScaledActivity() {
             roadCameraTimeoutInput.setText(OverlayPrefs.roadCameraTimeout(this).toString())
             navNotificationEndTimeoutInput.setText(OverlayPrefs.navNotificationEndTimeout(this).toString())
             navUpdatesEndTimeoutInput.setText(OverlayPrefs.navUpdatesEndTimeout(this).toString())
+            speedometerFreezeTimeoutInput.setText(OverlayPrefs.speedometerFreezeTimeout(this).toString())
             val correction = OverlayPrefs.speedCorrection(this)
             speedCorrectionSeek.progress = correction + 10
             speedCorrectionValue.text = getString(R.string.speed_correction_value, correction)

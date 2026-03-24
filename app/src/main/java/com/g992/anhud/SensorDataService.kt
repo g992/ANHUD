@@ -26,6 +26,8 @@ class SensorDataService : Service() {
     private var isLocationSubscribed = false
     private val gpsSpeedSamples = ArrayDeque<Location>()
     private var lastGpsSpeedUpdateElapsedMs: Long = 0L
+    private var lastGbinderSpeedKmh: Int? = null
+    private var lastGbinderSpeedChangedElapsedMs: Long = 0L
     private var carProxyBinder: IBinder? = null
     private var carProxyConnection: ServiceConnection? = null
     private var lastTurnSignalRaw: Int? = null
@@ -34,6 +36,7 @@ class SensorDataService : Service() {
     private val staleSpeedRunnable = object : Runnable {
         override fun run() {
             clearStaleGpsSpeedIfNeeded()
+            resubscribeGbinderSpeedIfNeeded()
             staleSpeedHandler.postDelayed(this, GPS_STALE_CHECK_INTERVAL_MS)
         }
     }
@@ -87,6 +90,7 @@ class SensorDataService : Service() {
         staleSpeedHandler.removeCallbacks(carProxyReconnectRunnable)
         unbindTurnSignalCarProxy()
         clearTurnSignalState()
+        resetGbinderSpeedWatchdog()
         stopLocationUpdates()
         super.onDestroy()
     }
@@ -129,13 +133,17 @@ class SensorDataService : Service() {
     }
 
     private fun handleSpeedIntent(context: Context, intent: Intent) {
-        if (OverlayPrefs.speedFromGps(context)) return
+        if (OverlayPrefs.speedFromGps(context)) {
+            resetGbinderSpeedWatchdog()
+            return
+        }
         val id = readIntExtra(intent, EXTRA_ID) ?: return
         if (id != SENSOR_ID_CAR_SPEED) return
         val value = readFloatExtra(intent, EXTRA_VALUE) ?: return
         val rawSpeed = (value * MS_TO_KMH).roundToInt()
         val correction = OverlayPrefs.speedCorrection(context)
         val speedKmh = (rawSpeed + correction).coerceAtLeast(0)
+        markGbinderSpeedObserved(speedKmh)
         NavigationHudStore.update { current -> current.copy(speedKmh = speedKmh) }
         UiLogStore.append(
             LogCategory.SENSORS,
@@ -420,6 +428,43 @@ class SensorDataService : Service() {
         if (cleared) UiLogStore.append(LogCategory.SENSORS, "GPS-скорость: сброс ($reason)")
     }
 
+    private fun markGbinderSpeedObserved(speedKmh: Int) {
+        val now = SystemClock.elapsedRealtime()
+        if (lastGbinderSpeedKmh != speedKmh) {
+            lastGbinderSpeedKmh = speedKmh
+            lastGbinderSpeedChangedElapsedMs = now
+            return
+        }
+        if (lastGbinderSpeedChangedElapsedMs <= 0L) {
+            lastGbinderSpeedChangedElapsedMs = now
+        }
+    }
+
+    private fun resetGbinderSpeedWatchdog() {
+        lastGbinderSpeedKmh = null
+        lastGbinderSpeedChangedElapsedMs = 0L
+    }
+
+    private fun resubscribeGbinderSpeedIfNeeded() {
+        if (OverlayPrefs.speedFromGps(this)) {
+            resetGbinderSpeedWatchdog()
+            return
+        }
+        val timeoutSeconds = OverlayPrefs.speedometerFreezeTimeout(this)
+        if (timeoutSeconds <= 0) return
+        val speedKmh = lastGbinderSpeedKmh ?: return
+        val lastChanged = lastGbinderSpeedChangedElapsedMs
+        if (lastChanged <= 0L) return
+        val elapsed = SystemClock.elapsedRealtime() - lastChanged
+        if (elapsed < timeoutSeconds * MILLIS_PER_SECOND_LONG) return
+        UiLogStore.append(
+            LogCategory.SENSORS,
+            "Скорость не менялась $timeoutSeconds c (gbinder=$speedKmh), переподписка на датчик"
+        )
+        subscribeToSpeedSensor()
+        lastGbinderSpeedChangedElapsedMs = SystemClock.elapsedRealtime()
+    }
+
     private fun resolveDeltaSeconds(previous: Location, current: Location): Float {
         val prevRealtime = previous.elapsedRealtimeNanos
         val currRealtime = current.elapsedRealtimeNanos
@@ -521,6 +566,7 @@ class SensorDataService : Service() {
         private const val GPS_STALE_CHECK_INTERVAL_MS = 1000L
         private const val GPS_SPEED_STALE_TIMEOUT_MS = 3000L
         private const val GPS_STOP_SPEED_KMH = 1.0f
+        private const val MILLIS_PER_SECOND_LONG = 1000L
         private const val NANOS_IN_SECOND = 1_000_000_000f
         private const val MILLIS_IN_SECOND = 1000f
     }

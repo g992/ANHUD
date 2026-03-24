@@ -17,6 +17,7 @@ import android.view.View
 import android.widget.Button
 import android.widget.CheckBox
 import android.widget.ImageButton
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.SeekBar
@@ -88,6 +89,10 @@ class MainActivity : ScaledActivity() {
     private lateinit var positionTrafficLightCard: View
     private lateinit var positionSpeedometerCard: View
     private lateinit var positionTurnSignalsCard: View
+    internal lateinit var positionTurnSignalsIconRow: View
+    internal lateinit var turnSignalsCardPreviewLeft: ImageView
+    internal lateinit var turnSignalsCardPreviewRight: ImageView
+    internal lateinit var turnSignalsIconValue: TextView
     private lateinit var positionClockCard: View
     internal lateinit var navProjectionSwitch: SwitchCompat
     internal lateinit var arrowProjectionSwitch: SwitchCompat
@@ -174,6 +179,10 @@ class MainActivity : ScaledActivity() {
         positionTrafficLightCard = findViewById(R.id.positionTrafficLightCard)
         positionSpeedometerCard = findViewById(R.id.positionSpeedometerCard)
         positionTurnSignalsCard = findViewById(R.id.positionTurnSignalsCard)
+        positionTurnSignalsIconRow = findViewById(R.id.positionTurnSignalsIconRow)
+        turnSignalsCardPreviewLeft = findViewById(R.id.turnSignalsCardPreviewLeft)
+        turnSignalsCardPreviewRight = findViewById(R.id.turnSignalsCardPreviewRight)
+        turnSignalsIconValue = findViewById(R.id.turnSignalsIconValue)
         positionClockCard = findViewById(R.id.positionClockCard)
         navProjectionSwitch = findViewById(R.id.navProjectionSwitch)
         arrowProjectionSwitch = findViewById(R.id.arrowProjectionSwitch)
@@ -292,6 +301,9 @@ class MainActivity : ScaledActivity() {
         }
         positionTurnSignalsCard.setOnClickListener {
             openPositionDialog(OverlayTarget.TURN_SIGNALS)
+        }
+        positionTurnSignalsIconRow.setOnClickListener {
+            showTurnSignalIconDialog()
         }
         positionClockCard.setOnClickListener {
             openPositionDialog(OverlayTarget.CLOCK)
@@ -760,6 +772,7 @@ class MainActivity : ScaledActivity() {
         trafficLightPosition: PointF? = null,
         speedometerPosition: PointF? = null,
         turnSignalsPosition: PointF? = null,
+        turnSignalsIconStyle: Int? = null,
         clockPosition: PointF? = null,
         navScale: Float? = null,
         navTextScale: Float? = null,
@@ -851,6 +864,12 @@ class MainActivity : ScaledActivity() {
         if (turnSignalsPosition != null) {
             intent.putExtra(OverlayBroadcasts.EXTRA_TURN_SIGNALS_X_DP, turnSignalsPosition.x)
             intent.putExtra(OverlayBroadcasts.EXTRA_TURN_SIGNALS_Y_DP, turnSignalsPosition.y)
+        }
+        if (turnSignalsIconStyle != null) {
+            intent.putExtra(
+                OverlayBroadcasts.EXTRA_TURN_SIGNALS_ICON_STYLE,
+                TurnSignalIcons.sanitize(turnSignalsIconStyle)
+            )
         }
         if (clockPosition != null) {
             intent.putExtra(OverlayBroadcasts.EXTRA_CLOCK_X_DP, clockPosition.x)

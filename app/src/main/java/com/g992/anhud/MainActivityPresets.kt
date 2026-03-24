@@ -296,6 +296,7 @@ private fun MainActivity.notifyOverlaySettingsChangedFull() {
         trafficLightPosition = trafficLightPos,
         speedometerPosition = speedometerPos,
         turnSignalsPosition = turnSignalsPos,
+        turnSignalsIconStyle = OverlayPrefs.turnSignalsIconStyle(this),
         clockPosition = clockPos,
         navScale = OverlayPrefs.navScale(this),
         navTextScale = OverlayPrefs.navTextScale(this),

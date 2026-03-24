@@ -286,6 +286,34 @@
                             android:inputType="number"
                             android:textColor="@color/white"
                             android:textColorHint="#404040" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="20dp"
+                            android:text="@string/speedometer_freeze_timeout_label"
+                            android:textColor="@color/white"
+                            android:textSize="16sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="4dp"
+                            android:text="@string/speedometer_freeze_timeout_hint"
+                            android:textColor="#808080"
+                            android:textSize="12sp" />
+
+                        <EditText
+                            android:id="@+id/speedometerFreezeTimeoutInput"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="8dp"
+                            android:backgroundTint="@color/white"
+                            android:hint="0"
+                            android:inputType="number"
+                            android:textColor="@color/white"
+                            android:textColorHint="#404040" />
                     </LinearLayout>
                 </LinearLayout>
 

@@ -57,6 +57,7 @@ internal fun MainActivity.openPositionDialog(
     val previewSpeedometer = dialogView.findViewById<TextView>(R.id.dialogPreviewSpeedometer)
     val previewTurnSignals = dialogView.findViewById<LinearLayout>(R.id.dialogPreviewTurnSignalsBlock)
     val previewTurnSignalsLeft = dialogView.findViewById<ImageView>(R.id.dialogPreviewTurnSignalsLeft)
+    val previewTurnSignalsRight = dialogView.findViewById<ImageView>(R.id.dialogPreviewTurnSignalsRight)
     val previewClock = dialogView.findViewById<TextView>(R.id.dialogPreviewClock)
     val showOthersCheck = dialogView.findViewById<CheckBox>(R.id.dialogShowOthers)
     val hudSpeedGpsStatusCheck = dialogView.findViewById<CheckBox>(R.id.dialogHudSpeedShowGpsStatus)
@@ -91,6 +92,7 @@ internal fun MainActivity.openPositionDialog(
     val trafficLightPosition = OverlayPrefs.trafficLightPositionDp(this)
     val speedometerPosition = OverlayPrefs.speedometerPositionDp(this)
     val turnSignalsPosition = OverlayPrefs.turnSignalsPositionDp(this)
+    val turnSignalsIconStyle = OverlayPrefs.turnSignalsIconStyle(this)
     val clockPosition = OverlayPrefs.clockPositionDp(this)
     val containerPosition = OverlayPrefs.containerPositionDp(this)
     val containerSize = OverlayPrefs.containerSizeDp(this)
@@ -110,6 +112,7 @@ internal fun MainActivity.openPositionDialog(
     var turnSignalsSpacingDp = OverlayPrefs.turnSignalsSpacingDp(this)
     var currentScale = 1f
     val density = displayDensity.takeIf { it > 0f } ?: resources.displayMetrics.density
+    TurnSignalIcons.applyPair(previewTurnSignalsLeft, previewTurnSignalsRight, turnSignalsIconStyle)
     val scalePercent = when (target) {
         OverlayTarget.NAVIGATION -> (OverlayPrefs.navScale(this) * 100).toInt()
         OverlayTarget.ARROW -> (OverlayPrefs.arrowScale(this) * 100).toInt()
@@ -468,6 +471,10 @@ internal fun MainActivity.openPositionDialog(
             }
         }
         if (showHudSpeed) {
+            previewHudSpeedBlock.pivotX = 0f
+            previewHudSpeedBlock.pivotY = 0f
+            previewHudSpeedBlock.scaleX = currentScale
+            previewHudSpeedBlock.scaleY = currentScale
             positionPreviewView(
                 previewHudContainer,
                 previewHudSpeedBlock,
