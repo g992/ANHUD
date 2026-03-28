@@ -1161,6 +1161,7 @@ class HudOverlayController(private val context: Context) {
                 FrameLayout.LayoutParams.WRAP_CONTENT,
                 FrameLayout.LayoutParams.WRAP_CONTENT
             )
+            setBackgroundColor(Color.TRANSPARENT)
             visibility = View.GONE
         }
         val turnArrowSize = (OverlayPrefs.TURN_SIGNALS_ICON_SIZE_DP * metrics.density).roundToInt().coerceAtLeast(1)
@@ -1175,7 +1176,7 @@ class HudOverlayController(private val context: Context) {
             layoutParams = LinearLayout.LayoutParams(turnArrowSize, turnArrowSize)
             scaleType = ImageView.ScaleType.FIT_CENTER
         }
-        TurnSignalIcons.applyPair(turnSignalLeft, turnSignalRight, turnSignalsIconStyle)
+        TurnSignalIcons.applyPair(context, turnSignalLeft, turnSignalRight, turnSignalsIconStyle)
         turnSignalsBlock.addView(turnSignalLeft)
         turnSignalsBlock.addView(turnSignalRight)
 
@@ -1635,11 +1636,13 @@ class HudOverlayController(private val context: Context) {
         } else {
             state.turnSignalRight || state.turnSignalHazard
         }
+        val turnSignalsTransparentFillVisible = !previewTurnSignals && !turnSignalLeft && !turnSignalRight
         updateTurnSignals(
             allowed = turnSignalsAllowed,
             preview = previewTurnSignals,
             leftActive = turnSignalLeft,
-            rightActive = turnSignalRight
+            rightActive = turnSignalRight,
+            fillTransparentBackground = turnSignalsTransparentFillVisible
         )
         val hudSpeedLimitTextScale = PREVIEW_SPEED_LIMIT_TEXT_SCALE
         updateHudSpeed(
@@ -1695,7 +1698,8 @@ class HudOverlayController(private val context: Context) {
             hasCameraData || hudSpeedGpsStatusVisible || hudSpeedTransparentFillVisible
         }
         val speedometerVisible = if (showPreview) previewSpeedometer else state.speedKmh != null
-        val turnSignalsVisible = turnSignalsAllowed && (previewTurnSignals || turnSignalLeft || turnSignalRight)
+        val turnSignalsVisible = turnSignalsAllowed &&
+            (previewTurnSignals || turnSignalLeft || turnSignalRight || turnSignalsTransparentFillVisible)
         val clockVisible = if (showPreview) previewClock else true
         val roadCameraVisible = roadCameraAllowed && (previewRoadCamera || roadCameraHasData)
         val trafficLightVisible = trafficLightAllowed && (previewTrafficLight || trafficLights.isNotEmpty())
@@ -1844,30 +1848,38 @@ class HudOverlayController(private val context: Context) {
         allowed: Boolean,
         preview: Boolean,
         leftActive: Boolean,
-        rightActive: Boolean
+        rightActive: Boolean,
+        fillTransparentBackground: Boolean
     ) {
         val container = turnSignalsContainer ?: return
         turnSignalsPreviewMode = preview
         turnSignalLeftActive = leftActive
         turnSignalRightActive = rightActive
+        container.setBackgroundColor(Color.TRANSPARENT)
         if (!allowed) {
             stopTurnSignalBlinking()
             container.visibility = View.GONE
             return
         }
         val hasActive = leftActive || rightActive
-        if (!preview && !hasActive) {
+        if (!preview && !hasActive && !fillTransparentBackground) {
             stopTurnSignalBlinking()
             container.visibility = View.GONE
             return
         }
         if (preview) {
             stopTurnSignalBlinking()
-        } else {
+        } else if (hasActive) {
             startTurnSignalBlinking()
+        } else {
+            stopTurnSignalBlinking()
         }
         applyTurnSignalVisibility()
         container.visibility = View.VISIBLE
+        if (fillTransparentBackground) {
+            container.invalidate()
+            container.postInvalidateOnAnimation()
+        }
     }
 
     private fun applyTurnSignalVisibility() {
@@ -1879,7 +1891,7 @@ class HudOverlayController(private val context: Context) {
     }
 
     private fun applyTurnSignalsIconStyle() {
-        TurnSignalIcons.applyPair(turnSignalLeftView, turnSignalRightView, turnSignalsIconStyle)
+        TurnSignalIcons.applyPair(context, turnSignalLeftView, turnSignalRightView, turnSignalsIconStyle)
     }
 
     private fun startTurnSignalBlinking() {

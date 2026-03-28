@@ -112,7 +112,7 @@ internal fun MainActivity.openPositionDialog(
     var turnSignalsSpacingDp = OverlayPrefs.turnSignalsSpacingDp(this)
     var currentScale = 1f
     val density = displayDensity.takeIf { it > 0f } ?: resources.displayMetrics.density
-    TurnSignalIcons.applyPair(previewTurnSignalsLeft, previewTurnSignalsRight, turnSignalsIconStyle)
+    TurnSignalIcons.applyPair(this, previewTurnSignalsLeft, previewTurnSignalsRight, turnSignalsIconStyle)
     val scalePercent = when (target) {
         OverlayTarget.NAVIGATION -> (OverlayPrefs.navScale(this) * 100).toInt()
         OverlayTarget.ARROW -> (OverlayPrefs.arrowScale(this) * 100).toInt()

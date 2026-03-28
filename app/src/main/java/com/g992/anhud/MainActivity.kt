@@ -7,6 +7,7 @@ import android.content.IntentFilter
 import android.content.SharedPreferences
 import android.graphics.Point
 import android.graphics.PointF
+import android.net.Uri
 import android.os.Bundle
 import android.os.Build
 import android.provider.Settings
@@ -63,6 +64,20 @@ class MainActivity : ScaledActivity() {
         ActivityResultContracts.RequestPermission()
     ) {
         updatePermissionStatus()
+    }
+    private var turnSignalCustomIconPickerCallback: ((Uri?) -> Unit)? = null
+    private val turnSignalCustomIconPickerLauncher = registerForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            val flags = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION
+            runCatching {
+                contentResolver.takePersistableUriPermission(uri, flags)
+            }
+        }
+        val callback = turnSignalCustomIconPickerCallback
+        turnSignalCustomIconPickerCallback = null
+        callback?.invoke(uri)
     }
     internal lateinit var permissionStatus: TextView
     internal lateinit var requestPermissionButton: Button
@@ -142,6 +157,11 @@ class MainActivity : ScaledActivity() {
         if (isApplyingPreset) return@OnSharedPreferenceChangeListener
         syncPresetSelectionFromPrefs()
         updatePresetModifiedState()
+    }
+
+    internal fun pickTurnSignalCustomIcon(onResult: (Uri?) -> Unit) {
+        turnSignalCustomIconPickerCallback = onResult
+        turnSignalCustomIconPickerLauncher.launch(arrayOf("image/png", "image/svg+xml"))
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {

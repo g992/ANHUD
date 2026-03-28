@@ -16,37 +16,81 @@ internal data class TurnSignalStyle(
 )
 
 internal object TurnSignalIcons {
+    const val CUSTOM_STYLE_ID = 1000
+
     private val styles = listOf(
         TurnSignalStyle(1, R.drawable.turn_signal_style_1, TurnSignalBaseDirection.LEFT),
-        TurnSignalStyle(2, R.drawable.turn_signal_style_12, TurnSignalBaseDirection.LEFT),
-        TurnSignalStyle(3, R.drawable.turn_signal_style_2, TurnSignalBaseDirection.RIGHT),
-        TurnSignalStyle(4, R.drawable.turn_signal_style_3, TurnSignalBaseDirection.LEFT),
-        TurnSignalStyle(5, R.drawable.turn_signal_style_4, TurnSignalBaseDirection.LEFT),
         TurnSignalStyle(6, R.drawable.turn_signal_style_5, TurnSignalBaseDirection.LEFT),
         TurnSignalStyle(7, R.drawable.turn_signal_style_6, TurnSignalBaseDirection.RIGHT),
         TurnSignalStyle(8, R.drawable.turn_signal_style_7, TurnSignalBaseDirection.RIGHT),
-        TurnSignalStyle(9, R.drawable.turn_signal_style_8, TurnSignalBaseDirection.RIGHT),
-        TurnSignalStyle(10, R.drawable.turn_signal_style_9, TurnSignalBaseDirection.RIGHT),
-        TurnSignalStyle(11, R.drawable.turn_signal_style_10, TurnSignalBaseDirection.RIGHT),
-        TurnSignalStyle(12, R.drawable.turn_signal_style_11, TurnSignalBaseDirection.RIGHT)
+        TurnSignalStyle(9, R.drawable.turn_signal_style_8, TurnSignalBaseDirection.RIGHT)
     )
 
     fun all(): List<TurnSignalStyle> = styles
 
+    fun displayNumber(styleId: Int): Int {
+        val resolvedId = sanitize(styleId)
+        return styles.indexOfFirst { it.id == resolvedId }
+            .takeIf { it >= 0 }
+            ?.plus(1)
+            ?: 1
+    }
+
     fun sanitize(styleId: Int): Int {
-        return styles.firstOrNull { it.id == styleId }?.id ?: OverlayPrefs.TURN_SIGNALS_ICON_STYLE_DEFAULT
+        return when {
+            styleId == CUSTOM_STYLE_ID -> CUSTOM_STYLE_ID
+            else -> styles.firstOrNull { it.id == styleId }?.id ?: OverlayPrefs.TURN_SIGNALS_ICON_STYLE_DEFAULT
+        }
     }
 
     fun resolve(styleId: Int): TurnSignalStyle {
         val sanitizedId = sanitize(styleId)
+        if (isCustom(sanitizedId)) {
+            return styles.first { it.id == OverlayPrefs.TURN_SIGNALS_ICON_STYLE_DEFAULT }
+        }
         return styles.first { it.id == sanitizedId }
     }
 
     fun label(context: Context, styleId: Int): String {
-        return context.getString(R.string.turn_signal_icon_option_value, sanitize(styleId))
+        if (isCustom(styleId)) {
+            return context.getString(R.string.turn_signal_icon_option_value_custom)
+        }
+        return context.getString(R.string.turn_signal_icon_option_value, displayNumber(styleId))
     }
 
-    fun applyPair(left: ImageView?, right: ImageView?, styleId: Int) {
+    fun summary(context: Context, styleId: Int): String {
+        if (!isCustom(styleId)) {
+            return label(context, styleId)
+        }
+        val customIcon = OverlayPrefs.turnSignalsCustomIcon(context)
+        if (customIcon == null) {
+            return context.getString(R.string.turn_signal_icon_custom_missing)
+        }
+        val directionLabel = when (customIcon.baseDirection) {
+            TurnSignalBaseDirection.LEFT -> context.getString(R.string.turn_signal_icon_direction_left)
+            TurnSignalBaseDirection.RIGHT -> context.getString(R.string.turn_signal_icon_direction_right)
+        }
+        return context.getString(
+            R.string.turn_signal_icon_custom_summary,
+            customIcon.displayName,
+            directionLabel
+        )
+    }
+
+    fun isCustom(styleId: Int): Boolean = styleId == CUSTOM_STYLE_ID
+
+    fun applyPair(context: Context, left: ImageView?, right: ImageView?, styleId: Int) {
+        if (isCustom(styleId)) {
+            val applied = TurnSignalCustomIconLoader.applyPair(
+                context = context,
+                left = left,
+                right = right,
+                icon = OverlayPrefs.turnSignalsCustomIcon(context)
+            )
+            if (applied) {
+                return
+            }
+        }
         val style = resolve(styleId)
         val leftScale = if (style.baseDirection == TurnSignalBaseDirection.LEFT) 1f else -1f
         val rightScale = -leftScale

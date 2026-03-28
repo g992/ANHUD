@@ -45,6 +45,9 @@ object OverlayPrefs {
     private const val KEY_TURN_SIGNALS_SPACING_DP = "overlay_turn_signals_spacing_dp"
     private const val KEY_TURN_SIGNALS_ICON_STYLE = "overlay_turn_signals_icon_style"
     private const val KEY_TURN_SIGNALS_ICON_STYLE_MIGRATED = "overlay_turn_signals_icon_style_migrated_v2"
+    private const val KEY_TURN_SIGNALS_CUSTOM_ICON_URI = "overlay_turn_signals_custom_icon_uri"
+    private const val KEY_TURN_SIGNALS_CUSTOM_ICON_NAME = "overlay_turn_signals_custom_icon_name"
+    private const val KEY_TURN_SIGNALS_CUSTOM_ICON_BASE_DIRECTION = "overlay_turn_signals_custom_icon_base_direction"
     private const val KEY_CLOCK_SCALE = "overlay_clock_scale"
     private const val KEY_NAV_ALPHA = "overlay_nav_alpha"
     private const val KEY_ARROW_ALPHA = "overlay_arrow_alpha"
@@ -458,6 +461,50 @@ object OverlayPrefs {
         prefs(context).edit()
             .putInt(KEY_TURN_SIGNALS_ICON_STYLE, TurnSignalIcons.sanitize(styleId))
             .putBoolean(KEY_TURN_SIGNALS_ICON_STYLE_MIGRATED, true)
+            .apply()
+    }
+
+    internal fun turnSignalsCustomIcon(context: Context): TurnSignalCustomIcon? {
+        val preferences = prefs(context)
+        val uriString = preferences.getString(KEY_TURN_SIGNALS_CUSTOM_ICON_URI, null)
+            ?.takeIf { it.isNotBlank() }
+            ?: return null
+        val displayName = preferences.getString(KEY_TURN_SIGNALS_CUSTOM_ICON_NAME, null)
+            ?.takeIf { it.isNotBlank() }
+            ?: return null
+        val baseDirectionName = preferences.getString(
+            KEY_TURN_SIGNALS_CUSTOM_ICON_BASE_DIRECTION,
+            TurnSignalBaseDirection.LEFT.name
+        ).orEmpty()
+        val baseDirection = runCatching {
+            TurnSignalBaseDirection.valueOf(baseDirectionName)
+        }.getOrDefault(TurnSignalBaseDirection.LEFT)
+        val icon = TurnSignalCustomIcon(
+            uriString = uriString,
+            displayName = displayName,
+            baseDirection = baseDirection
+        )
+        return icon.takeIf { it.uri.scheme == "file" }
+    }
+
+    internal fun setTurnSignalsCustomIcon(
+        context: Context,
+        uriString: String,
+        displayName: String,
+        baseDirection: TurnSignalBaseDirection
+    ) {
+        prefs(context).edit()
+            .putString(KEY_TURN_SIGNALS_CUSTOM_ICON_URI, uriString)
+            .putString(KEY_TURN_SIGNALS_CUSTOM_ICON_NAME, displayName)
+            .putString(KEY_TURN_SIGNALS_CUSTOM_ICON_BASE_DIRECTION, baseDirection.name)
+            .apply()
+    }
+
+    internal fun clearTurnSignalsCustomIcon(context: Context) {
+        prefs(context).edit()
+            .remove(KEY_TURN_SIGNALS_CUSTOM_ICON_URI)
+            .remove(KEY_TURN_SIGNALS_CUSTOM_ICON_NAME)
+            .remove(KEY_TURN_SIGNALS_CUSTOM_ICON_BASE_DIRECTION)
             .apply()
     }
 
