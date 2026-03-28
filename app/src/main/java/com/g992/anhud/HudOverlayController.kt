@@ -2130,7 +2130,6 @@ class HudOverlayController(private val context: Context) {
                     icon.clearColorFilter()
                     icon.visibility = View.INVISIBLE
                     gpsBadge?.setImageResource(resolveHudSpeedGpsIcon(hasGps))
-                    gpsBadge?.setColorFilter(resolveHudSpeedGpsColor(hasGps))
                     gpsBadge?.visibility = View.VISIBLE
                 } else {
                     gpsBadge?.setImageDrawable(null)
@@ -2193,7 +2192,6 @@ class HudOverlayController(private val context: Context) {
                 icon.clearColorFilter()
                 icon.visibility = View.INVISIBLE
                 gpsBadge?.setImageResource(resolveHudSpeedGpsIcon(hasGps))
-                gpsBadge?.setColorFilter(resolveHudSpeedGpsColor(hasGps))
                 gpsBadge?.visibility = View.VISIBLE
             } else {
                 gpsBadge?.setImageDrawable(null)
@@ -2438,13 +2436,6 @@ class HudOverlayController(private val context: Context) {
         } else {
             R.drawable.location_off_24dp_e8eaed_fill0_wght400_grad0_opsz24
         }
-    }
-
-    private fun resolveHudSpeedGpsColor(hasGps: Boolean): Int {
-        return ContextCompat.getColor(
-            context,
-            if (hasGps) R.color.traffic_light_green_primary else R.color.traffic_light_red_primary
-        )
     }
 
     private fun formatHudSpeedDistance(distanceMeters: Int?): String {
