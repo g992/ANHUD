@@ -2130,6 +2130,7 @@ class HudOverlayController(private val context: Context) {
                     icon.clearColorFilter()
                     icon.visibility = View.INVISIBLE
                     gpsBadge?.setImageResource(resolveHudSpeedGpsIcon(hasGps))
+                    gpsBadge?.setColorFilter(resolveHudSpeedGpsColor(hasGps))
                     gpsBadge?.visibility = View.VISIBLE
                 } else {
                     gpsBadge?.setImageDrawable(null)
@@ -2192,6 +2193,7 @@ class HudOverlayController(private val context: Context) {
                 icon.clearColorFilter()
                 icon.visibility = View.INVISIBLE
                 gpsBadge?.setImageResource(resolveHudSpeedGpsIcon(hasGps))
+                gpsBadge?.setColorFilter(resolveHudSpeedGpsColor(hasGps))
                 gpsBadge?.visibility = View.VISIBLE
             } else {
                 gpsBadge?.setImageDrawable(null)
@@ -2438,6 +2440,13 @@ class HudOverlayController(private val context: Context) {
         }
     }
 
+    private fun resolveHudSpeedGpsColor(hasGps: Boolean): Int {
+        return ContextCompat.getColor(
+            context,
+            if (hasGps) R.color.traffic_light_green_primary else R.color.traffic_light_red_primary
+        )
+    }
+
     private fun formatHudSpeedDistance(distanceMeters: Int?): String {
         if (distanceMeters == null || distanceMeters < 0) {
             return ""
@@ -2500,17 +2509,14 @@ class HudOverlayController(private val context: Context) {
         val displayContext = context.createDisplayContext(display)
         val metrics = displayContext.resources.displayMetrics
         val (containerWidthPx, containerHeightPx) = resolveContainerSizePx(metrics)
+        val navWidthPx = updateNavLayoutWidth(metrics.density)
         val maxHeightPx = metrics.heightPixels.coerceAtLeast(0)
-        val resolvedHeightPx = resolveContainerHeightPx(containerWidthPx, containerHeightPx)
+        val resolvedHeightPx = resolveContainerHeightPx(containerWidthPx, containerHeightPx, navWidthPx, metrics.density)
             .coerceAtMost(maxHeightPx)
         updateContainerLayout(metrics, containerWidthPx, resolvedHeightPx)
         val containerWidth = containerWidthPx.toFloat()
         val containerHeight = resolvedHeightPx.toFloat()
         navContainer?.let {
-            val navWidthPx = resolveScaledLayoutWidthPx(navWidthDp, navScale, metrics.density)
-            it.layoutParams = (it.layoutParams as? FrameLayout.LayoutParams)?.apply {
-                width = navWidthPx
-            } ?: FrameLayout.LayoutParams(navWidthPx, FrameLayout.LayoutParams.WRAP_CONTENT)
             if (previewMode && previewTarget == OverlayBroadcasts.PREVIEW_TARGET_NAV) {
                 it.background = ContextCompat.getDrawable(it.context, R.drawable.bg_nav_block_outline)
             } else {
@@ -2657,12 +2663,28 @@ class HudOverlayController(private val context: Context) {
     }
 
     private fun resolveContainerHeightPx(containerWidthPx: Int, containerHeightPx: Int): Int {
+        return resolveContainerHeightPx(
+            containerWidthPx = containerWidthPx,
+            containerHeightPx = containerHeightPx,
+            navWidthPx = null,
+            density = context.resources.displayMetrics.density
+        )
+    }
+
+    private fun resolveContainerHeightPx(
+        containerWidthPx: Int,
+        containerHeightPx: Int,
+        navWidthPx: Int?,
+        density: Float
+    ): Int {
         val navView = navContainer ?: return containerHeightPx
         if (navView.visibility != View.VISIBLE) {
             return containerHeightPx
         }
         val params = navView.layoutParams
-        val navWidth = if (params != null && params.width > 0) {
+        val navWidth = if (navWidthPx != null && navWidthPx > 0) {
+            navWidthPx.toFloat()
+        } else if (params != null && params.width > 0) {
             params.width.toFloat()
         } else {
             containerWidthPx.toFloat()
@@ -2672,13 +2694,22 @@ class HudOverlayController(private val context: Context) {
         if (scaledHeight <= 0f) {
             return containerHeightPx
         }
-        return max(containerHeightPx, scaledHeight.roundToInt())
+        val requiredHeight = (navPositionDp.y * density) + scaledHeight
+        return max(containerHeightPx, requiredHeight.roundToInt())
     }
 
     private fun resolveScaledLayoutWidthPx(widthDp: Float, scale: Float, density: Float): Int {
         val safeScale = scale.coerceAtLeast(0.01f)
         val visibleWidthPx = (widthDp * density).coerceAtLeast(1f)
         return (visibleWidthPx / safeScale).roundToInt().coerceAtLeast(1)
+    }
+
+    private fun updateNavLayoutWidth(density: Float): Int {
+        val navWidthPx = resolveScaledLayoutWidthPx(navWidthDp, navScale, density)
+        navContainer?.layoutParams = (navContainer?.layoutParams as? FrameLayout.LayoutParams)?.apply {
+            width = navWidthPx
+        } ?: FrameLayout.LayoutParams(navWidthPx, FrameLayout.LayoutParams.WRAP_CONTENT)
+        return navWidthPx
     }
 
     private fun positionView(
