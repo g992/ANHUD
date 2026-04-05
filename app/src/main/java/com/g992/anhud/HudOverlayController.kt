@@ -758,7 +758,6 @@ class HudOverlayController(private val context: Context) {
             return
         }
         val metrics = displayContext.resources.displayMetrics
-        val padding = (8 * metrics.density).roundToInt()
         val iconSize = (48 * metrics.density).roundToInt()
         val iconMargin = (8 * metrics.density).roundToInt()
         val speedSize = (40 * metrics.density).roundToInt()
@@ -802,6 +801,8 @@ class HudOverlayController(private val context: Context) {
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.MATCH_PARENT
             )
+            includeFontPadding = false
+            setPadding(0, 0, 0, 0)
             gravity = Gravity.CENTER
             text = displayContext.getString(R.string.preview_direction_label)
             setTextColor(Color.WHITE)
@@ -826,6 +827,8 @@ class HudOverlayController(private val context: Context) {
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT
             )
+            includeFontPadding = false
+            setPadding(0, 0, 0, 0)
             setTextColor(Color.WHITE)
             setTextSize(TypedValue.COMPLEX_UNIT_SP, NAV_PRIMARY_TEXT_SIZE_SP)
             setTypeface(typeface, Typeface.BOLD)
@@ -837,6 +840,8 @@ class HudOverlayController(private val context: Context) {
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT
             )
+            includeFontPadding = false
+            setPadding(0, 0, 0, 0)
             setTextColor(Color.WHITE)
             setTextSize(TypedValue.COMPLEX_UNIT_SP, NAV_SECONDARY_TEXT_SIZE_SP)
             setSingleLine(false)
@@ -847,6 +852,8 @@ class HudOverlayController(private val context: Context) {
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT
             )
+            includeFontPadding = false
+            setPadding(0, 0, 0, 0)
             setTextColor(Color.WHITE)
             setTextSize(TypedValue.COMPLEX_UNIT_SP, NAV_TIME_TEXT_SIZE_SP)
             setSingleLine(false)
@@ -873,6 +880,8 @@ class HudOverlayController(private val context: Context) {
                 LinearLayout.LayoutParams.WRAP_CONTENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT
             )
+            includeFontPadding = false
+            setPadding(0, 0, 0, 0)
             gravity = Gravity.CENTER
             setTextColor(Color.WHITE)
             setTextSize(TypedValue.COMPLEX_UNIT_SP, ROAD_CAMERA_TEXT_SIZE_SP)
@@ -906,6 +915,8 @@ class HudOverlayController(private val context: Context) {
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.MATCH_PARENT
             )
+            includeFontPadding = false
+            setPadding(0, 0, 0, 0)
             gravity = Gravity.CENTER
             text = displayContext.getString(R.string.preview_direction_label)
             setTextColor(Color.WHITE)
@@ -918,6 +929,8 @@ class HudOverlayController(private val context: Context) {
 
         val speedText = OutlinedTextView(displayContext).apply {
             layoutParams = FrameLayout.LayoutParams(speedSize, speedSize)
+            includeFontPadding = false
+            setPadding(0, 0, 0, 0)
             background = ContextCompat.getDrawable(displayContext, R.drawable.bg_speed_limit)
             gravity = Gravity.CENTER
             setTextColor(Color.BLACK)
@@ -972,9 +985,7 @@ class HudOverlayController(private val context: Context) {
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.WRAP_CONTENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT
-            ).apply {
-                marginStart = (6 * metrics.density).roundToInt()
-            }
+            )
         }
 
         val hudSpeedCompactLayoutView = LinearLayout(displayContext).apply {
@@ -998,9 +1009,7 @@ class HudOverlayController(private val context: Context) {
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.WRAP_CONTENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT
-            ).apply {
-                marginStart = (6 * metrics.density).roundToInt()
-            }
+            )
         }
 
         val trafficLightBlock = LinearLayout(displayContext).apply {
@@ -1042,6 +1051,8 @@ class HudOverlayController(private val context: Context) {
 
         val hudSpeedFullLimitTextView = TextView(displayContext).apply {
             layoutParams = LinearLayout.LayoutParams(iconSize, iconSize)
+            includeFontPadding = false
+            setPadding(0, 0, 0, 0)
             background = ContextCompat.getDrawable(displayContext, R.drawable.bg_hudspeed_limit)
             gravity = Gravity.CENTER
             setTextColor(Color.BLACK)
@@ -1051,9 +1062,9 @@ class HudOverlayController(private val context: Context) {
         }
 
         val hudSpeedFullDistanceTextView = TextView(displayContext).apply {
-            layoutParams = LinearLayout.LayoutParams(iconSize, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
-                topMargin = (2 * metrics.density).roundToInt()
-            }
+            layoutParams = LinearLayout.LayoutParams(iconSize, LinearLayout.LayoutParams.WRAP_CONTENT)
+            includeFontPadding = false
+            setPadding(0, 0, 0, 0)
             gravity = Gravity.CENTER
             text = displayContext.getString(R.string.preview_hudspeed_distance)
             setTextColor(Color.WHITE)
@@ -1062,9 +1073,7 @@ class HudOverlayController(private val context: Context) {
         }
 
         val hudSpeedFullDirectionIconView = ImageView(displayContext).apply {
-            layoutParams = LinearLayout.LayoutParams(iconSize, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
-                topMargin = (4 * metrics.density).roundToInt()
-            }
+            layoutParams = LinearLayout.LayoutParams(iconSize, LinearLayout.LayoutParams.WRAP_CONTENT)
             adjustViewBounds = true
             scaleType = ImageView.ScaleType.FIT_CENTER
             visibility = View.GONE
@@ -1104,6 +1113,8 @@ class HudOverlayController(private val context: Context) {
 
         val hudSpeedCompactDistanceTextView = TextView(displayContext).apply {
             layoutParams = LinearLayout.LayoutParams(iconSize, halfIconSize)
+            includeFontPadding = false
+            setPadding(0, 0, 0, 0)
             gravity = Gravity.CENTER
             text = displayContext.getString(R.string.preview_hudspeed_distance)
             setTextColor(Color.WHITE)
@@ -2509,13 +2520,10 @@ class HudOverlayController(private val context: Context) {
         val displayContext = context.createDisplayContext(display)
         val metrics = displayContext.resources.displayMetrics
         val (containerWidthPx, containerHeightPx) = resolveContainerSizePx(metrics)
-        val navWidthPx = updateNavLayoutWidth(metrics.density)
-        val maxHeightPx = metrics.heightPixels.coerceAtLeast(0)
-        val resolvedHeightPx = resolveContainerHeightPx(containerWidthPx, containerHeightPx, navWidthPx, metrics.density)
-            .coerceAtMost(maxHeightPx)
-        updateContainerLayout(metrics, containerWidthPx, resolvedHeightPx)
+        updateNavLayoutWidth(metrics.density)
+        updateContainerLayout(metrics, containerWidthPx, containerHeightPx)
         val containerWidth = containerWidthPx.toFloat()
-        val containerHeight = resolvedHeightPx.toFloat()
+        val containerHeight = containerHeightPx.toFloat()
         navContainer?.let {
             if (previewMode && previewTarget == OverlayBroadcasts.PREVIEW_TARGET_NAV) {
                 it.background = ContextCompat.getDrawable(it.context, R.drawable.bg_nav_block_outline)
@@ -2567,7 +2575,7 @@ class HudOverlayController(private val context: Context) {
         clockView?.let {
             positionView(it, clockPositionDp, clockScale, clockAlpha, metrics.density, containerWidth, containerHeight)
         }
-        updateMapView(displayContext, containerWidthPx, resolvedHeightPx)
+        updateMapView(displayContext, containerWidthPx, containerHeightPx)
     }
 
     private fun applyTurnSignalsSpacing(density: Float) {
@@ -2660,42 +2668,6 @@ class HudOverlayController(private val context: Context) {
         val resolvedWidth = widthPx.coerceIn(minPx, maxWidthPx)
         val resolvedHeight = heightPx.coerceIn(minPx, maxHeightPx)
         return resolvedWidth to resolvedHeight
-    }
-
-    private fun resolveContainerHeightPx(containerWidthPx: Int, containerHeightPx: Int): Int {
-        return resolveContainerHeightPx(
-            containerWidthPx = containerWidthPx,
-            containerHeightPx = containerHeightPx,
-            navWidthPx = null,
-            density = context.resources.displayMetrics.density
-        )
-    }
-
-    private fun resolveContainerHeightPx(
-        containerWidthPx: Int,
-        containerHeightPx: Int,
-        navWidthPx: Int?,
-        density: Float
-    ): Int {
-        val navView = navContainer ?: return containerHeightPx
-        if (navView.visibility != View.VISIBLE) {
-            return containerHeightPx
-        }
-        val params = navView.layoutParams
-        val navWidth = if (navWidthPx != null && navWidthPx > 0) {
-            navWidthPx.toFloat()
-        } else if (params != null && params.width > 0) {
-            params.width.toFloat()
-        } else {
-            containerWidthPx.toFloat()
-        }
-        val (_, rawHeight) = resolveViewSize(navView, navWidth, params?.width != ViewGroup.LayoutParams.MATCH_PARENT)
-        val scaledHeight = rawHeight * navScale
-        if (scaledHeight <= 0f) {
-            return containerHeightPx
-        }
-        val requiredHeight = (navPositionDp.y * density) + scaledHeight
-        return max(containerHeightPx, requiredHeight.roundToInt())
     }
 
     private fun resolveScaledLayoutWidthPx(widthDp: Float, scale: Float, density: Float): Int {
