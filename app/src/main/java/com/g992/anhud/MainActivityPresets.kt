@@ -282,11 +282,16 @@ private fun MainActivity.notifyOverlaySettingsChangedFull() {
     val clockPos = OverlayPrefs.clockPositionDp(this)
     val containerPos = OverlayPrefs.containerPositionDp(this)
     val containerSize = OverlayPrefs.containerSizeDp(this)
+    val mapPos = OverlayPrefs.mapPositionDp(this)
+    val mapSize = OverlayPrefs.mapSizeDp(this)
 
     notifyOverlaySettingsChanged(
         containerPosition = containerPos,
         containerWidthDp = containerSize.x,
         containerHeightDp = containerSize.y,
+        mapPosition = mapPos,
+        mapWidthDp = mapSize.x,
+        mapHeightDp = mapSize.y,
         navPosition = navPos,
         navWidthDp = OverlayPrefs.navWidthDp(this),
         arrowPosition = arrowPos,
@@ -319,6 +324,7 @@ private fun MainActivity.notifyOverlaySettingsChangedFull() {
         turnSignalsAlpha = OverlayPrefs.turnSignalsAlpha(this),
         clockAlpha = OverlayPrefs.clockAlpha(this),
         containerAlpha = OverlayPrefs.containerAlpha(this),
+        mapAlpha = OverlayPrefs.mapAlpha(this),
         navEnabled = OverlayPrefs.navEnabled(this),
         arrowEnabled = OverlayPrefs.arrowEnabled(this),
         speedEnabled = OverlayPrefs.speedEnabled(this),

@@ -38,6 +38,11 @@ object GuideContent {
             R.string.guide_main_container_body
         ),
         GuideItem(
+            R.id.positionMapCard,
+            R.string.guide_main_map_title,
+            R.string.guide_main_map_body
+        ),
+        GuideItem(
             R.id.positionNavCard,
             R.string.guide_main_nav_title,
             R.string.guide_main_nav_body

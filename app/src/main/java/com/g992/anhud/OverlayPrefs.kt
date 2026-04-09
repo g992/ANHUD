@@ -14,6 +14,10 @@ object OverlayPrefs {
     private const val KEY_CONTAINER_Y_DP = "overlay_container_y_dp"
     private const val KEY_CONTAINER_WIDTH_DP = "overlay_container_width_dp"
     private const val KEY_CONTAINER_HEIGHT_DP = "overlay_container_height_dp"
+    private const val KEY_MAP_X_DP = "overlay_map_x_dp"
+    private const val KEY_MAP_Y_DP = "overlay_map_y_dp"
+    private const val KEY_MAP_WIDTH_DP = "overlay_map_width_dp"
+    private const val KEY_MAP_HEIGHT_DP = "overlay_map_height_dp"
     private const val KEY_NAV_X_DP = "overlay_nav_x_dp"
     private const val KEY_NAV_Y_DP = "overlay_nav_y_dp"
     private const val KEY_ARROW_X_DP = "overlay_arrow_x_dp"
@@ -59,6 +63,7 @@ object OverlayPrefs {
     private const val KEY_TURN_SIGNALS_ALPHA = "overlay_turn_signals_alpha"
     private const val KEY_CLOCK_ALPHA = "overlay_clock_alpha"
     private const val KEY_CONTAINER_ALPHA = "overlay_container_alpha"
+    private const val KEY_MAP_ALPHA = "overlay_map_alpha"
     private const val KEY_NAV_ENABLED = "overlay_nav_enabled"
     private const val KEY_ARROW_ENABLED = "overlay_arrow_enabled"
     private const val KEY_ARROW_ONLY_WHEN_NO_ICON = "overlay_arrow_only_when_no_icon"
@@ -100,6 +105,7 @@ object OverlayPrefs {
     const val TURN_SIGNALS_ICON_STYLE_DEFAULT = 1
     const val NAV_WIDTH_MIN_DP = ICON_SIZE_DP * 2
     const val CONTAINER_MIN_SIZE_PX = 100f
+    const val MAP_MIN_SIZE_DP = 48f
     const val SPEED_LIMIT_ALERT_THRESHOLD_MAX = 20
     const val TIMEOUT_MAX = 360
     const val SPEED_CORRECTION_MIN = -10
@@ -158,6 +164,21 @@ object OverlayPrefs {
         prefs(context).edit()
             .putFloat(KEY_CONTAINER_X_DP, xDp)
             .putFloat(KEY_CONTAINER_Y_DP, yDp)
+            .apply()
+    }
+
+    fun mapPositionDp(context: Context): PointF {
+        val prefs = prefs(context)
+        val defaultPos = defaultMapPositionDp(context)
+        val x = prefs.getFloat(KEY_MAP_X_DP, defaultPos.x)
+        val y = prefs.getFloat(KEY_MAP_Y_DP, defaultPos.y)
+        return PointF(x, y)
+    }
+
+    fun setMapPositionDp(context: Context, xDp: Float, yDp: Float) {
+        prefs(context).edit()
+            .putFloat(KEY_MAP_X_DP, xDp)
+            .putFloat(KEY_MAP_Y_DP, yDp)
             .apply()
     }
 
@@ -626,6 +647,16 @@ object OverlayPrefs {
             .apply()
     }
 
+    fun mapAlpha(context: Context): Float {
+        return prefs(context).getFloat(KEY_MAP_ALPHA, 1f)
+    }
+
+    fun setMapAlpha(context: Context, alpha: Float) {
+        prefs(context).edit()
+            .putFloat(KEY_MAP_ALPHA, alpha)
+            .apply()
+    }
+
     fun containerSizeDp(context: Context): PointF {
         val prefs = prefs(context)
         val defaultSize = defaultContainerSizeDp(context)
@@ -638,6 +669,21 @@ object OverlayPrefs {
         prefs(context).edit()
             .putFloat(KEY_CONTAINER_WIDTH_DP, widthDp)
             .putFloat(KEY_CONTAINER_HEIGHT_DP, heightDp)
+            .apply()
+    }
+
+    fun mapSizeDp(context: Context): PointF {
+        val prefs = prefs(context)
+        val defaultSize = defaultMapSizeDp(context)
+        val width = prefs.getFloat(KEY_MAP_WIDTH_DP, defaultSize.x)
+        val height = prefs.getFloat(KEY_MAP_HEIGHT_DP, defaultSize.y)
+        return PointF(width, height)
+    }
+
+    fun setMapSizeDp(context: Context, widthDp: Float, heightDp: Float) {
+        prefs(context).edit()
+            .putFloat(KEY_MAP_WIDTH_DP, widthDp)
+            .putFloat(KEY_MAP_HEIGHT_DP, heightDp)
             .apply()
     }
 
@@ -1035,6 +1081,21 @@ object OverlayPrefs {
         val minDp = CONTAINER_MIN_SIZE_PX / density
         val defaultDp = CONTAINER_DEFAULT_SIZE_PX / density
         return maxOf(minDp, defaultDp)
+    }
+
+    private fun defaultMapSizeDp(context: Context): PointF {
+        val containerSize = containerSizeDp(context)
+        val width = (containerSize.x * 0.6f).coerceAtLeast(MAP_MIN_SIZE_DP)
+        val height = (containerSize.y * 0.45f).coerceAtLeast(MAP_MIN_SIZE_DP)
+        return PointF(width, height)
+    }
+
+    private fun defaultMapPositionDp(context: Context): PointF {
+        val containerSize = containerSizeDp(context)
+        val mapSize = defaultMapSizeDp(context)
+        val x = ((containerSize.x - mapSize.x) / 2f).coerceAtLeast(0f)
+        val y = ((containerSize.y - mapSize.y) / 2f).coerceAtLeast(0f)
+        return PointF(x, y)
     }
 
     private const val SPEED_BLOCK_SIZE_DP = 40f

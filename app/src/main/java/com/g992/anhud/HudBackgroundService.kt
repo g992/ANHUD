@@ -47,6 +47,10 @@ class HudBackgroundService : Service() {
                 val containerY = intent.getFloatExtra(OverlayBroadcasts.EXTRA_CONTAINER_Y_DP, Float.NaN)
                 val containerWidth = intent.getFloatExtra(OverlayBroadcasts.EXTRA_CONTAINER_WIDTH_DP, Float.NaN)
                 val containerHeight = intent.getFloatExtra(OverlayBroadcasts.EXTRA_CONTAINER_HEIGHT_DP, Float.NaN)
+                val mapX = intent.getFloatExtra(OverlayBroadcasts.EXTRA_MAP_X_DP, Float.NaN)
+                val mapY = intent.getFloatExtra(OverlayBroadcasts.EXTRA_MAP_Y_DP, Float.NaN)
+                val mapWidth = intent.getFloatExtra(OverlayBroadcasts.EXTRA_MAP_WIDTH_DP, Float.NaN)
+                val mapHeight = intent.getFloatExtra(OverlayBroadcasts.EXTRA_MAP_HEIGHT_DP, Float.NaN)
                 val navScale = intent.getFloatExtra(OverlayBroadcasts.EXTRA_NAV_SCALE, Float.NaN)
                 val navTextScale = intent.getFloatExtra(OverlayBroadcasts.EXTRA_NAV_TEXT_SCALE, Float.NaN)
                 val speedTextScale = intent.getFloatExtra(OverlayBroadcasts.EXTRA_SPEED_TEXT_SCALE, Float.NaN)
@@ -77,6 +81,7 @@ class HudBackgroundService : Service() {
                 val turnSignalsAlpha = intent.getFloatExtra(OverlayBroadcasts.EXTRA_TURN_SIGNALS_ALPHA, Float.NaN)
                 val clockAlpha = intent.getFloatExtra(OverlayBroadcasts.EXTRA_CLOCK_ALPHA, Float.NaN)
                 val containerAlpha = intent.getFloatExtra(OverlayBroadcasts.EXTRA_CONTAINER_ALPHA, Float.NaN)
+                val mapAlpha = intent.getFloatExtra(OverlayBroadcasts.EXTRA_MAP_ALPHA, Float.NaN)
                 val navEnabled = if (intent.hasExtra(OverlayBroadcasts.EXTRA_NAV_ENABLED)) {
                     intent.getBooleanExtra(OverlayBroadcasts.EXTRA_NAV_ENABLED, true)
                 } else {
@@ -232,8 +237,15 @@ class HudBackgroundService : Service() {
                 } else {
                     null
                 }
+                val mapPosition = if (!mapX.isNaN() && !mapY.isNaN()) {
+                    android.graphics.PointF(mapX, mapY)
+                } else {
+                    null
+                }
                 val containerWidthValue = containerWidth.takeIf { !it.isNaN() }
                 val containerHeightValue = containerHeight.takeIf { !it.isNaN() }
+                val mapWidthValue = mapWidth.takeIf { !it.isNaN() }
+                val mapHeightValue = mapHeight.takeIf { !it.isNaN() }
                 val navWidthValue = navWidth.takeIf { !it.isNaN() }
                 val navScaleValue = navScale.takeIf { !it.isNaN() }
                 val navTextScaleValue = navTextScale.takeIf { !it.isNaN() }
@@ -257,10 +269,14 @@ class HudBackgroundService : Service() {
                 val turnSignalsAlphaValue = turnSignalsAlpha.takeIf { !it.isNaN() }
                 val clockAlphaValue = clockAlpha.takeIf { !it.isNaN() }
                 val containerAlphaValue = containerAlpha.takeIf { !it.isNaN() }
+                val mapAlphaValue = mapAlpha.takeIf { !it.isNaN() }
                 overlayController.updateLayout(
                     containerPosition,
                     containerWidthValue,
                     containerHeightValue,
+                    mapPosition,
+                    mapWidthValue,
+                    mapHeightValue,
                     navPosition,
                     navWidthValue,
                     arrowPosition,
@@ -294,6 +310,7 @@ class HudBackgroundService : Service() {
                     turnSignalsAlphaValue,
                     clockAlphaValue,
                     containerAlphaValue,
+                    mapAlphaValue,
                     navEnabled,
                     arrowEnabled,
                     arrowOnlyWhenNoIcon,

@@ -9,8 +9,12 @@ import android.graphics.PointF
 import android.graphics.Typeface
 import android.graphics.drawable.ColorDrawable
 import android.hardware.display.DisplayManager
+import android.net.Uri
+import android.os.Build
+import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.util.Log
 import android.provider.Settings
 import android.text.SpannableStringBuilder
@@ -19,6 +23,9 @@ import android.text.style.RelativeSizeSpan
 import android.util.TypedValue
 import android.view.Gravity
 import android.view.LayoutInflater
+import android.view.SurfaceControlViewHost
+import android.view.SurfaceHolder
+import android.view.SurfaceView
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
@@ -36,10 +43,15 @@ import kotlin.math.roundToInt
 class HudOverlayController(private val context: Context) {
     companion object {
         private const val CONTAINER_OUTLINE_PREVIEW_MIN_ALPHA = 0.35f
+        private val MAP_RENDERER_URI: Uri = Uri.parse("content://com.g992.mapformer.render")
+        private const val MAP_RENDERER_PACKAGE = "com.g992.mapformer"
         private const val CLOCK_TICK_MS = 5_000L
         private const val DISPLAY_CHANGE_REFRESH_DELAY_MS = 500L
         private const val DISPLAY_RETRY_DELAY_MS = 2_000L
         private const val DISPLAY_RETRY_MAX_ATTEMPTS = 100
+        private const val MAP_RENDERER_RETRY_DELAY_MS = 2_000L
+        private const val MAP_RENDERER_LAYOUT_SETTLE_DELAY_MS = 150L
+        private const val MAP_RENDERER_HEARTBEAT_INTERVAL_MS = 3_000L
         private const val SPEED_LIMIT_TEXT_SIZE_SP = 16.8f
         private const val SPEED_LIMIT_ALERT_TEXT_SIZE_SP = 15.5f
         private const val NAV_PRIMARY_TEXT_SIZE_SP = 18f
@@ -124,6 +136,20 @@ class HudOverlayController(private val context: Context) {
     private var turnSignalLeftView: ImageView? = null
     private var turnSignalRightView: ImageView? = null
     private var clockView: TextView? = null
+    private var mapContainerView: FrameLayout? = null
+    private var mapSurfaceView: SurfaceView? = null
+    private var mapPlaceholderView: TextView? = null
+    private var mapSurfacePackage: SurfaceControlViewHost.SurfacePackage? = null
+    private var mapTargetWidthPx = 0
+    private var mapTargetHeightPx = 0
+    private var mapAttachedWidthPx = 0
+    private var mapAttachedHeightPx = 0
+    private var mapLastHeartbeatAtMs = 0L
+    private var mapRendererProtocolChecked = false
+    private var mapRendererSurfaceSupported = false
+    private var lastMapRendererError: String? = null
+    private var nextMapRendererRetryAtMs = 0L
+    private var mapSyncRunnable: Runnable? = null
     private var currentDisplayId: Int? = null
     private var lastState: NavigationHudState = NavigationHudState()
     private var lastRenderSignature: RenderSignature? = null
@@ -131,6 +157,9 @@ class HudOverlayController(private val context: Context) {
     private var containerPositionDp: PointF = OverlayPrefs.containerPositionDp(context)
     private var containerWidthDp: Float = OverlayPrefs.containerSizeDp(context).x
     private var containerHeightDp: Float = OverlayPrefs.containerSizeDp(context).y
+    private var mapPositionDp: PointF = OverlayPrefs.mapPositionDp(context)
+    private var mapWidthDp: Float = OverlayPrefs.mapSizeDp(context).x
+    private var mapHeightDp: Float = OverlayPrefs.mapSizeDp(context).y
     private var navPositionDp: PointF = OverlayPrefs.navPositionDp(context)
     private var navWidthDp: Float = OverlayPrefs.navWidthDp(context)
     private var arrowPositionDp: PointF = OverlayPrefs.arrowPositionDp(context)
@@ -164,6 +193,7 @@ class HudOverlayController(private val context: Context) {
     private var turnSignalsAlpha: Float = OverlayPrefs.turnSignalsAlpha(context)
     private var clockAlpha: Float = OverlayPrefs.clockAlpha(context)
     private var containerAlpha: Float = OverlayPrefs.containerAlpha(context)
+    private var mapAlpha: Float = OverlayPrefs.mapAlpha(context)
     private var navEnabled: Boolean = OverlayPrefs.navEnabled(context)
     private var arrowEnabled: Boolean = OverlayPrefs.arrowEnabled(context)
     private var arrowOnlyWhenNoIcon: Boolean = OverlayPrefs.arrowOnlyWhenNoIcon(context)
@@ -200,6 +230,30 @@ class HudOverlayController(private val context: Context) {
         override fun run() {
             updateClockText()
             handler.postDelayed(this, CLOCK_TICK_MS)
+        }
+    }
+    private val mapSurfaceCallback = object : SurfaceHolder.Callback {
+        override fun surfaceCreated(holder: SurfaceHolder) {
+            mapSurfaceView?.let { scheduleMapRendererSync(it, delayMs = 0L) }
+        }
+
+        override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
+            if (width <= 0 || height <= 0) return
+            mapSurfaceView?.let { scheduleMapRendererSync(it) }
+        }
+
+        override fun surfaceDestroyed(holder: SurfaceHolder) {
+            releaseMapRenderer()
+        }
+    }
+    private val mapHeartbeatRunnable = object : Runnable {
+        override fun run() {
+            val surfaceView = mapSurfaceView
+            if (surfaceView == null || !mapEnabled || previewMode) {
+                return
+            }
+            scheduleMapRendererSync(surfaceView, delayMs = 0L)
+            handler.postDelayed(this, MAP_RENDERER_HEARTBEAT_INTERVAL_MS)
         }
     }
 
@@ -452,6 +506,9 @@ class HudOverlayController(private val context: Context) {
         containerPosition: PointF?,
         containerWidthDp: Float?,
         containerHeightDp: Float?,
+        mapPosition: PointF?,
+        mapWidthDp: Float?,
+        mapHeightDp: Float?,
         navPosition: PointF?,
         navWidthDp: Float?,
         arrowPosition: PointF?,
@@ -485,6 +542,7 @@ class HudOverlayController(private val context: Context) {
         turnSignalsAlpha: Float?,
         clockAlpha: Float?,
         containerAlpha: Float?,
+        mapAlpha: Float?,
         navEnabled: Boolean?,
         arrowEnabled: Boolean?,
         arrowOnlyWhenNoIcon: Boolean?,
@@ -521,6 +579,15 @@ class HudOverlayController(private val context: Context) {
             }
             if (containerHeightDp != null) {
                 this.containerHeightDp = containerHeightDp.coerceAtLeast(0f)
+            }
+            if (mapPosition != null) {
+                mapPositionDp = mapPosition
+            }
+            if (mapWidthDp != null) {
+                this.mapWidthDp = mapWidthDp.coerceAtLeast(OverlayPrefs.MAP_MIN_SIZE_DP)
+            }
+            if (mapHeightDp != null) {
+                this.mapHeightDp = mapHeightDp.coerceAtLeast(OverlayPrefs.MAP_MIN_SIZE_DP)
             }
             if (navPosition != null) {
                 navPositionDp = navPosition
@@ -626,6 +693,9 @@ class HudOverlayController(private val context: Context) {
             }
             if (containerAlpha != null) {
                 this.containerAlpha = containerAlpha.coerceIn(0f, 1f)
+            }
+            if (mapAlpha != null) {
+                this.mapAlpha = mapAlpha.coerceIn(0f, 1f)
             }
             if (navEnabled != null) {
                 this.navEnabled = navEnabled
@@ -1203,6 +1273,40 @@ class HudOverlayController(private val context: Context) {
             setTypeface(typeface, Typeface.BOLD)
         }
 
+        val mapBlock = FrameLayout(displayContext).apply {
+            layoutParams = FrameLayout.LayoutParams(1, 1)
+            clipChildren = true
+            clipToPadding = true
+            visibility = View.GONE
+        }
+
+        val mapSurface = SurfaceView(displayContext).apply {
+            layoutParams = FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT
+            )
+            setBackgroundColor(Color.TRANSPARENT)
+            holder.addCallback(mapSurfaceCallback)
+        }
+
+        val mapPlaceholder = TextView(displayContext).apply {
+            layoutParams = FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT
+            )
+            gravity = Gravity.CENTER
+            text = displayContext.getString(R.string.position_map_block_label)
+            setTextColor(Color.WHITE)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
+            setTypeface(typeface, Typeface.BOLD)
+            background = ColorDrawable(Color.argb(96, 33, 150, 243))
+            visibility = View.GONE
+        }
+
+        mapBlock.addView(mapSurface)
+        mapBlock.addView(mapPlaceholder)
+
+        root.addView(mapBlock)
         root.addView(navBlock)
         root.addView(arrowBox)
         root.addView(speedText)
@@ -1268,6 +1372,9 @@ class HudOverlayController(private val context: Context) {
             turnSignalLeftView = turnSignalLeft
             turnSignalRightView = turnSignalRight
             clockView = clockText
+            mapContainerView = mapBlock
+            mapSurfaceView = mapSurface
+            mapPlaceholderView = mapPlaceholder
             currentDisplayId = display.displayId
             applyTurnSignalsSpacing(metrics.density)
             applyNavTextScale()
@@ -1315,6 +1422,9 @@ class HudOverlayController(private val context: Context) {
             turnSignalLeftView = null
             turnSignalRightView = null
             clockView = null
+            mapContainerView = null
+            mapSurfaceView = null
+            mapPlaceholderView = null
             currentDisplayId = null
             stopTurnSignalBlinking()
             stopClockTicker()
@@ -1376,6 +1486,9 @@ class HudOverlayController(private val context: Context) {
         turnSignalLeftView = null
         turnSignalRightView = null
         clockView = null
+        mapContainerView = null
+        mapSurfaceView = null
+        mapPlaceholderView = null
         currentDisplayId = null
         stopClockTicker()
     }
@@ -1465,6 +1578,7 @@ class HudOverlayController(private val context: Context) {
         val container = overlayView
         val clock = clockView
         val speedometer = speedometerView
+        val mapContainer = mapContainerView
         val showPreview = previewMode
         val target = previewTarget
         val previewNav = showPreview && (
@@ -1512,7 +1626,13 @@ class HudOverlayController(private val context: Context) {
                 target == OverlayBroadcasts.PREVIEW_TARGET_CLOCK ||
                 previewShowOthers
             )
+        val previewMap = showPreview && (
+            target == null ||
+                target == OverlayBroadcasts.PREVIEW_TARGET_MAP ||
+                previewShowOthers
+            )
         val navAllowed = navEnabled || (showPreview && target == OverlayBroadcasts.PREVIEW_TARGET_NAV)
+        val mapAllowed = mapEnabled || (showPreview && target == OverlayBroadcasts.PREVIEW_TARGET_MAP)
         val arrowAllowed = arrowEnabled || (showPreview && target == OverlayBroadcasts.PREVIEW_TARGET_ARROW)
         val speedAllowed = speedEnabled || (showPreview && target == OverlayBroadcasts.PREVIEW_TARGET_SPEED)
         val speedometerAllowed = speedometerEnabled || (showPreview && target == OverlayBroadcasts.PREVIEW_TARGET_SPEEDOMETER)
@@ -1712,9 +1832,11 @@ class HudOverlayController(private val context: Context) {
         val turnSignalsVisible = turnSignalsAllowed &&
             (previewTurnSignals || turnSignalLeft || turnSignalRight || turnSignalsTransparentFillVisible)
         val clockVisible = if (showPreview) previewClock else true
+        val mapVisible = mapAllowed && (previewMap || mapEnabled)
         val roadCameraVisible = roadCameraAllowed && (previewRoadCamera || roadCameraHasData)
         val trafficLightVisible = trafficLightAllowed && (previewTrafficLight || trafficLights.isNotEmpty())
         navContainer?.visibility = if (navAllowed && navVisible) View.VISIBLE else View.GONE
+        mapContainer?.visibility = if (mapVisible) View.VISIBLE else View.GONE
         arrowContainer?.visibility = if (arrowAllowed && arrowVisible) View.VISIBLE else View.GONE
         speedLimitView?.visibility = if (speedAllowed && speedVisible) View.VISIBLE else View.GONE
         hudSpeedContainer?.visibility = if (hudSpeedAllowed && hudSpeedVisible) View.VISIBLE else View.GONE
@@ -1723,6 +1845,7 @@ class HudOverlayController(private val context: Context) {
 
         // Hide main container if nothing is visible
         val anyVisible = (navAllowed && navVisible) ||
+            mapVisible ||
             (arrowAllowed && arrowVisible) ||
             (speedAllowed && speedVisible) ||
             (hudSpeedAllowed && hudSpeedVisible) ||
@@ -2647,15 +2770,311 @@ class HudOverlayController(private val context: Context) {
     }
 
     private fun updateMapView(displayContext: Context, containerWidthPx: Int, containerHeightPx: Int) {
-        if (!mapEnabled) {
+        val previewMap = previewMode && previewTarget == OverlayBroadcasts.PREVIEW_TARGET_MAP
+        if (!mapEnabled && !previewMap) {
             removeMapView()
             return
         }
-        // MapKit integration is temporarily disabled to reduce app size.
+        val mapContainer = mapContainerView ?: return
+        val placeholder = mapPlaceholderView ?: return
+        val widthPx = (mapWidthDp * displayContext.resources.displayMetrics.density)
+            .roundToInt()
+            .coerceIn(1, containerWidthPx.coerceAtLeast(1))
+        val heightPx = (mapHeightDp * displayContext.resources.displayMetrics.density)
+            .roundToInt()
+            .coerceIn(1, containerHeightPx.coerceAtLeast(1))
+        mapTargetWidthPx = widthPx
+        mapTargetHeightPx = heightPx
+        mapContainer.layoutParams = (mapContainer.layoutParams as? FrameLayout.LayoutParams)?.apply {
+            width = widthPx
+            height = heightPx
+        } ?: FrameLayout.LayoutParams(widthPx, heightPx)
+        positionView(
+            mapContainer,
+            mapPositionDp,
+            1f,
+            mapAlpha,
+            displayContext.resources.displayMetrics.density,
+            containerWidthPx.toFloat(),
+            containerHeightPx.toFloat()
+        )
+        mapContainer.visibility = View.VISIBLE
+        if (previewMap) {
+            stopMapRendererHeartbeat()
+            placeholder.background = ContextCompat.getDrawable(displayContext, R.drawable.bg_nav_block_outline)
+            placeholder.text = displayContext.getString(R.string.position_map_block_label)
+            placeholder.visibility = View.VISIBLE
+        } else if (mapSurfacePackage == null || lastMapRendererError != null) {
+            ensureMapRendererHeartbeat()
+            placeholder.background = ColorDrawable(Color.argb(96, 33, 150, 243))
+            placeholder.text = displayContext.getString(R.string.position_map_block_label)
+            placeholder.visibility = View.VISIBLE
+        } else {
+            ensureMapRendererHeartbeat()
+            placeholder.visibility = View.GONE
+        }
+        mapSurfaceView?.let { scheduleMapRendererSync(it, widthPx, heightPx) }
     }
 
     private fun removeMapView() {
-        // MapKit integration is disabled.
+        stopMapRendererHeartbeat()
+        mapTargetWidthPx = 0
+        mapTargetHeightPx = 0
+        releaseMapRenderer()
+        mapContainerView?.visibility = View.GONE
+        mapPlaceholderView?.visibility = View.GONE
+    }
+
+    private fun scheduleMapRendererSync(
+        surfaceView: SurfaceView,
+        targetWidthPx: Int = mapTargetWidthPx,
+        targetHeightPx: Int = mapTargetHeightPx,
+        delayMs: Long = MAP_RENDERER_LAYOUT_SETTLE_DELAY_MS
+    ) {
+        if (targetWidthPx > 0) mapTargetWidthPx = targetWidthPx
+        if (targetHeightPx > 0) mapTargetHeightPx = targetHeightPx
+        mapSyncRunnable?.let(handler::removeCallbacks)
+        val runnable = Runnable {
+            mapSyncRunnable = null
+            if (mapSurfaceView !== surfaceView) return@Runnable
+            syncMapRenderer(surfaceView)
+        }
+        mapSyncRunnable = runnable
+        if (delayMs > 0L) {
+            handler.postDelayed(runnable, delayMs)
+        } else {
+            handler.post(runnable)
+        }
+    }
+
+    private fun syncMapRenderer(surfaceView: SurfaceView) {
+        val previewMap = previewMode && previewTarget == OverlayBroadcasts.PREVIEW_TARGET_MAP
+        if (!mapEnabled || previewMap) {
+            return
+        }
+        if (!shouldUseEmbeddedMapRenderer()) {
+            return
+        }
+        val targetWidth = mapTargetWidthPx
+        val targetHeight = mapTargetHeightPx
+        if (targetWidth <= 0 || targetHeight <= 0) {
+            return
+        }
+        if (surfaceView.width != targetWidth || surfaceView.height != targetHeight) {
+            scheduleMapRendererSync(surfaceView)
+            return
+        }
+        if (mapSurfacePackage == null) {
+            if (SystemClock.elapsedRealtime() >= nextMapRendererRetryAtMs) {
+                attachMapRenderer(surfaceView)
+            }
+            return
+        }
+        if (mapAttachedWidthPx != targetWidth || mapAttachedHeightPx != targetHeight) {
+            resizeMapRenderer(targetWidth, targetHeight, force = true)
+            return
+        }
+        val now = SystemClock.elapsedRealtime()
+        if (now - mapLastHeartbeatAtMs >= MAP_RENDERER_HEARTBEAT_INTERVAL_MS) {
+            resizeMapRenderer(targetWidth, targetHeight, force = true)
+        }
+    }
+
+    private fun attachMapRenderer(surfaceView: SurfaceView) {
+        val previewMap = previewMode && previewTarget == OverlayBroadcasts.PREVIEW_TARGET_MAP
+        if (!mapEnabled || previewMap) {
+            return
+        }
+        if (!shouldUseEmbeddedMapRenderer()) {
+            return
+        }
+        val targetWidth = mapTargetWidthPx.coerceAtLeast(1)
+        val targetHeight = mapTargetHeightPx.coerceAtLeast(1)
+        if (surfaceView.width != targetWidth || surfaceView.height != targetHeight) {
+            scheduleMapRendererSync(surfaceView)
+            return
+        }
+        val displayId = surfaceView.display?.displayId ?: currentDisplayId ?: return
+        @Suppress("DEPRECATION")
+        val hostToken = surfaceView.hostToken
+        if (hostToken == null) {
+            setMapRendererError("hostToken is null")
+            return
+        }
+        ensureMapRendererProtocol()
+        runCatching {
+            val extras = Bundle().apply {
+                putBinder("hostToken", hostToken)
+                putInt("displayId", displayId)
+                putInt("width", targetWidth)
+                putInt("height", targetHeight)
+            }
+            UiLogStore.append(
+                LogCategory.SYSTEM,
+                "Карта: create_surface hostToken=${hostToken.javaClass.simpleName} displayId=$displayId size=${targetWidth}x${targetHeight}"
+            )
+            context.contentResolver.call(MAP_RENDERER_URI, "create_surface", null, extras)
+        }.onSuccess { result ->
+            if (result == null) {
+                setMapRendererError("Renderer did not return a result")
+                return
+            }
+            if (!result.getBoolean("ok")) {
+                setMapRendererError(result.getString("error") ?: "Renderer create_surface failed")
+                return
+            }
+            val surfacePackage = getSurfacePackage(result)
+            if (surfacePackage == null) {
+                setMapRendererError("Renderer returned empty SurfacePackage")
+                return
+            }
+            clearMapRendererError()
+            UiLogStore.append(LogCategory.SYSTEM, "Карта: create_surface ok, got SurfacePackage")
+            detachMapSurfacePackage(surfaceView)
+            mapSurfacePackage?.release()
+            mapSurfacePackage = surfacePackage
+            mapAttachedWidthPx = targetWidth
+            mapAttachedHeightPx = targetHeight
+            mapLastHeartbeatAtMs = SystemClock.elapsedRealtime()
+            surfaceView.setChildSurfacePackage(surfacePackage)
+            UiLogStore.append(LogCategory.SYSTEM, "Карта: setChildSurfacePackage applied")
+        }.onFailure { error ->
+            setMapRendererError(error.message ?: error.javaClass.simpleName)
+        }
+    }
+
+    private fun resizeMapRenderer(width: Int, height: Int, force: Boolean = false) {
+        if (!shouldUseEmbeddedMapRenderer()) return
+        if (mapSurfacePackage == null) return
+        if (!force && mapAttachedWidthPx == width && mapAttachedHeightPx == height) return
+        runCatching {
+            UiLogStore.append(LogCategory.SYSTEM, "Карта: resize_surface ${width.coerceAtLeast(1)}x${height.coerceAtLeast(1)}")
+            context.contentResolver.call(
+                MAP_RENDERER_URI,
+                "resize_surface",
+                null,
+                Bundle().apply {
+                    putInt("width", width.coerceAtLeast(1))
+                    putInt("height", height.coerceAtLeast(1))
+                }
+            )
+        }.onSuccess { result ->
+            if (result != null && !result.getBoolean("ok")) {
+                recreateMapRenderer(result.getString("error") ?: "Renderer resize_surface failed")
+                return@onSuccess
+            }
+            mapAttachedWidthPx = width.coerceAtLeast(1)
+            mapAttachedHeightPx = height.coerceAtLeast(1)
+            mapLastHeartbeatAtMs = SystemClock.elapsedRealtime()
+        }.onFailure { error ->
+            recreateMapRenderer(error.message ?: error.javaClass.simpleName)
+        }
+    }
+
+    private fun recreateMapRenderer(reason: String) {
+        setMapRendererError(reason)
+        nextMapRendererRetryAtMs = 0L
+        releaseMapRenderer(notifyRemote = false)
+        mapSurfaceView?.let { scheduleMapRendererSync(it, delayMs = 0L) }
+    }
+
+    private fun releaseMapRenderer(notifyRemote: Boolean = true) {
+        mapSyncRunnable?.let(handler::removeCallbacks)
+        mapSyncRunnable = null
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            detachMapSurfacePackage(mapSurfaceView)
+        }
+        mapSurfacePackage?.release()
+        mapSurfacePackage = null
+        mapAttachedWidthPx = 0
+        mapAttachedHeightPx = 0
+        mapLastHeartbeatAtMs = 0L
+        if (notifyRemote) {
+            runCatching {
+                UiLogStore.append(LogCategory.SYSTEM, "Карта: release_surface")
+                context.contentResolver.call(MAP_RENDERER_URI, "release_surface", null, null)
+            }
+        }
+    }
+
+    private fun detachMapSurfacePackage(surfaceView: SurfaceView?) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R || surfaceView == null) return
+        runCatching {
+            SurfaceView::class.java
+                .getMethod(
+                    "setChildSurfacePackage",
+                    SurfaceControlViewHost.SurfacePackage::class.java
+                )
+                .invoke(surfaceView, null)
+        }
+            .onFailure { UiLogStore.append(LogCategory.SYSTEM, "Карта: failed to detach SurfacePackage: ${it.message}") }
+    }
+
+    private fun ensureMapRendererHeartbeat() {
+        handler.removeCallbacks(mapHeartbeatRunnable)
+        handler.postDelayed(mapHeartbeatRunnable, MAP_RENDERER_HEARTBEAT_INTERVAL_MS)
+    }
+
+    private fun stopMapRendererHeartbeat() {
+        handler.removeCallbacks(mapHeartbeatRunnable)
+    }
+
+    private fun ensureMapRendererProtocol(): Boolean {
+        if (mapRendererProtocolChecked) {
+            return mapRendererSurfaceSupported
+        }
+        val result = runCatching {
+            context.contentResolver.call(MAP_RENDERER_URI, "get_protocol_info", null, null)
+        }.getOrNull()
+        val supported = result?.let {
+            it.getBoolean("ok") && it.getStringArrayList("features")
+                .orEmpty()
+                .contains("surface_package")
+        } == true
+        if (result != null) {
+            mapRendererProtocolChecked = true
+            mapRendererSurfaceSupported = supported
+            if (!supported) {
+                UiLogStore.append(LogCategory.SYSTEM, "Карта: get_protocol_info returned without surface_package, trying create_surface anyway")
+            }
+        } else {
+            UiLogStore.append(LogCategory.SYSTEM, "Карта: get_protocol_info unavailable, trying create_surface directly")
+        }
+        return supported
+    }
+
+    private fun shouldUseEmbeddedMapRenderer(): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+            setMapRendererError("Embedded renderer requires Android 11+")
+            return false
+        }
+        return true
+    }
+
+    private fun getSurfacePackage(bundle: Bundle): SurfaceControlViewHost.SurfacePackage? {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            bundle.getParcelable(
+                "surfacePackage",
+                SurfaceControlViewHost.SurfacePackage::class.java
+            )
+        } else {
+            @Suppress("DEPRECATION")
+            bundle.getParcelable("surfacePackage")
+        }
+    }
+
+    private fun setMapRendererError(message: String) {
+        nextMapRendererRetryAtMs = SystemClock.elapsedRealtime() + MAP_RENDERER_RETRY_DELAY_MS
+        if (lastMapRendererError == message) return
+        lastMapRendererError = message
+        mapPlaceholderView?.visibility = View.VISIBLE
+        mapPlaceholderView?.text = context.getString(R.string.position_map_block_label)
+        UiLogStore.append(LogCategory.SYSTEM, "Карта: $message")
+    }
+
+    private fun clearMapRendererError() {
+        lastMapRendererError = null
+        nextMapRendererRetryAtMs = 0L
     }
 
     private fun resolveContainerSizePx(metrics: android.util.DisplayMetrics): Pair<Int, Int> {

@@ -32,6 +32,8 @@
     <queries>
         <package android:name="com.salat.gbinder" />
         <package android:name="com.autolink.carproxyservice" />
+        <package android:name="com.g992.mapformer" />
+        <provider android:authorities="com.g992.mapformer.render" />
         <intent>
             <action android:name="android.intent.action.MAIN" />
             <category android:name="android.intent.category.LAUNCHER" />

@@ -96,6 +96,7 @@ class MainActivity : ScaledActivity() {
     internal lateinit var saveAsPresetButton: ImageButton
     internal lateinit var displaySpinner: Spinner
     private lateinit var positionContainerCard: View
+    private lateinit var positionMapCard: View
     private lateinit var positionNavCard: View
     private lateinit var positionArrowCard: View
     private lateinit var positionSpeedCard: View
@@ -110,6 +111,7 @@ class MainActivity : ScaledActivity() {
     internal lateinit var turnSignalsIconValue: TextView
     private lateinit var positionClockCard: View
     internal lateinit var navProjectionSwitch: SwitchCompat
+    internal lateinit var mapProjectionSwitch: SwitchCompat
     internal lateinit var arrowProjectionSwitch: SwitchCompat
     internal lateinit var speedProjectionSwitch: SwitchCompat
     internal lateinit var hudSpeedProjectionSwitch: SwitchCompat
@@ -185,12 +187,12 @@ class MainActivity : ScaledActivity() {
         requestInstallPermissionButton = findViewById(R.id.requestInstallPermissionButton)
         overlaySwitch = findViewById(R.id.overlaySwitch)
         nativeNavSwitch = findViewById(R.id.nativeNavSwitch)
-//        mapToggleSwitch = findViewById(R.id.mapToggleSwitch)
         presetSpinner = findViewById(R.id.presetSpinner)
         savePresetButton = findViewById(R.id.savePresetButton)
         saveAsPresetButton = findViewById(R.id.saveAsPresetButton)
         displaySpinner = findViewById(R.id.displaySpinner)
         positionContainerCard = findViewById(R.id.positionContainerCard)
+        positionMapCard = findViewById(R.id.positionMapCard)
         positionNavCard = findViewById(R.id.positionNavCard)
         positionArrowCard = findViewById(R.id.positionArrowCard)
         positionSpeedCard = findViewById(R.id.positionSpeedCard)
@@ -205,6 +207,7 @@ class MainActivity : ScaledActivity() {
         turnSignalsIconValue = findViewById(R.id.turnSignalsIconValue)
         positionClockCard = findViewById(R.id.positionClockCard)
         navProjectionSwitch = findViewById(R.id.navProjectionSwitch)
+        mapProjectionSwitch = findViewById(R.id.mapProjectionSwitch)
         arrowProjectionSwitch = findViewById(R.id.arrowProjectionSwitch)
         speedProjectionSwitch = findViewById(R.id.speedProjectionSwitch)
         hudSpeedProjectionSwitch = findViewById(R.id.hudSpeedProjectionSwitch)
@@ -286,7 +289,7 @@ class MainActivity : ScaledActivity() {
             }
         }
 
-        mapToggleSwitch?.apply {
+        mapProjectionSwitch.apply {
             isChecked = OverlayPrefs.mapEnabled(this@MainActivity)
             setOnCheckedChangeListener { _, isChecked ->
                 if (isSyncingUi) {
@@ -295,9 +298,11 @@ class MainActivity : ScaledActivity() {
                 OverlayPrefs.setMapEnabled(this@MainActivity, isChecked)
                 notifyOverlaySettingsChanged(mapEnabled = isChecked)
             }
-            visibility = View.GONE
         }
 
+        positionMapCard.setOnClickListener {
+            openPositionDialog(OverlayTarget.MAP)
+        }
         positionNavCard.setOnClickListener {
             openPositionDialog(OverlayTarget.NAVIGATION)
         }
@@ -783,6 +788,9 @@ class MainActivity : ScaledActivity() {
         containerPosition: PointF? = null,
         containerWidthDp: Float? = null,
         containerHeightDp: Float? = null,
+        mapPosition: PointF? = null,
+        mapWidthDp: Float? = null,
+        mapHeightDp: Float? = null,
         navPosition: PointF? = null,
         navWidthDp: Float? = null,
         arrowPosition: PointF? = null,
@@ -816,6 +824,7 @@ class MainActivity : ScaledActivity() {
         turnSignalsAlpha: Float? = null,
         clockAlpha: Float? = null,
         containerAlpha: Float? = null,
+        mapAlpha: Float? = null,
         navEnabled: Boolean? = null,
         arrowEnabled: Boolean? = null,
         speedEnabled: Boolean? = null,
@@ -849,6 +858,16 @@ class MainActivity : ScaledActivity() {
         }
         if (containerHeightDp != null) {
             intent.putExtra(OverlayBroadcasts.EXTRA_CONTAINER_HEIGHT_DP, containerHeightDp)
+        }
+        if (mapPosition != null) {
+            intent.putExtra(OverlayBroadcasts.EXTRA_MAP_X_DP, mapPosition.x)
+            intent.putExtra(OverlayBroadcasts.EXTRA_MAP_Y_DP, mapPosition.y)
+        }
+        if (mapWidthDp != null) {
+            intent.putExtra(OverlayBroadcasts.EXTRA_MAP_WIDTH_DP, mapWidthDp)
+        }
+        if (mapHeightDp != null) {
+            intent.putExtra(OverlayBroadcasts.EXTRA_MAP_HEIGHT_DP, mapHeightDp)
         }
         if (navPosition != null) {
             intent.putExtra(OverlayBroadcasts.EXTRA_NAV_X_DP, navPosition.x)
@@ -960,6 +979,9 @@ class MainActivity : ScaledActivity() {
         }
         if (containerAlpha != null) {
             intent.putExtra(OverlayBroadcasts.EXTRA_CONTAINER_ALPHA, containerAlpha)
+        }
+        if (mapAlpha != null) {
+            intent.putExtra(OverlayBroadcasts.EXTRA_MAP_ALPHA, mapAlpha)
         }
         if (navEnabled != null) {
             intent.putExtra(OverlayBroadcasts.EXTRA_NAV_ENABLED, navEnabled)

@@ -23,6 +23,23 @@
             android:layout_height="match_parent"
             android:background="@android:color/transparent">
 
+            <FrameLayout
+                android:id="@+id/dialogPreviewMapBlock"
+                android:layout_width="112dp"
+                android:layout_height="64dp"
+                android:background="#603396F3"
+                android:visibility="gone">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:gravity="center"
+                    android:text="@string/position_map_block_label"
+                    android:textColor="@color/white"
+                    android:textSize="12sp"
+                    android:textStyle="bold" />
+            </FrameLayout>
+
             <LinearLayout
                 android:id="@+id/dialogPreviewNavBlock"
                 android:layout_width="wrap_content"

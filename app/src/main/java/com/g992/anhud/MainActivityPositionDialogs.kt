@@ -20,6 +20,7 @@ import kotlin.math.min
 import kotlin.math.roundToInt
 
 internal enum class OverlayTarget(val previewKey: String) {
+    MAP(OverlayBroadcasts.PREVIEW_TARGET_MAP),
     NAVIGATION(OverlayBroadcasts.PREVIEW_TARGET_NAV),
     ARROW(OverlayBroadcasts.PREVIEW_TARGET_ARROW),
     SPEED(OverlayBroadcasts.PREVIEW_TARGET_SPEED),
@@ -42,6 +43,7 @@ internal fun MainActivity.openPositionDialog(
     val dialogView = layoutInflater.inflate(R.layout.dialog_position_editor, null)
     val previewContainer = dialogView.findViewById<FrameLayout>(R.id.dialogPreviewContainer)
     val previewHudContainer = dialogView.findViewById<FrameLayout>(R.id.dialogPreviewHudContainer)
+    val previewMapBlock = dialogView.findViewById<View>(R.id.dialogPreviewMapBlock)
     val previewNavBlock = dialogView.findViewById<View>(R.id.dialogPreviewNavBlock)
     val previewNavTextColumn = dialogView.findViewById<LinearLayout>(R.id.dialogPreviewNavTextColumn)
     val previewNavPrimary = dialogView.findViewById<TextView>(R.id.dialogPreviewNavPrimary)
@@ -96,6 +98,9 @@ internal fun MainActivity.openPositionDialog(
     val clockPosition = OverlayPrefs.clockPositionDp(this)
     val containerPosition = OverlayPrefs.containerPositionDp(this)
     val containerSize = OverlayPrefs.containerSizeDp(this)
+    val mapPosition = OverlayPrefs.mapPositionDp(this)
+    val mapSize = OverlayPrefs.mapSizeDp(this)
+    val mapPoint = PointF(mapPosition.x, mapPosition.y)
     val navPoint = PointF(navPosition.x, navPosition.y)
     val arrowPoint = PointF(arrowPosition.x, arrowPosition.y)
     val speedPoint = PointF(speedPosition.x, speedPosition.y)
@@ -108,12 +113,15 @@ internal fun MainActivity.openPositionDialog(
     val containerPoint = PointF(containerPosition.x, containerPosition.y)
     var containerWidthDp = containerSize.x
     var containerHeightDp = containerSize.y
+    var mapWidthDp = mapSize.x
+    var mapHeightDp = mapSize.y
     var navWidthDp = OverlayPrefs.navWidthDp(this)
     var turnSignalsSpacingDp = OverlayPrefs.turnSignalsSpacingDp(this)
     var currentScale = 1f
     val density = displayDensity.takeIf { it > 0f } ?: resources.displayMetrics.density
     TurnSignalIcons.applyPair(this, previewTurnSignalsLeft, previewTurnSignalsRight, turnSignalsIconStyle)
     val scalePercent = when (target) {
+        OverlayTarget.MAP -> 100
         OverlayTarget.NAVIGATION -> (OverlayPrefs.navScale(this) * 100).toInt()
         OverlayTarget.ARROW -> (OverlayPrefs.arrowScale(this) * 100).toInt()
         OverlayTarget.SPEED -> (OverlayPrefs.speedScale(this) * 100).toInt()
@@ -126,6 +134,7 @@ internal fun MainActivity.openPositionDialog(
         OverlayTarget.CONTAINER -> 100
     }
     val brightnessPercent = when (target) {
+        OverlayTarget.MAP -> (OverlayPrefs.mapAlpha(this) * 100).toInt()
         OverlayTarget.NAVIGATION -> (OverlayPrefs.navAlpha(this) * 100).toInt()
         OverlayTarget.ARROW -> (OverlayPrefs.arrowAlpha(this) * 100).toInt()
         OverlayTarget.SPEED -> (OverlayPrefs.speedAlpha(this) * 100).toInt()
@@ -201,6 +210,7 @@ internal fun MainActivity.openPositionDialog(
     }
 
     val dialogTitle = when (target) {
+        OverlayTarget.MAP -> getString(R.string.position_map_block_label)
         OverlayTarget.NAVIGATION -> getString(R.string.position_nav_block_label)
         OverlayTarget.ARROW -> getString(R.string.position_arrow_block_label)
         OverlayTarget.SPEED -> getString(R.string.position_speed_block_label)
@@ -227,7 +237,7 @@ internal fun MainActivity.openPositionDialog(
     hudSpeedGpsStatusCheck.visibility = if (showHudSpeedGpsStatusSetting) View.VISIBLE else View.GONE
     hudSpeedGpsStatusCheck.isChecked = OverlayPrefs.hudSpeedGpsStatusEnabled(activity)
 
-    if (target == OverlayTarget.CONTAINER) {
+    if (target == OverlayTarget.CONTAINER || target == OverlayTarget.MAP) {
         scaleLabel.visibility = View.GONE
         scaleSeek.visibility = View.GONE
         scaleValue.visibility = View.GONE
@@ -339,11 +349,19 @@ internal fun MainActivity.openPositionDialog(
     renderTrafficLightPreview(previewTrafficLightBlock, OverlayPrefs.trafficLightMaxActive(this))
 
     val minContainerSizeDp = OverlayPrefs.CONTAINER_MIN_SIZE_PX / density
+    val minMapSizeDp = OverlayPrefs.MAP_MIN_SIZE_DP
     val maxWidthDp = (displaySize.x.coerceAtLeast(1) / density).coerceAtLeast(minContainerSizeDp)
     val maxHeightDp = (displaySize.y.coerceAtLeast(1) / density).coerceAtLeast(minContainerSizeDp)
     val minSizeInt = minContainerSizeDp.roundToInt()
     val maxWidthInt = maxWidthDp.roundToInt().coerceAtLeast(minSizeInt)
     val maxHeightInt = maxHeightDp.roundToInt().coerceAtLeast(minSizeInt)
+    fun resolveMapMaxWidthDp(): Float = containerWidthDp.coerceAtLeast(minMapSizeDp)
+    fun resolveMapMaxHeightDp(): Float = containerHeightDp.coerceAtLeast(minMapSizeDp)
+
+    fun clampMapSize() {
+        mapWidthDp = mapWidthDp.coerceIn(minMapSizeDp, resolveMapMaxWidthDp())
+        mapHeightDp = mapHeightDp.coerceIn(minMapSizeDp, resolveMapMaxHeightDp())
+    }
 
     fun clampContainerSize() {
         containerWidthDp = containerWidthDp.coerceIn(minContainerSizeDp, maxWidthDp)
@@ -355,6 +373,7 @@ internal fun MainActivity.openPositionDialog(
             navWidthDp = navWidthDp.coerceIn(OverlayPrefs.NAV_WIDTH_MIN_DP, containerWidthDp)
         }
         val showNav = target == OverlayTarget.NAVIGATION
+        val showMap = target == OverlayTarget.MAP
         val showArrow = target == OverlayTarget.ARROW
         val showSpeed = target == OverlayTarget.SPEED
         val showHudSpeed = target == OverlayTarget.HUDSPEED
@@ -363,6 +382,7 @@ internal fun MainActivity.openPositionDialog(
         val showSpeedometer = target == OverlayTarget.SPEEDOMETER
         val showTurnSignals = target == OverlayTarget.TURN_SIGNALS
         val showClock = target == OverlayTarget.CLOCK
+        previewMapBlock.visibility = if (showMap) View.VISIBLE else View.GONE
         previewNavBlock.visibility = if (showNav) View.VISIBLE else View.GONE
         previewArrowBlock.visibility = if (showArrow) View.VISIBLE else View.GONE
         previewSpeedLimit.visibility = if (showSpeed) View.VISIBLE else View.GONE
@@ -393,6 +413,32 @@ internal fun MainActivity.openPositionDialog(
         }
         val containerWidthPx = containerWidthDp * density
         val containerHeightPx = containerHeightDp * density
+        if (showMap) {
+            clampMapSize()
+            previewMapBlock.layoutParams = (previewMapBlock.layoutParams as? FrameLayout.LayoutParams)?.apply {
+                width = (mapWidthDp * density).roundToInt().coerceAtLeast(1)
+                height = (mapHeightDp * density).roundToInt().coerceAtLeast(1)
+            } ?: FrameLayout.LayoutParams(
+                (mapWidthDp * density).roundToInt().coerceAtLeast(1),
+                (mapHeightDp * density).roundToInt().coerceAtLeast(1)
+            )
+            if (target == OverlayTarget.MAP) {
+                previewMapBlock.background = ContextCompat.getDrawable(activity, R.drawable.bg_nav_block_outline)
+            }
+            positionPreviewView(
+                previewHudContainer,
+                previewMapBlock,
+                mapPoint.x,
+                mapPoint.y,
+                containerWidthPx,
+                containerHeightPx
+            )
+            previewMapBlock.alpha = if (target == OverlayTarget.MAP) {
+                brightnessSeek.progress.coerceIn(0, 100) / 100f
+            } else {
+                OverlayPrefs.mapAlpha(activity).coerceIn(0f, 1f)
+            }
+        }
         if (showNav) {
             val navWidthPx = resolveScaledLayoutWidthPx(navWidthDp * density, currentScale)
             val iconSizePx = (48 * density).roundToInt()
@@ -569,6 +615,7 @@ internal fun MainActivity.openPositionDialog(
 
     fun updateOverlayPosition(previewX: Float, previewY: Float, persist: Boolean) {
         val view = when (target) {
+            OverlayTarget.MAP -> previewMapBlock
             OverlayTarget.NAVIGATION -> previewNavBlock
             OverlayTarget.ARROW -> previewArrowBlock
             OverlayTarget.SPEED -> previewSpeedLimit
@@ -598,6 +645,19 @@ internal fun MainActivity.openPositionDialog(
         val (dpX, dpY) = positionDpFromPreview(dragContainer, view, previewX, previewY, boundsWidth, boundsHeight)
         val point = PointF(dpX, dpY)
         when (target) {
+            OverlayTarget.MAP -> {
+                if (persist) {
+                    OverlayPrefs.setMapPositionDp(this, dpX, dpY)
+                    mapPoint.x = dpX
+                    mapPoint.y = dpY
+                }
+                notifyOverlaySettingsChanged(
+                    mapPosition = point,
+                    preview = true,
+                    previewTarget = target,
+                    previewShowOthers = showOthersCheck.isChecked
+                )
+            }
             OverlayTarget.NAVIGATION -> {
                 if (persist) {
                     OverlayPrefs.setNavPositionDp(this, dpX, dpY)
@@ -812,17 +872,31 @@ internal fun MainActivity.openPositionDialog(
     }
 
     clampContainerSize()
-    containerWidthSeek.max = (maxWidthInt - minSizeInt).coerceAtLeast(0)
-    containerHeightSeek.max = (maxHeightInt - minSizeInt).coerceAtLeast(0)
-    containerWidthSeek.progress = (containerWidthDp.roundToInt() - minSizeInt)
-        .coerceIn(0, containerWidthSeek.max)
-    containerHeightSeek.progress = (containerHeightDp.roundToInt() - minSizeInt)
-        .coerceIn(0, containerHeightSeek.max)
+    clampMapSize()
+    if (target == OverlayTarget.MAP) {
+        val minMapInt = minMapSizeDp.roundToInt()
+        val maxMapWidthInt = resolveMapMaxWidthDp().roundToInt().coerceAtLeast(minMapInt)
+        val maxMapHeightInt = resolveMapMaxHeightDp().roundToInt().coerceAtLeast(minMapInt)
+        containerWidthSeek.max = (maxMapWidthInt - minMapInt).coerceAtLeast(0)
+        containerHeightSeek.max = (maxMapHeightInt - minMapInt).coerceAtLeast(0)
+        containerWidthSeek.progress = (mapWidthDp.roundToInt() - minMapInt)
+            .coerceIn(0, containerWidthSeek.max)
+        containerHeightSeek.progress = (mapHeightDp.roundToInt() - minMapInt)
+            .coerceIn(0, containerHeightSeek.max)
+    } else {
+        containerWidthSeek.max = (maxWidthInt - minSizeInt).coerceAtLeast(0)
+        containerHeightSeek.max = (maxHeightInt - minSizeInt).coerceAtLeast(0)
+        containerWidthSeek.progress = (containerWidthDp.roundToInt() - minSizeInt)
+            .coerceIn(0, containerWidthSeek.max)
+        containerHeightSeek.progress = (containerHeightDp.roundToInt() - minSizeInt)
+            .coerceIn(0, containerHeightSeek.max)
+    }
 
 
     setupDialogDrag(
         if (target == OverlayTarget.CONTAINER) previewContainer else previewHudContainer,
         when (target) {
+            OverlayTarget.MAP -> previewMapBlock
             OverlayTarget.NAVIGATION -> previewNavBlock
             OverlayTarget.ARROW -> previewArrowBlock
             OverlayTarget.SPEED -> previewSpeedLimit
@@ -841,73 +915,126 @@ internal fun MainActivity.openPositionDialog(
 
     containerWidthSeek.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
         override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
-            if (target != OverlayTarget.CONTAINER) {
+            if (target != OverlayTarget.CONTAINER && target != OverlayTarget.MAP) {
                 return
             }
-            containerWidthDp = (minSizeInt + progress).toFloat().coerceIn(minContainerSizeDp, maxWidthDp)
+            if (target == OverlayTarget.CONTAINER) {
+                containerWidthDp = (minSizeInt + progress).toFloat().coerceIn(minContainerSizeDp, maxWidthDp)
+            } else {
+                mapWidthDp = (progress + minMapSizeDp.roundToInt()).toFloat()
+                    .coerceIn(minMapSizeDp, resolveMapMaxWidthDp())
+            }
             updateDialogVisibility()
-            notifyOverlaySettingsChanged(
-                containerWidthDp = containerWidthDp,
-                containerHeightDp = containerHeightDp,
-                preview = true,
-                previewTarget = target,
-                previewShowOthers = showOthersCheck.isChecked
-            )
+            if (target == OverlayTarget.CONTAINER) {
+                notifyOverlaySettingsChanged(
+                    containerWidthDp = containerWidthDp,
+                    containerHeightDp = containerHeightDp,
+                    preview = true,
+                    previewTarget = target,
+                    previewShowOthers = showOthersCheck.isChecked
+                )
+            } else {
+                notifyOverlaySettingsChanged(
+                    mapWidthDp = mapWidthDp,
+                    mapHeightDp = mapHeightDp,
+                    preview = true,
+                    previewTarget = target,
+                    previewShowOthers = showOthersCheck.isChecked
+                )
+            }
         }
 
         override fun onStartTrackingTouch(seekBar: SeekBar?) = Unit
 
         override fun onStopTrackingTouch(seekBar: SeekBar?) {
-            if (target != OverlayTarget.CONTAINER) {
+            if (target != OverlayTarget.CONTAINER && target != OverlayTarget.MAP) {
                 return
             }
-            OverlayPrefs.setContainerSizeDp(activity, containerWidthDp, containerHeightDp)
-            notifyOverlaySettingsChanged(
-                containerWidthDp = containerWidthDp,
-                containerHeightDp = containerHeightDp,
-                preview = true,
-                previewTarget = target,
-                previewShowOthers = showOthersCheck.isChecked
-            )
+            if (target == OverlayTarget.CONTAINER) {
+                OverlayPrefs.setContainerSizeDp(activity, containerWidthDp, containerHeightDp)
+                notifyOverlaySettingsChanged(
+                    containerWidthDp = containerWidthDp,
+                    containerHeightDp = containerHeightDp,
+                    preview = true,
+                    previewTarget = target,
+                    previewShowOthers = showOthersCheck.isChecked
+                )
+            } else {
+                OverlayPrefs.setMapSizeDp(activity, mapWidthDp, mapHeightDp)
+                notifyOverlaySettingsChanged(
+                    mapWidthDp = mapWidthDp,
+                    mapHeightDp = mapHeightDp,
+                    preview = true,
+                    previewTarget = target,
+                    previewShowOthers = showOthersCheck.isChecked
+                )
+            }
         }
     })
 
     containerHeightSeek.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
         override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
-            if (target != OverlayTarget.CONTAINER) {
+            if (target != OverlayTarget.CONTAINER && target != OverlayTarget.MAP) {
                 return
             }
-            containerHeightDp = (minSizeInt + progress).toFloat().coerceIn(minContainerSizeDp, maxHeightDp)
+            if (target == OverlayTarget.CONTAINER) {
+                containerHeightDp = (minSizeInt + progress).toFloat().coerceIn(minContainerSizeDp, maxHeightDp)
+            } else {
+                mapHeightDp = (progress + minMapSizeDp.roundToInt()).toFloat()
+                    .coerceIn(minMapSizeDp, resolveMapMaxHeightDp())
+            }
             updateDialogVisibility()
-            notifyOverlaySettingsChanged(
-                containerWidthDp = containerWidthDp,
-                containerHeightDp = containerHeightDp,
-                preview = true,
-                previewTarget = target,
-                previewShowOthers = showOthersCheck.isChecked
-            )
+            if (target == OverlayTarget.CONTAINER) {
+                notifyOverlaySettingsChanged(
+                    containerWidthDp = containerWidthDp,
+                    containerHeightDp = containerHeightDp,
+                    preview = true,
+                    previewTarget = target,
+                    previewShowOthers = showOthersCheck.isChecked
+                )
+            } else {
+                notifyOverlaySettingsChanged(
+                    mapWidthDp = mapWidthDp,
+                    mapHeightDp = mapHeightDp,
+                    preview = true,
+                    previewTarget = target,
+                    previewShowOthers = showOthersCheck.isChecked
+                )
+            }
         }
 
         override fun onStartTrackingTouch(seekBar: SeekBar?) = Unit
 
         override fun onStopTrackingTouch(seekBar: SeekBar?) {
-            if (target != OverlayTarget.CONTAINER) {
+            if (target != OverlayTarget.CONTAINER && target != OverlayTarget.MAP) {
                 return
             }
-            OverlayPrefs.setContainerSizeDp(activity, containerWidthDp, containerHeightDp)
-            notifyOverlaySettingsChanged(
-                containerWidthDp = containerWidthDp,
-                containerHeightDp = containerHeightDp,
-                preview = true,
-                previewTarget = target,
-                previewShowOthers = showOthersCheck.isChecked
-            )
+            if (target == OverlayTarget.CONTAINER) {
+                OverlayPrefs.setContainerSizeDp(activity, containerWidthDp, containerHeightDp)
+                notifyOverlaySettingsChanged(
+                    containerWidthDp = containerWidthDp,
+                    containerHeightDp = containerHeightDp,
+                    preview = true,
+                    previewTarget = target,
+                    previewShowOthers = showOthersCheck.isChecked
+                )
+            } else {
+                OverlayPrefs.setMapSizeDp(activity, mapWidthDp, mapHeightDp)
+                notifyOverlaySettingsChanged(
+                    mapWidthDp = mapWidthDp,
+                    mapHeightDp = mapHeightDp,
+                    preview = true,
+                    previewTarget = target,
+                    previewShowOthers = showOthersCheck.isChecked
+                )
+            }
         }
     })
 
     val scaleMinPercent = 25
     val scaleMaxPercent = when (target) {
         OverlayTarget.SPEEDOMETER -> 300
+        OverlayTarget.MAP -> 100
         OverlayTarget.CONTAINER -> 100
         else -> 150
     }
@@ -919,7 +1046,7 @@ internal fun MainActivity.openPositionDialog(
     scaleValue.text = getString(R.string.scale_percent_format, resolvedScalePercent)
     scaleSeek.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
         override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
-            if (target == OverlayTarget.CONTAINER) {
+            if (target == OverlayTarget.CONTAINER || target == OverlayTarget.MAP) {
                 return
             }
             val percent = (progress + scaleMinPercent).coerceIn(scaleMinPercent, scaleMaxPercent)
@@ -931,6 +1058,7 @@ internal fun MainActivity.openPositionDialog(
             }
             updateDialogVisibility()
             when (target) {
+                OverlayTarget.MAP -> Unit
                 OverlayTarget.NAVIGATION -> notifyOverlaySettingsChanged(
                     navScale = scale,
                     preview = true,
@@ -993,7 +1121,7 @@ internal fun MainActivity.openPositionDialog(
         override fun onStartTrackingTouch(seekBar: SeekBar?) = Unit
 
         override fun onStopTrackingTouch(seekBar: SeekBar?) {
-            if (target == OverlayTarget.CONTAINER) {
+            if (target == OverlayTarget.CONTAINER || target == OverlayTarget.MAP) {
                 return
             }
             val percent = ((seekBar?.progress ?: 0) + scaleMinPercent)
@@ -1005,6 +1133,7 @@ internal fun MainActivity.openPositionDialog(
             }
             updateDialogVisibility()
             when (target) {
+                OverlayTarget.MAP -> Unit
                 OverlayTarget.NAVIGATION -> {
                     OverlayPrefs.setNavScale(activity, scale)
                     notifyOverlaySettingsChanged(
@@ -1101,6 +1230,15 @@ internal fun MainActivity.openPositionDialog(
             val alpha = percent / 100f
             brightnessValue.text = getString(R.string.scale_percent_format, percent)
             when (target) {
+                OverlayTarget.MAP -> {
+                    previewMapBlock.alpha = alpha
+                    notifyOverlaySettingsChanged(
+                        mapAlpha = alpha,
+                        preview = true,
+                        previewTarget = target,
+                        previewShowOthers = showOthersCheck.isChecked
+                    )
+                }
                 OverlayTarget.NAVIGATION -> {
                     previewNavBlock.alpha = alpha
                     notifyOverlaySettingsChanged(
@@ -1200,6 +1338,15 @@ internal fun MainActivity.openPositionDialog(
             val percent = (seekBar?.progress ?: 100).coerceIn(0, 100)
             val alpha = percent / 100f
             when (target) {
+                OverlayTarget.MAP -> {
+                    OverlayPrefs.setMapAlpha(activity, alpha)
+                    notifyOverlaySettingsChanged(
+                        mapAlpha = alpha,
+                        preview = true,
+                        previewTarget = target,
+                        previewShowOthers = showOthersCheck.isChecked
+                    )
+                }
                 OverlayTarget.NAVIGATION -> {
                     OverlayPrefs.setNavAlpha(activity, alpha)
                     notifyOverlaySettingsChanged(

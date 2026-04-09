@@ -65,6 +65,7 @@
     <string name="overlay_position_label">Позиции HUD</string>
     <string name="position_blocks_hint">Нажмите блок, чтобы открыть настройку положения.</string>
     <string name="position_container_label">Контейнер HUD</string>
+    <string name="position_map_block_label">Блок карты</string>
     <string name="position_nav_block_label">Блок навигации</string>
     <string name="position_arrow_block_label">Блок стрелки</string>
     <string name="position_speed_block_label">Ограничитель скорости</string>
@@ -228,6 +229,8 @@
     <string name="guide_main_display_body">Выберите дисплей для HUD. По умолчанию — экран 1 (если доступен), иначе экран 0.</string>
     <string name="guide_main_container_title">Контейнер HUD</string>
     <string name="guide_main_container_body">Границы области HUD. Нажмите, чтобы менять размер и позицию.</string>
+    <string name="guide_main_map_title">Блок карты</string>
+    <string name="guide_main_map_body">Положение и размер карты внутри контейнера HUD. Здесь же меняется яркость блока карты.</string>
     <string name="guide_main_nav_title">Блок навигации</string>
     <string name="guide_main_nav_body">Манёвр, расстояние и время. Можно отключать проекцию.</string>
     <string name="guide_main_arrow_title">Блок стрелки</string>
