@@ -7,6 +7,7 @@ import org.json.JSONObject
 object PrefsJson {
     const val OVERLAY_PREFS_NAME = "hud_overlay_prefs"
     const val MANEUVER_PREFS_NAME = "maneuver_match_prefs"
+    const val MAP_RENDER_PREFS_NAME = "map_render_settings"
     private const val DEFAULTS_ASSET = "maneuver_match_defaults.properties"
     private const val DEFAULT_MANEUVER_ICON_ID = "101"
     private const val MAX_SUPPORTED_MANEUVER_ICON_ID = 150
@@ -17,6 +18,7 @@ object PrefsJson {
         val prefsObject = JSONObject()
         prefsObject.put(OVERLAY_PREFS_NAME, serializeOverlayPrefs(context))
         prefsObject.put(MANEUVER_PREFS_NAME, serializeManeuverPrefs(context))
+        prefsObject.put(MAP_RENDER_PREFS_NAME, serializeMapRenderPrefs(context))
         payload.put("prefs", prefsObject)
         return payload
     }
@@ -33,7 +35,12 @@ object PrefsJson {
             MANEUVER_PREFS_NAME,
             prefsObject.optJSONArray(MANEUVER_PREFS_NAME)
         )
-        return overlayApplied || maneuverApplied
+        val mapRenderApplied = applyPrefsFromJson(
+            context,
+            MAP_RENDER_PREFS_NAME,
+            prefsObject.optJSONArray(MAP_RENDER_PREFS_NAME)
+        )
+        return overlayApplied || maneuverApplied || mapRenderApplied
     }
 
     fun payloadEquals(first: JSONObject, second: JSONObject): Boolean {
@@ -255,6 +262,40 @@ object PrefsJson {
             val entry = serializeValue(key, merged[key]) ?: continue
             items.put(entry)
         }
+        return items
+    }
+
+    private fun serializeMapRenderPrefs(context: Context): JSONArray {
+        val items = JSONArray()
+
+        fun putFloat(key: String, value: Double) {
+            items.put(JSONObject().put("k", key).put("t", "f").put("v", value))
+        }
+
+        fun putBoolean(key: String, value: Boolean) {
+            items.put(JSONObject().put("k", key).put("t", "b").put("v", value))
+        }
+
+        fun putInt(key: String, value: Int) {
+            items.put(JSONObject().put("k", key).put("t", "i").put("v", value))
+        }
+
+        fun putString(key: String, value: String?) {
+            if (value == null) return
+            items.put(JSONObject().put("k", key).put("t", "s").put("v", value))
+        }
+
+        val settings = MapRenderSettingsStore.current()
+        putFloat("zoom", settings.zoom)
+        putBoolean("auto_zoom_enabled", settings.autoZoomEnabled)
+        putFloat("auto_zoom_at_0", settings.autoZoomAt0Kmh)
+        putFloat("auto_zoom_at_60", settings.autoZoomAt60Kmh)
+        putFloat("auto_zoom_at_90", settings.autoZoomAt90Kmh)
+        putFloat("tilt", settings.tilt)
+        putInt("arrow_scale_percent", settings.arrowScalePercent)
+        putInt("cache_size_step", settings.cacheSizeStep)
+        putBoolean("download_route_enabled", settings.downloadRouteEnabled)
+        putString("offline_region_id", settings.offlineRegionId)
         return items
     }
 

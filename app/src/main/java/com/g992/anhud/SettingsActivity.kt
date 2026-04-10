@@ -1,6 +1,7 @@
 package com.g992.anhud
 
 import android.Manifest
+import android.app.AlertDialog
 import android.content.ClipData
 import android.app.DownloadManager
 import android.content.BroadcastReceiver
@@ -12,6 +13,7 @@ import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Color
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -27,9 +29,12 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.BaseAdapter
+import android.widget.Button
 import android.widget.EditText
+import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
+import android.widget.ListView
 import android.widget.ProgressBar
 import android.widget.ScrollView
 import android.widget.SeekBar
@@ -58,6 +63,7 @@ import kotlin.math.roundToInt
 class SettingsActivity : ScaledActivity() {
     private lateinit var tabLayout: TabLayout
     private lateinit var tabGeneralContent: View
+    private lateinit var tabMapContent: LinearLayout
     private lateinit var tabManeuverContent: View
     private lateinit var tabUpdatesContent: View
     private lateinit var tabDebugContent: View
@@ -98,6 +104,18 @@ class SettingsActivity : ScaledActivity() {
     private lateinit var ramGraphSummary: TextView
     private lateinit var topCpuTable: TableLayout
     private lateinit var topCpuNote: TextView
+    private lateinit var mapZoomValue: TextView
+    private lateinit var mapAutoZoomZeroValue: TextView
+    private lateinit var mapAutoZoomSixtyValue: TextView
+    private lateinit var mapAutoZoomNinetyValue: TextView
+    private lateinit var mapTiltValue: TextView
+    private lateinit var mapArrowValue: TextView
+    private lateinit var mapCacheValue: TextView
+    private lateinit var mapOfflineRegionValue: TextView
+    private lateinit var mapAutoZoomSwitch: SwitchCompat
+    private lateinit var mapRouteDownloadSwitch: SwitchCompat
+    private var mapAutoZoomConfigRows: List<View> = emptyList()
+    private var mapCacheButtons: List<Button> = emptyList()
 
     private var updateDownloadId: Long = -1L
     private var updatesTabIndex: Int = -1
@@ -215,6 +233,7 @@ class SettingsActivity : ScaledActivity() {
 
         tabLayout = findViewById(R.id.tabLayout)
         tabGeneralContent = findViewById(R.id.tabGeneralContent)
+        tabMapContent = findViewById(R.id.tabMapContent)
         tabManeuverContent = findViewById(R.id.tabManeuverContent)
         tabUpdatesContent = findViewById(R.id.tabUpdatesContent)
         tabDebugContent = findViewById(R.id.tabDebugContent)
@@ -258,6 +277,7 @@ class SettingsActivity : ScaledActivity() {
 
         setupTabs()
         setupGeneralSettings()
+        setupMapTab()
         setupManeuverTab()
         setupUpdatesTab()
         setupDebugTab()
@@ -310,12 +330,13 @@ class SettingsActivity : ScaledActivity() {
 
     private fun setupTabs() {
         tabLayout.addTab(tabLayout.newTab().setText(R.string.tab_general_settings))
+        tabLayout.addTab(tabLayout.newTab().setText(R.string.tab_map_settings))
         tabLayout.addTab(tabLayout.newTab().setText(R.string.tab_nav_settings))
         tabLayout.addTab(tabLayout.newTab().setText(R.string.tab_updates))
         tabLayout.addTab(tabLayout.newTab().setText(R.string.tab_debug))
         tabLayout.addTab(tabLayout.newTab().setText(R.string.tab_help))
 
-        updatesTabIndex = 2
+        updatesTabIndex = 3
         val badge = tabLayout.getTabAt(updatesTabIndex)?.orCreateBadge
         badge?.setBackgroundColor(ContextCompat.getColor(this@SettingsActivity, R.color.update_badge_red))
         badge?.setVisible(false)
@@ -327,6 +348,7 @@ class SettingsActivity : ScaledActivity() {
                 when (tab.position) {
                     0 -> {
                         tabGeneralContent.visibility = View.VISIBLE
+                        tabMapContent.visibility = View.GONE
                         tabManeuverContent.visibility = View.GONE
                         tabUpdatesContent.visibility = View.GONE
                         tabDebugContent.visibility = View.GONE
@@ -334,27 +356,39 @@ class SettingsActivity : ScaledActivity() {
                     }
                     1 -> {
                         tabGeneralContent.visibility = View.GONE
-                        tabManeuverContent.visibility = View.VISIBLE
+                        tabMapContent.visibility = View.VISIBLE
+                        tabManeuverContent.visibility = View.GONE
                         tabUpdatesContent.visibility = View.GONE
                         tabDebugContent.visibility = View.GONE
                         tabHelpContent.visibility = View.GONE
                     }
                     2 -> {
                         tabGeneralContent.visibility = View.GONE
-                        tabManeuverContent.visibility = View.GONE
-                        tabUpdatesContent.visibility = View.VISIBLE
+                        tabMapContent.visibility = View.GONE
+                        tabManeuverContent.visibility = View.VISIBLE
+                        tabUpdatesContent.visibility = View.GONE
                         tabDebugContent.visibility = View.GONE
                         tabHelpContent.visibility = View.GONE
                     }
                     3 -> {
                         tabGeneralContent.visibility = View.GONE
+                        tabMapContent.visibility = View.GONE
+                        tabManeuverContent.visibility = View.GONE
+                        tabUpdatesContent.visibility = View.VISIBLE
+                        tabDebugContent.visibility = View.GONE
+                        tabHelpContent.visibility = View.GONE
+                    }
+                    4 -> {
+                        tabGeneralContent.visibility = View.GONE
+                        tabMapContent.visibility = View.GONE
                         tabManeuverContent.visibility = View.GONE
                         tabUpdatesContent.visibility = View.GONE
                         tabDebugContent.visibility = View.VISIBLE
                         tabHelpContent.visibility = View.GONE
                     }
-                    4 -> {
+                    5 -> {
                         tabGeneralContent.visibility = View.GONE
+                        tabMapContent.visibility = View.GONE
                         tabManeuverContent.visibility = View.GONE
                         tabUpdatesContent.visibility = View.GONE
                         tabDebugContent.visibility = View.GONE
@@ -523,6 +557,474 @@ class SettingsActivity : ScaledActivity() {
                 OverlayPrefs.setHideTurnWhenFarDistanceMeters(this@SettingsActivity, distance)
             }
         })
+    }
+
+    private fun setupMapTab() {
+        MapRenderSettingsStore.initialize(applicationContext)
+        val settings = MapRenderSettingsStore.current()
+
+        mapZoomValue = createMapValueView()
+        mapAutoZoomZeroValue = createMapValueView()
+        mapAutoZoomSixtyValue = createMapValueView()
+        mapAutoZoomNinetyValue = createMapValueView()
+        mapTiltValue = createMapValueView()
+        mapArrowValue = createMapValueView()
+        mapCacheValue = createMapValueView()
+        mapOfflineRegionValue = createMapValueView()
+        mapAutoZoomSwitch = SwitchCompat(this).apply {
+            text = getString(R.string.map_settings_auto_zoom)
+            setTextColor(ContextCompat.getColor(this@SettingsActivity, R.color.white))
+            setOnCheckedChangeListener { _, isChecked ->
+                if (!isSyncingUi) {
+                    MapRenderSettingsStore.update { it.copy(autoZoomEnabled = isChecked) }
+                    syncMapUiFromPrefs()
+                }
+            }
+        }
+        mapRouteDownloadSwitch = SwitchCompat(this).apply {
+            text = getString(R.string.map_settings_route_download)
+            setTextColor(ContextCompat.getColor(this@SettingsActivity, R.color.white))
+            setOnCheckedChangeListener { _, isChecked ->
+                if (!isSyncingUi) {
+                    MapRenderSettingsStore.update { it.copy(downloadRouteEnabled = isChecked) }
+                }
+            }
+        }
+
+        val zoomSeek = SeekBar(this).apply {
+            max = ((MAP_ZOOM_MAX - MAP_ZOOM_MIN) * 10).roundToInt()
+            setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                    val value = MAP_ZOOM_MIN + (progress / 10.0)
+                    mapZoomValue.text = formatMapDecimal(value)
+                    if (fromUser && !isSyncingUi) {
+                        MapRenderSettingsStore.update { it.copy(zoom = value) }
+                    }
+                }
+
+                override fun onStartTrackingTouch(seekBar: SeekBar?) = Unit
+                override fun onStopTrackingTouch(seekBar: SeekBar?) = Unit
+            })
+        }
+        val autoZoomZeroSeek = SeekBar(this).apply {
+            max = ((MAP_ZOOM_MAX - MAP_ZOOM_MIN) * 10).roundToInt()
+            setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                    val value = MAP_ZOOM_MIN + (progress / 10.0)
+                    mapAutoZoomZeroValue.text = formatMapDecimal(value)
+                    if (fromUser && !isSyncingUi) {
+                        MapRenderSettingsStore.update { it.copy(autoZoomAt0Kmh = value) }
+                    }
+                }
+
+                override fun onStartTrackingTouch(seekBar: SeekBar?) = Unit
+                override fun onStopTrackingTouch(seekBar: SeekBar?) = Unit
+            })
+        }
+        val autoZoomSixtySeek = SeekBar(this).apply {
+            max = ((MAP_ZOOM_MAX - MAP_ZOOM_MIN) * 10).roundToInt()
+            setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                    val value = MAP_ZOOM_MIN + (progress / 10.0)
+                    mapAutoZoomSixtyValue.text = formatMapDecimal(value)
+                    if (fromUser && !isSyncingUi) {
+                        MapRenderSettingsStore.update { it.copy(autoZoomAt60Kmh = value) }
+                    }
+                }
+
+                override fun onStartTrackingTouch(seekBar: SeekBar?) = Unit
+                override fun onStopTrackingTouch(seekBar: SeekBar?) = Unit
+            })
+        }
+        val autoZoomNinetySeek = SeekBar(this).apply {
+            max = ((MAP_ZOOM_MAX - MAP_ZOOM_MIN) * 10).roundToInt()
+            setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                    val value = MAP_ZOOM_MIN + (progress / 10.0)
+                    mapAutoZoomNinetyValue.text = formatMapDecimal(value)
+                    if (fromUser && !isSyncingUi) {
+                        MapRenderSettingsStore.update { it.copy(autoZoomAt90Kmh = value) }
+                    }
+                }
+
+                override fun onStartTrackingTouch(seekBar: SeekBar?) = Unit
+                override fun onStopTrackingTouch(seekBar: SeekBar?) = Unit
+            })
+        }
+        val tiltSeek = SeekBar(this).apply {
+            max = 80
+            setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                    val value = progress.toDouble()
+                    mapTiltValue.text = getString(R.string.map_settings_tilt_value, value.roundToInt())
+                    if (fromUser && !isSyncingUi) {
+                        MapRenderSettingsStore.update { it.copy(tilt = value) }
+                    }
+                }
+
+                override fun onStartTrackingTouch(seekBar: SeekBar?) = Unit
+                override fun onStopTrackingTouch(seekBar: SeekBar?) = Unit
+            })
+        }
+        val arrowSeek = SeekBar(this).apply {
+            max = MAP_ARROW_SCALE_MAX_PERCENT - MAP_ARROW_SCALE_MIN_PERCENT
+            setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                    val value = MAP_ARROW_SCALE_MIN_PERCENT + progress
+                    mapArrowValue.text = value.toString()
+                    if (fromUser && !isSyncingUi) {
+                        MapRenderSettingsStore.update { it.copy(arrowScalePercent = value) }
+                    }
+                }
+
+                override fun onStartTrackingTouch(seekBar: SeekBar?) = Unit
+                override fun onStopTrackingTouch(seekBar: SeekBar?) = Unit
+            })
+        }
+
+        val cacheButtons = MapCacheSizeOptionsMb.mapIndexed { index, valueMb ->
+            Button(this).apply {
+                text = formatCacheStepLabel(valueMb)
+                isAllCaps = false
+                setOnClickListener {
+                    if (!isSyncingUi) {
+                        MapRenderSettingsStore.update { it.copy(cacheSizeStep = index) }
+                        syncMapUiFromPrefs()
+                    }
+                }
+            }
+        }
+        mapCacheButtons = cacheButtons
+        val cacheRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            weightSum = cacheButtons.size.toFloat()
+            cacheButtons.forEachIndexed { index, button ->
+                addView(
+                    button,
+                    LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
+                        if (index > 0) marginStart = dp(8)
+                    }
+                )
+            }
+        }
+
+        val regionButton = Button(this).apply {
+            text = getString(R.string.map_settings_region_pick)
+            isAllCaps = false
+            setOnClickListener { showOfflineRegionPicker() }
+        }
+
+        val autoZoomRows = listOf(
+            createMapSliderRow(getString(R.string.map_settings_auto_zoom_at_0), mapAutoZoomZeroValue, autoZoomZeroSeek),
+            createMapSliderRow(getString(R.string.map_settings_auto_zoom_at_60), mapAutoZoomSixtyValue, autoZoomSixtySeek),
+            createMapSliderRow(getString(R.string.map_settings_auto_zoom_at_90), mapAutoZoomNinetyValue, autoZoomNinetySeek),
+        )
+        mapAutoZoomConfigRows = autoZoomRows
+
+        tabMapContent.removeAllViews()
+        tabMapContent.addView(
+            createMapSection(
+                title = getString(R.string.map_settings_title),
+                subtitle = getString(R.string.map_settings_subtitle),
+                body = listOf(
+                    createMapSliderRow(getString(R.string.map_settings_zoom), mapZoomValue, zoomSeek),
+                    createMapSwitchRow(mapAutoZoomSwitch, getString(R.string.map_settings_auto_zoom_hint)),
+                    *autoZoomRows.toTypedArray(),
+                    createMapSliderRow(getString(R.string.map_settings_tilt), mapTiltValue, tiltSeek),
+                    createMapSliderRow(getString(R.string.map_settings_arrow_scale), mapArrowValue, arrowSeek),
+                    createMapValueRow(getString(R.string.map_settings_cache), mapCacheValue, cacheRow),
+                    createMapSwitchRow(mapRouteDownloadSwitch, getString(R.string.map_settings_route_download_hint)),
+                    createMapValueRow(getString(R.string.map_settings_offline_region), mapOfflineRegionValue, regionButton),
+                )
+            )
+        )
+
+        isSyncingUi = true
+        try {
+            zoomSeek.progress = ((settings.zoom - MAP_ZOOM_MIN) * 10).roundToInt()
+                .coerceIn(0, zoomSeek.max)
+            autoZoomZeroSeek.progress = ((settings.autoZoomAt0Kmh - MAP_ZOOM_MIN) * 10).roundToInt()
+                .coerceIn(0, autoZoomZeroSeek.max)
+            autoZoomSixtySeek.progress = ((settings.autoZoomAt60Kmh - MAP_ZOOM_MIN) * 10).roundToInt()
+                .coerceIn(0, autoZoomSixtySeek.max)
+            autoZoomNinetySeek.progress = ((settings.autoZoomAt90Kmh - MAP_ZOOM_MIN) * 10).roundToInt()
+                .coerceIn(0, autoZoomNinetySeek.max)
+            tiltSeek.progress = settings.tilt.roundToInt().coerceIn(0, 80)
+            arrowSeek.progress = settings.arrowScalePercent
+                .coerceIn(MAP_ARROW_SCALE_MIN_PERCENT, MAP_ARROW_SCALE_MAX_PERCENT) - MAP_ARROW_SCALE_MIN_PERCENT
+        } finally {
+            isSyncingUi = false
+        }
+        syncMapUiFromPrefs()
+    }
+
+    private fun createMapSection(
+        title: String,
+        subtitle: String,
+        body: List<View>,
+    ): View {
+        return LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundResource(R.drawable.bg_log_section)
+            setPadding(dp(16), dp(16), dp(16), dp(16))
+            addView(TextView(context).apply {
+                text = title
+                setTextColor(ContextCompat.getColor(context, R.color.white))
+                textSize = 18f
+                setTypeface(typeface, android.graphics.Typeface.BOLD)
+            })
+            addView(TextView(context).apply {
+                text = subtitle
+                setTextColor(Color.parseColor("#808080"))
+                textSize = 12f
+            }, LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply {
+                topMargin = dp(4)
+            })
+            body.forEachIndexed { index, view ->
+                addView(view, LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply {
+                    topMargin = if (index == 0) dp(16) else dp(12)
+                })
+            }
+        }
+    }
+
+    private fun createMapSliderRow(label: String, valueView: TextView, seekBar: SeekBar): View {
+        return LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(LinearLayout(context).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                addView(TextView(context).apply {
+                    text = label
+                    setTextColor(ContextCompat.getColor(context, R.color.white))
+                    textSize = 16f
+                    setTypeface(typeface, android.graphics.Typeface.BOLD)
+                }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+                addView(valueView)
+            })
+            addView(seekBar)
+        }
+    }
+
+    private fun createMapValueRow(label: String, valueView: TextView, trailing: View): View {
+        return LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(LinearLayout(context).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                addView(TextView(context).apply {
+                    text = label
+                    setTextColor(ContextCompat.getColor(context, R.color.white))
+                    textSize = 16f
+                    setTypeface(typeface, android.graphics.Typeface.BOLD)
+                }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+                addView(valueView)
+            })
+            addView(trailing, LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply {
+                topMargin = dp(8)
+            })
+        }
+    }
+
+    private fun createMapSwitchRow(switch: SwitchCompat, hint: String): View {
+        return LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(switch)
+            addView(TextView(context).apply {
+                text = hint
+                setTextColor(Color.parseColor("#808080"))
+                textSize = 12f
+            }, LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply {
+                topMargin = dp(4)
+            })
+        }
+    }
+
+    private fun createMapValueView(): TextView {
+        return TextView(this).apply {
+            setTextColor(ContextCompat.getColor(context, R.color.white))
+            textSize = 14f
+            setTypeface(typeface, android.graphics.Typeface.BOLD)
+        }
+    }
+
+    private fun syncMapUiFromPrefs() {
+        val settings = MapRenderSettingsStore.current()
+        mapZoomValue.text = formatMapDecimal(settings.zoom)
+        mapAutoZoomZeroValue.text = formatMapDecimal(settings.autoZoomAt0Kmh)
+        mapAutoZoomSixtyValue.text = formatMapDecimal(settings.autoZoomAt60Kmh)
+        mapAutoZoomNinetyValue.text = formatMapDecimal(settings.autoZoomAt90Kmh)
+        mapTiltValue.text = getString(R.string.map_settings_tilt_value, settings.tilt.roundToInt())
+        mapArrowValue.text = settings.arrowScalePercent.toString()
+        mapCacheValue.text = formatMapCacheValue(settings.cacheSizeBytes())
+        mapOfflineRegionValue.text = formatOfflineRegion(settings.offlineRegionId)
+        mapAutoZoomSwitch.isChecked = settings.autoZoomEnabled
+        mapRouteDownloadSwitch.isChecked = settings.downloadRouteEnabled
+        val autoZoomVisibility = if (settings.autoZoomEnabled) View.VISIBLE else View.GONE
+        mapAutoZoomConfigRows.forEach { it.visibility = autoZoomVisibility }
+        refreshMapCacheButtons(settings.cacheSizeStep)
+    }
+
+    private fun refreshMapCacheButtons(selectedStep: Int) {
+        mapCacheButtons.forEachIndexed { index, button ->
+            val selected = index == selectedStep
+            button.setBackgroundColor(
+                if (selected) ContextCompat.getColor(this, R.color.white)
+                else Color.parseColor("#2A2A2A")
+            )
+            button.setTextColor(
+                if (selected) Color.BLACK
+                else ContextCompat.getColor(this, R.color.white)
+            )
+        }
+    }
+
+    private fun formatMapCacheValue(configuredBytes: Long): String {
+        return formatStorageBytes(configuredBytes)
+    }
+
+    private fun formatMapDecimal(value: Double): String {
+        return String.format(Locale.getDefault(), "%.1f", value)
+    }
+
+    private fun formatStorageBytes(bytes: Long): String {
+        val kb = 1024L
+        val mb = kb * 1024L
+        val gb = mb * 1024L
+        return when {
+            bytes >= gb -> String.format(Locale.getDefault(), "%.1f GB", bytes.toDouble() / gb.toDouble())
+            bytes >= mb -> String.format(Locale.getDefault(), "%.0f MB", bytes.toDouble() / mb.toDouble())
+            bytes >= kb -> String.format(Locale.getDefault(), "%.0f KB", bytes.toDouble() / kb.toDouble())
+            else -> "$bytes B"
+        }
+    }
+
+    private fun formatCacheStepLabel(valueMb: Int): String {
+        return if (valueMb >= 1024) "${valueMb / 1024}G" else "${valueMb}M"
+    }
+
+    private fun formatOfflineRegion(regionId: String?): String {
+        val entry = OfflineRegionCatalog.findById(this, regionId)
+        return entry?.displayLabel ?: getString(R.string.map_settings_region_none)
+    }
+
+    private fun showOfflineRegionPicker() {
+        val allEntries = OfflineRegionCatalog.all(this)
+        if (allEntries.isEmpty()) {
+            showToast(R.string.map_settings_region_empty)
+            return
+        }
+        val regionAdapter = OfflineRegionAdapter(allEntries.toMutableList())
+        var dialog: AlertDialog? = null
+        val searchInput = EditText(this).apply {
+            hint = getString(R.string.map_settings_region_search)
+            setTextColor(ContextCompat.getColor(this@SettingsActivity, R.color.white))
+            setHintTextColor(Color.parseColor("#66FFFFFF"))
+            setBackgroundColor(Color.parseColor("#1A1A1A"))
+            setPadding(dp(16), dp(16), dp(16), dp(16))
+            textSize = 18f
+        }
+        val listView = ListView(this).apply {
+            dividerHeight = 0
+            adapter = regionAdapter
+            setBackgroundColor(Color.BLACK)
+            setOnItemClickListener { _, _, position, _ ->
+                val item = regionAdapter.getItem(position)
+                MapRenderSettingsStore.update { it.copy(offlineRegionId = item.id) }
+                syncMapUiFromPrefs()
+                dialog?.dismiss()
+            }
+        }
+        searchInput.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                regionAdapter.replace(OfflineRegionCatalog.search(this@SettingsActivity, s?.toString().orEmpty()))
+            }
+            override fun afterTextChanged(s: Editable?) = Unit
+        })
+        dialog = AlertDialog.Builder(this)
+            .setView(
+                LinearLayout(this).apply {
+                    orientation = LinearLayout.VERTICAL
+                    setBackgroundColor(Color.BLACK)
+                    setPadding(dp(24), dp(24), dp(24), dp(24))
+                    addView(searchInput)
+                    addView(
+                        FrameLayout(context).apply {
+                            addView(
+                                listView,
+                                FrameLayout.LayoutParams(
+                                    FrameLayout.LayoutParams.MATCH_PARENT,
+                                    dp(420)
+                                )
+                            )
+                        },
+                        LinearLayout.LayoutParams(
+                            LinearLayout.LayoutParams.MATCH_PARENT,
+                            LinearLayout.LayoutParams.WRAP_CONTENT
+                        ).apply {
+                            topMargin = dp(16)
+                        }
+                    )
+                }
+            )
+            .setNegativeButton(R.string.map_settings_region_close, null)
+            .create()
+        dialog.show()
+        dialog.window?.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+    }
+
+    private inner class OfflineRegionAdapter(
+        private val items: MutableList<OfflineRegionEntry>,
+    ) : BaseAdapter() {
+        override fun getCount(): Int = items.size
+
+        override fun getItem(position: Int): OfflineRegionEntry = items[position]
+
+        override fun getItemId(position: Int): Long = position.toLong()
+
+        fun replace(entries: List<OfflineRegionEntry>) {
+            items.clear()
+            items.addAll(entries)
+            notifyDataSetChanged()
+        }
+
+        override fun getView(position: Int, convertView: View?, parent: ViewGroup?): View {
+            val row = convertView as? LinearLayout ?: LinearLayout(this@SettingsActivity).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(dp(20), dp(16), dp(20), dp(16))
+                addView(
+                    TextView(context).apply {
+                        id = android.R.id.text1
+                        setTextColor(ContextCompat.getColor(context, R.color.white))
+                        textSize = 16f
+                    }
+                )
+                addView(
+                    TextView(context).apply {
+                        id = android.R.id.text2
+                        setTextColor(Color.parseColor("#99FFFFFF"))
+                        textSize = 12f
+                    }
+                )
+            }
+            val item = getItem(position)
+            row.findViewById<TextView>(android.R.id.text1).text = item.regionRu
+            row.findViewById<TextView>(android.R.id.text2).text = item.countryRu
+            return row
+        }
     }
 
     private fun exportSettingsToDownloads() {
@@ -1258,6 +1760,7 @@ class SettingsActivity : ScaledActivity() {
             hideTurnWhenFarDistanceValue.text = formatManeuverHideDistance(hideDistance)
             updateHideTurnSwitchLabel(hideDistance)
             updateHideTurnDistanceControls(hideTurnWhenFarEnabled)
+            syncMapUiFromPrefs()
         } finally {
             isSyncingUi = false
         }

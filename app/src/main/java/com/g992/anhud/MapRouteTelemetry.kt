@@ -1,0 +1,212 @@
+package com.g992.anhud
+
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.location.Location
+import android.util.Log
+import org.maplibre.android.geometry.LatLng
+import java.util.concurrent.CopyOnWriteArraySet
+import kotlin.math.atan2
+import kotlin.math.cos
+import kotlin.math.sin
+
+private const val ROUTE_PREFS_NAME = "map_route_telemetry"
+private const val ROUTE_TELEMETRY_TAG = "MapRouteTelemetry"
+private const val PREF_STATE = "state"
+private const val PREF_START = "start"
+private const val PREF_END = "end"
+private const val PREF_SAMPLED = "sampled"
+private const val PREF_PRE_MANEUVER = "pre_maneuver"
+private const val PREF_WAYPOINTS = "waypoints"
+private const val PREF_JAMS = "jams"
+private const val EXTERNAL_ROUTE_SPEED_MPS = 10.0
+
+data class MapRouteTelemetrySnapshot(
+    val state: String? = null,
+    val hasExternalTelemetry: Boolean = false,
+    val routeToken: String? = null,
+    val routePoints: List<LatLng> = emptyList(),
+    val routeJams: List<String> = emptyList(),
+    val startLocation: Location? = null,
+) {
+    val hasRoute: Boolean
+        get() = routePoints.size >= 2
+
+    val routeBuilt: Boolean
+        get() = hasRoute || state == MAP_ROUTE_STATE_BUILT
+}
+
+class MapRouteTelemetryReceiver : BroadcastReceiver() {
+    override fun onReceive(context: Context, intent: Intent) {
+        MapRouteTelemetryStore.handleIntent(context.applicationContext, intent)
+    }
+}
+
+object MapRouteTelemetryStore {
+    private val listeners = CopyOnWriteArraySet<(MapRouteTelemetrySnapshot) -> Unit>()
+
+    @Volatile
+    private var initialized = false
+    @Volatile
+    private var currentSnapshot = MapRouteTelemetrySnapshot()
+
+    fun initialize(context: Context) {
+        if (initialized) return
+        synchronized(this) {
+            if (initialized) return
+            currentSnapshot = buildSnapshot(context.applicationContext)
+            initialized = true
+        }
+    }
+
+    fun current(): MapRouteTelemetrySnapshot = currentSnapshot
+
+    fun addListener(listener: (MapRouteTelemetrySnapshot) -> Unit) {
+        listeners += listener
+    }
+
+    fun removeListener(listener: (MapRouteTelemetrySnapshot) -> Unit) {
+        listeners -= listener
+    }
+
+    fun handleIntent(context: Context, intent: Intent) {
+        initialize(context)
+        val prefs = context.getSharedPreferences(ROUTE_PREFS_NAME, Context.MODE_PRIVATE)
+        when (intent.action) {
+            MAP_ROUTE_TELEMETRY_ACTION -> {
+                prefs.edit()
+                    .putString(PREF_START, intent.getStringExtra(MAP_EXTRA_ROUTE_START))
+                    .putString(PREF_END, intent.getStringExtra(MAP_EXTRA_ROUTE_END))
+                    .putString(PREF_SAMPLED, intent.getStringExtra(MAP_EXTRA_ROUTE_SAMPLED))
+                    .putString(PREF_PRE_MANEUVER, intent.getStringExtra(MAP_EXTRA_ROUTE_PRE_MANEUVER))
+                    .putString(PREF_WAYPOINTS, intent.getStringExtra(MAP_EXTRA_ROUTE_WAYPOINTS))
+                    .putString(PREF_JAMS, intent.getStringExtra(MAP_EXTRA_ROUTE_JAMS))
+                    .apply()
+            }
+
+            MAP_ROUTE_STATE_ACTION -> {
+                val state = intent.getStringExtra(MAP_EXTRA_ROUTE_STATE)
+                prefs.edit()
+                    .putString(PREF_STATE, state)
+                    .apply()
+                if (state == MAP_ROUTE_STATE_ARRIVED || state == MAP_ROUTE_STATE_CANCELLED) {
+                    prefs.edit()
+                        .remove(PREF_START)
+                        .remove(PREF_END)
+                        .remove(PREF_SAMPLED)
+                        .remove(PREF_PRE_MANEUVER)
+                        .remove(PREF_WAYPOINTS)
+                        .remove(PREF_JAMS)
+                        .apply()
+                }
+            }
+        }
+        currentSnapshot = buildSnapshot(context)
+        listeners.forEach { it(currentSnapshot) }
+        notifyRouteStatusChanged(context, currentSnapshot)
+    }
+
+    private fun notifyRouteStatusChanged(context: Context, snapshot: MapRouteTelemetrySnapshot) {
+        context.sendBroadcast(
+            Intent(MAP_RENDER_ROUTE_STATUS_ACTION).apply {
+                putExtra(MAP_EXTRA_HAS_ROUTE, snapshot.hasRoute)
+                putExtra(MAP_EXTRA_ROUTE_BUILT, snapshot.routeBuilt)
+                putExtra(MAP_EXTRA_ROUTE_STATE, snapshot.state)
+            }
+        )
+    }
+
+    private fun buildSnapshot(context: Context): MapRouteTelemetrySnapshot {
+        val prefs = context.getSharedPreferences(ROUTE_PREFS_NAME, Context.MODE_PRIVATE)
+        val sampledRaw = prefs.getString(PREF_SAMPLED, null)
+        val startRaw = prefs.getString(PREF_START, null)
+        val points = parsePoints(sampledRaw).ifEmpty {
+            listOfNotNull(parsePoint(startRaw), parsePoint(prefs.getString(PREF_END, null)))
+        }
+        val jams = normalizeJams(prefs.getString(PREF_JAMS, null), points.size - 1)
+        return MapRouteTelemetrySnapshot(
+            state = prefs.getString(PREF_STATE, null),
+            hasExternalTelemetry = sampledRaw != null || prefs.getString(PREF_STATE, null) != null,
+            routeToken = sampledRaw?.let { "$it|${prefs.getString(PREF_JAMS, null).orEmpty()}" },
+            routePoints = points,
+            routeJams = jams,
+            startLocation = points.startLocation(),
+        )
+    }
+
+    private fun parsePoints(raw: String?): List<LatLng> {
+        if (raw.isNullOrBlank()) return emptyList()
+        return raw.split(';').mapNotNull(::parsePoint)
+    }
+
+    private fun parsePoint(raw: String?): LatLng? {
+        if (raw.isNullOrBlank()) return null
+        val parts = raw.split(',')
+        if (parts.size < 2) return null
+        val lat = parts[0].trim().toDoubleOrNull() ?: return null
+        val lon = parts[1].trim().toDoubleOrNull() ?: return null
+        return LatLng(lat, lon)
+    }
+
+    private fun normalizeJams(raw: String?, size: Int): List<String> {
+        if (size <= 0) return emptyList()
+        val base = raw.orEmpty()
+            .split(';')
+            .mapNotNull { jam ->
+                when (jam.trim().uppercase()) {
+                    "FREE" -> "low"
+                    "LIGHT" -> "moderate"
+                    "HARD" -> "heavy"
+                    "VERY_HARD", "BLOCKED" -> "severe"
+                    else -> null
+                }
+            }
+            .toMutableList()
+        while (base.size < size) {
+            base += base.lastOrNull() ?: "low"
+        }
+        return base.take(size)
+    }
+
+    private fun List<LatLng>.startLocation(): Location? {
+        if (size < 2) return null
+        val start = first()
+        val next = this[1]
+        return Location("route-telemetry").apply {
+            latitude = start.latitude
+            longitude = start.longitude
+            altitude = start.altitude
+            bearing = bearingBetween(start, next).toFloat()
+            speed = EXTERNAL_ROUTE_SPEED_MPS.toFloat()
+            accuracy = 3f
+            time = System.currentTimeMillis()
+        }
+    }
+
+    private fun bearingBetween(start: LatLng, end: LatLng): Double {
+        val startLat = Math.toRadians(start.latitude)
+        val endLat = Math.toRadians(end.latitude)
+        val deltaLon = Math.toRadians(end.longitude - start.longitude)
+        val y = sin(deltaLon) * cos(endLat)
+        val x = cos(startLat) * sin(endLat) -
+            sin(startLat) * cos(endLat) * cos(deltaLon)
+        return (Math.toDegrees(atan2(y, x)) + 360.0) % 360.0
+    }
+}
+
+const val MAP_ROUTE_TELEMETRY_ACTION = "com.yandex.ROUTE_TELEMETRY"
+const val MAP_ROUTE_STATE_ACTION = "com.yandex.ROUTE_STATE"
+const val MAP_EXTRA_ROUTE_STATE = "route_state"
+const val MAP_EXTRA_ROUTE_START = "route_start"
+const val MAP_EXTRA_ROUTE_END = "route_end"
+const val MAP_EXTRA_ROUTE_SAMPLED = "route_sampled"
+const val MAP_EXTRA_ROUTE_PRE_MANEUVER = "route_pre_maneuver"
+const val MAP_EXTRA_ROUTE_WAYPOINTS = "route_waypoints"
+const val MAP_EXTRA_ROUTE_JAMS = "route_jams"
+const val MAP_EXTRA_HAS_ROUTE = "has_route"
+const val MAP_EXTRA_ROUTE_BUILT = "route_built"
+const val MAP_ROUTE_STATE_BUILT = "BUILT"
+const val MAP_ROUTE_STATE_ARRIVED = "ARRIVED"
+const val MAP_ROUTE_STATE_CANCELLED = "CANCELLED"
+const val MAP_RENDER_ROUTE_STATUS_ACTION = "com.g992.mapformer.ROUTE_STATUS_CHANGED"

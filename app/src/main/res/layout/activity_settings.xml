@@ -448,6 +448,14 @@
                     android:text="@string/settings_import_button" />
             </LinearLayout>
 
+            <LinearLayout
+                android:id="@+id/tabMapContent"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="20dp"
+                android:visibility="gone" />
+
             <!-- Повороты навигатора -->
             <LinearLayout
                 android:id="@+id/tabManeuverContent"

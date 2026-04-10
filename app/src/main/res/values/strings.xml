@@ -144,10 +144,32 @@
     <string name="display_option_label">Экран %1$d: %2$s %3$dx%4$d</string>
 
     <string name="tab_general_settings">Общие настройки</string>
+    <string name="tab_map_settings">Настройки карты</string>
     <string name="tab_nav_settings">Повороты навигатора</string>
     <string name="tab_updates">Обновления</string>
     <string name="tab_debug">Отладка</string>
     <string name="tab_help">Помощь</string>
+
+    <string name="map_settings_title">Настройки карты</string>
+    <string name="map_settings_subtitle">Параметры карты.</string>
+    <string name="map_settings_zoom">Масштаб</string>
+    <string name="map_settings_auto_zoom">Автомасштаб</string>
+    <string name="map_settings_auto_zoom_hint">При включении масштаб карты считается автоматически по скорости, с шагом 10 км/ч.</string>
+    <string name="map_settings_auto_zoom_at_0">Масштаб при 0 км/ч</string>
+    <string name="map_settings_auto_zoom_at_60">Масштаб при 60 км/ч</string>
+    <string name="map_settings_auto_zoom_at_90">Масштаб при 90 км/ч</string>
+    <string name="map_settings_tilt">Наклон</string>
+    <string name="map_settings_tilt_value">%1$d°</string>
+    <string name="map_settings_arrow_scale">Размер маркера положения</string>
+    <string name="map_settings_cache">Размер кэша карт</string>
+    <string name="map_settings_route_download">Подгружать маршрут в кэш</string>
+    <string name="map_settings_route_download_hint">При включении приложение заранее прогревает кэш вдоль активного маршрута.</string>
+    <string name="map_settings_offline_region">Оффлайн-регион</string>
+    <string name="map_settings_region_pick">Выбрать регион</string>
+    <string name="map_settings_region_none">Не выбран</string>
+    <string name="map_settings_region_empty">Список оффлайн-регионов пуст</string>
+    <string name="map_settings_region_search">Поиск региона</string>
+    <string name="map_settings_region_close">Закрыть</string>
 
     <string name="settings_timeouts_section_title">Таймауты</string>
     <string name="settings_timeouts_section_hint">Камеры, светофоры и завершение поездки</string>

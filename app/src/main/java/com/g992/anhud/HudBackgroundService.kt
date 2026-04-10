@@ -16,6 +16,9 @@ import androidx.core.content.ContextCompat
 
 class HudBackgroundService : Service() {
     private val overlayController by lazy { HudOverlayController(applicationContext) }
+    private val mapRouteListener: (MapRouteTelemetrySnapshot) -> Unit = {
+        overlayController.refresh()
+    }
     private val settingsReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             when (intent.action) {
@@ -352,6 +355,7 @@ class HudBackgroundService : Service() {
         super.onCreate()
         UiLogStore.append(LogCategory.SYSTEM, "HudBackgroundService: создан")
         NavigationHudStore.registerListener(navListener)
+        MapRouteTelemetryStore.addListener(mapRouteListener)
         val filter = android.content.IntentFilter().apply {
             addAction(OverlayBroadcasts.ACTION_OVERLAY_SETTINGS_CHANGED)
             addAction(OverlayBroadcasts.ACTION_CLEAR_NAVIGATION)
@@ -419,6 +423,7 @@ class HudBackgroundService : Service() {
 
     override fun onDestroy() {
         NavigationHudStore.unregisterListener(navListener)
+        MapRouteTelemetryStore.removeListener(mapRouteListener)
         try {
             unregisterReceiver(settingsReceiver)
         } catch (_: Exception) {
