@@ -7,6 +7,7 @@ import android.graphics.Bitmap
 import android.os.Bundle
 import android.os.Build
 import android.util.Log
+import org.maplibre.android.geometry.LatLng
 import java.util.Locale
 
 private const val MIN_ARROW_NATIVE_UPDATE_INTERVAL_MS = 3000L
@@ -283,12 +284,29 @@ class NavigationReceiver : BroadcastReceiver() {
                     "яндекс полилиния маршрута: active=$routeActive id=\"$routeId\" points=$count"
                 )
 
-                if (routeActive && lats != null && lons != null && count > 0) {
-                    Log.d(TAG, "Route polyline: ${count} points received")
-                    UiLogStore.append(LogCategory.NAVIGATION, "получена полилиния: $count точек")
+                val safeCount = if (lats != null && lons != null) {
+                    val arrayCount = minOf(lats.size, lons.size)
+                    if (count > 0) minOf(count, arrayCount) else arrayCount
+                } else {
+                    0
+                }
+                if (routeActive && lats != null && lons != null && safeCount >= 2) {
+                    val points = buildList {
+                        for (index in 0 until safeCount) {
+                            val lat = lats[index]
+                            val lon = lons[index]
+                            if (lat in -90.0..90.0 && lon in -180.0..180.0) {
+                                add(LatLng(lat, lon))
+                            }
+                        }
+                    }
+                    Log.d(TAG, "Route polyline: ${points.size} valid points received")
+                    UiLogStore.append(LogCategory.NAVIGATION, "получена полилиния: ${points.size} точек")
+                    MapRouteTelemetryStore.replaceRoutePolyline(context.applicationContext, routeId, points)
                 } else if (!routeActive) {
                     Log.d(TAG, "Route polyline: route cleared")
                     UiLogStore.append(LogCategory.NAVIGATION, "полилиния очищена (маршрут завершен)")
+                    MapRouteTelemetryStore.clearRoutePolyline(context.applicationContext)
                 }
             }
             ACTION_NATIVE_NAV_STOP -> {

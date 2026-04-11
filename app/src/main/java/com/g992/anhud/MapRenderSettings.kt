@@ -3,6 +3,45 @@ package com.g992.anhud
 import android.content.Context
 import android.content.SharedPreferences
 import java.util.concurrent.CopyOnWriteArraySet
+import kotlin.math.max
+import kotlin.math.min
+
+data class ManualOfflineBounds(
+    val label: String,
+    val lat1: Double,
+    val lon1: Double,
+    val lat2: Double,
+    val lon2: Double,
+) {
+    fun normalizedOrNull(): ManualOfflineBounds? {
+        val normalizedLat1 = lat1.coerceIn(-90.0, 90.0)
+        val normalizedLat2 = lat2.coerceIn(-90.0, 90.0)
+        val normalizedLon1 = lon1.coerceIn(-180.0, 180.0)
+        val normalizedLon2 = lon2.coerceIn(-180.0, 180.0)
+        if (normalizedLat1 == normalizedLat2 || normalizedLon1 == normalizedLon2) {
+            return null
+        }
+        return copy(
+            label = label.trim().ifBlank { "Прямоугольник" },
+            lat1 = normalizedLat1,
+            lon1 = normalizedLon1,
+            lat2 = normalizedLat2,
+            lon2 = normalizedLon2,
+        )
+    }
+
+    val south: Double
+        get() = min(lat1, lat2)
+
+    val north: Double
+        get() = max(lat1, lat2)
+
+    val west: Double
+        get() = min(lon1, lon2)
+
+    val east: Double
+        get() = max(lon1, lon2)
+}
 
 data class MapRenderSettings(
     val zoom: Double = 17.8,
@@ -15,6 +54,11 @@ data class MapRenderSettings(
     val cacheSizeStep: Int = 2,
     val downloadRouteEnabled: Boolean = false,
     val offlineRegionId: String? = null,
+    val offlineManualLabel: String? = null,
+    val offlineManualLat1: Double? = null,
+    val offlineManualLon1: Double? = null,
+    val offlineManualLat2: Double? = null,
+    val offlineManualLon2: Double? = null,
 )
 
 const val MAP_ARROW_SCALE_MIN_PERCENT = 7
@@ -29,18 +73,64 @@ fun MapRenderSettings.cacheSizeMb(): Int =
 
 fun MapRenderSettings.cacheSizeBytes(): Long = cacheSizeMb().toLong() * 1024L * 1024L
 
-fun MapRenderSettings.normalized(): MapRenderSettings = copy(
-    zoom = zoom.coerceIn(MAP_ZOOM_MIN, MAP_ZOOM_MAX),
-    autoZoomAt0Kmh = autoZoomAt0Kmh.coerceIn(MAP_ZOOM_MIN, MAP_ZOOM_MAX),
-    autoZoomAt60Kmh = autoZoomAt60Kmh.coerceIn(MAP_ZOOM_MIN, MAP_ZOOM_MAX),
-    autoZoomAt90Kmh = autoZoomAt90Kmh.coerceIn(MAP_ZOOM_MIN, MAP_ZOOM_MAX),
-    tilt = tilt.coerceIn(0.0, 80.0),
-    arrowScalePercent = arrowScalePercent.coerceIn(
-        MAP_ARROW_SCALE_MIN_PERCENT,
-        MAP_ARROW_SCALE_MAX_PERCENT
-    ),
-    cacheSizeStep = cacheSizeStep.coerceIn(0, MapCacheSizeOptionsMb.lastIndex),
-)
+fun MapRenderSettings.manualOfflineBoundsOrNull(): ManualOfflineBounds? {
+    val label = offlineManualLabel ?: return null
+    val lat1 = offlineManualLat1 ?: return null
+    val lon1 = offlineManualLon1 ?: return null
+    val lat2 = offlineManualLat2 ?: return null
+    val lon2 = offlineManualLon2 ?: return null
+    return ManualOfflineBounds(
+        label = label,
+        lat1 = lat1,
+        lon1 = lon1,
+        lat2 = lat2,
+        lon2 = lon2,
+    ).normalizedOrNull()
+}
+
+fun MapRenderSettings.normalized(): MapRenderSettings {
+    val base = copy(
+        zoom = zoom.coerceIn(MAP_ZOOM_MIN, MAP_ZOOM_MAX),
+        autoZoomAt0Kmh = autoZoomAt0Kmh.coerceIn(MAP_ZOOM_MIN, MAP_ZOOM_MAX),
+        autoZoomAt60Kmh = autoZoomAt60Kmh.coerceIn(MAP_ZOOM_MIN, MAP_ZOOM_MAX),
+        autoZoomAt90Kmh = autoZoomAt90Kmh.coerceIn(MAP_ZOOM_MIN, MAP_ZOOM_MAX),
+        tilt = tilt.coerceIn(0.0, 80.0),
+        arrowScalePercent = arrowScalePercent.coerceIn(
+            MAP_ARROW_SCALE_MIN_PERCENT,
+            MAP_ARROW_SCALE_MAX_PERCENT
+        ),
+        cacheSizeStep = cacheSizeStep.coerceIn(0, MapCacheSizeOptionsMb.lastIndex),
+        offlineRegionId = offlineRegionId?.takeIf { it.isNotBlank() },
+    )
+    return if (base.offlineRegionId != null) {
+        base.copy(
+            offlineManualLabel = null,
+            offlineManualLat1 = null,
+            offlineManualLon1 = null,
+            offlineManualLat2 = null,
+            offlineManualLon2 = null,
+        )
+    } else {
+        val manual = base.manualOfflineBoundsOrNull()
+        if (manual == null) {
+            base.copy(
+                offlineManualLabel = null,
+                offlineManualLat1 = null,
+                offlineManualLon1 = null,
+                offlineManualLat2 = null,
+                offlineManualLon2 = null,
+            )
+        } else {
+            base.copy(
+                offlineManualLabel = manual.label,
+                offlineManualLat1 = manual.lat1,
+                offlineManualLon1 = manual.lon1,
+                offlineManualLat2 = manual.lat2,
+                offlineManualLon2 = manual.lon2,
+            )
+        }
+    }
+}
 
 object MapRenderSettingsStore {
     private const val PREFS_NAME = "map_render_settings"
@@ -54,6 +144,11 @@ object MapRenderSettingsStore {
     private const val KEY_CACHE_SIZE_STEP = "cache_size_step"
     private const val KEY_DOWNLOAD_ROUTE = "download_route_enabled"
     private const val KEY_OFFLINE_REGION_ID = "offline_region_id"
+    private const val KEY_OFFLINE_MANUAL_LABEL = "offline_manual_label"
+    private const val KEY_OFFLINE_MANUAL_LAT1 = "offline_manual_lat1"
+    private const val KEY_OFFLINE_MANUAL_LON1 = "offline_manual_lon1"
+    private const val KEY_OFFLINE_MANUAL_LAT2 = "offline_manual_lat2"
+    private const val KEY_OFFLINE_MANUAL_LON2 = "offline_manual_lon2"
 
     private val listeners = CopyOnWriteArraySet<(MapRenderSettings) -> Unit>()
 
@@ -95,6 +190,11 @@ object MapRenderSettingsStore {
             .putInt(KEY_CACHE_SIZE_STEP, updated.cacheSizeStep)
             .putBoolean(KEY_DOWNLOAD_ROUTE, updated.downloadRouteEnabled)
             .putString(KEY_OFFLINE_REGION_ID, updated.offlineRegionId)
+            .putString(KEY_OFFLINE_MANUAL_LABEL, updated.offlineManualLabel)
+            .putOptionalFloat(KEY_OFFLINE_MANUAL_LAT1, updated.offlineManualLat1)
+            .putOptionalFloat(KEY_OFFLINE_MANUAL_LON1, updated.offlineManualLon1)
+            .putOptionalFloat(KEY_OFFLINE_MANUAL_LAT2, updated.offlineManualLat2)
+            .putOptionalFloat(KEY_OFFLINE_MANUAL_LON2, updated.offlineManualLon2)
             .apply()
         currentSettings = updated
         notifyListeners(updated)
@@ -124,6 +224,25 @@ object MapRenderSettingsStore {
             cacheSizeStep = prefs.getInt(KEY_CACHE_SIZE_STEP, 2),
             downloadRouteEnabled = prefs.getBoolean(KEY_DOWNLOAD_ROUTE, false),
             offlineRegionId = prefs.getString(KEY_OFFLINE_REGION_ID, null),
+            offlineManualLabel = prefs.getString(KEY_OFFLINE_MANUAL_LABEL, null),
+            offlineManualLat1 = prefs.getOptionalFloat(KEY_OFFLINE_MANUAL_LAT1),
+            offlineManualLon1 = prefs.getOptionalFloat(KEY_OFFLINE_MANUAL_LON1),
+            offlineManualLat2 = prefs.getOptionalFloat(KEY_OFFLINE_MANUAL_LAT2),
+            offlineManualLon2 = prefs.getOptionalFloat(KEY_OFFLINE_MANUAL_LON2),
         ).normalized()
     }
+}
+
+private fun SharedPreferences.Editor.putOptionalFloat(key: String, value: Double?): SharedPreferences.Editor {
+    if (value == null) {
+        remove(key)
+    } else {
+        putFloat(key, value.toFloat())
+    }
+    return this
+}
+
+private fun SharedPreferences.getOptionalFloat(key: String): Double? {
+    if (!contains(key)) return null
+    return getFloat(key, 0f).toDouble()
 }

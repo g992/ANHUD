@@ -59,6 +59,7 @@ class HudOverlayController(private val context: Context) {
         private const val SPEEDOMETER_UNIT_RELATIVE_SIZE = 1f / 3f
         private const val TURN_SIGNAL_BLINK_INTERVAL_MS = 400L
         private const val CLEAR_BEFORE_REDRAW_DELAY_MS = 32L
+        private const val HUD_OVERLAY_TAG = "HudOverlayController"
     }
     private val handler = Handler(Looper.getMainLooper())
     private val displayManager = context.getSystemService(DisplayManager::class.java)
@@ -131,6 +132,7 @@ class HudOverlayController(private val context: Context) {
     private var currentDisplayId: Int? = null
     private var lastState: NavigationHudState = NavigationHudState()
     private var lastRenderSignature: RenderSignature? = null
+    private var lastMapDebugKey: String? = null
     private var trafficLightPreviewArrow: Bitmap? = null
     private var containerPositionDp: PointF = OverlayPrefs.containerPositionDp(context)
     private var containerWidthDp: Float = OverlayPrefs.containerSizeDp(context).x
@@ -2726,6 +2728,13 @@ class HudOverlayController(private val context: Context) {
     private fun updateMapView(displayContext: Context, containerWidthPx: Int, containerHeightPx: Int) {
         val previewMap = previewMode && previewTarget == OverlayBroadcasts.PREVIEW_TARGET_MAP
         val hasMapRoute = MapRouteTelemetryStore.current().hasRoute
+        logMapState(
+            stage = "update",
+            previewMap = previewMap,
+            hasMapRoute = hasMapRoute,
+            mapContainerReady = mapContainerView != null,
+            mapContentReady = mapContentView != null,
+        )
         if ((!mapEnabled || !hasMapRoute) && !previewMap) {
             removeMapView()
             return
@@ -2767,6 +2776,23 @@ class HudOverlayController(private val context: Context) {
                 setVisible(true)
             }
         }
+    }
+
+    private fun logMapState(
+        stage: String,
+        previewMap: Boolean,
+        hasMapRoute: Boolean,
+        mapContainerReady: Boolean,
+        mapContentReady: Boolean,
+    ) {
+        val key = "$stage|$mapEnabled|$hasMapRoute|$previewMap|$mapContainerReady|$mapContentReady"
+        if (key == lastMapDebugKey) return
+        lastMapDebugKey = key
+        Log.d(
+            HUD_OVERLAY_TAG,
+            "map state: stage=$stage enabled=$mapEnabled hasRoute=$hasMapRoute preview=$previewMap " +
+                "container=$mapContainerReady content=$mapContentReady"
+        )
     }
 
     private fun removeMapView() {

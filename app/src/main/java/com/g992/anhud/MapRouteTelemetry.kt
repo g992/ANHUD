@@ -17,6 +17,7 @@ private const val PREF_STATE = "state"
 private const val PREF_START = "start"
 private const val PREF_END = "end"
 private const val PREF_SAMPLED = "sampled"
+private const val PREF_ROUTE_ID = "route_id"
 private const val PREF_PRE_MANEUVER = "pre_maneuver"
 private const val PREF_WAYPOINTS = "waypoints"
 private const val PREF_JAMS = "jams"
@@ -75,18 +76,26 @@ object MapRouteTelemetryStore {
         val prefs = context.getSharedPreferences(ROUTE_PREFS_NAME, Context.MODE_PRIVATE)
         when (intent.action) {
             MAP_ROUTE_TELEMETRY_ACTION -> {
+                val sampled = intent.getStringExtra(MAP_EXTRA_ROUTE_SAMPLED)
+                val jams = intent.getStringExtra(MAP_EXTRA_ROUTE_JAMS)
+                Log.d(
+                    ROUTE_TELEMETRY_TAG,
+                    "route telemetry: sampled=${countRoutePoints(sampled)} jams=${countDelimited(jams)} " +
+                        "start=${intent.hasExtra(MAP_EXTRA_ROUTE_START)} end=${intent.hasExtra(MAP_EXTRA_ROUTE_END)}"
+                )
                 prefs.edit()
                     .putString(PREF_START, intent.getStringExtra(MAP_EXTRA_ROUTE_START))
                     .putString(PREF_END, intent.getStringExtra(MAP_EXTRA_ROUTE_END))
-                    .putString(PREF_SAMPLED, intent.getStringExtra(MAP_EXTRA_ROUTE_SAMPLED))
+                    .putString(PREF_SAMPLED, sampled)
                     .putString(PREF_PRE_MANEUVER, intent.getStringExtra(MAP_EXTRA_ROUTE_PRE_MANEUVER))
                     .putString(PREF_WAYPOINTS, intent.getStringExtra(MAP_EXTRA_ROUTE_WAYPOINTS))
-                    .putString(PREF_JAMS, intent.getStringExtra(MAP_EXTRA_ROUTE_JAMS))
+                    .putString(PREF_JAMS, jams)
                     .apply()
             }
 
             MAP_ROUTE_STATE_ACTION -> {
                 val state = intent.getStringExtra(MAP_EXTRA_ROUTE_STATE)
+                Log.d(ROUTE_TELEMETRY_TAG, "route state: $state")
                 prefs.edit()
                     .putString(PREF_STATE, state)
                     .apply()
@@ -95,6 +104,7 @@ object MapRouteTelemetryStore {
                         .remove(PREF_START)
                         .remove(PREF_END)
                         .remove(PREF_SAMPLED)
+                        .remove(PREF_ROUTE_ID)
                         .remove(PREF_PRE_MANEUVER)
                         .remove(PREF_WAYPOINTS)
                         .remove(PREF_JAMS)
@@ -103,6 +113,50 @@ object MapRouteTelemetryStore {
             }
         }
         currentSnapshot = buildSnapshot(context)
+        Log.d(
+            ROUTE_TELEMETRY_TAG,
+            "snapshot: state=${currentSnapshot.state} hasRoute=${currentSnapshot.hasRoute} " +
+                "built=${currentSnapshot.routeBuilt} points=${currentSnapshot.routePoints.size} jams=${currentSnapshot.routeJams.size}"
+        )
+        listeners.forEach { it(currentSnapshot) }
+        notifyRouteStatusChanged(context, currentSnapshot)
+    }
+
+    fun replaceRoutePolyline(context: Context, routeId: String?, points: List<LatLng>) {
+        if (points.size < 2) return
+        initialize(context)
+        val sampled = serializePoints(points)
+        context.getSharedPreferences(ROUTE_PREFS_NAME, Context.MODE_PRIVATE)
+            .edit()
+            .putString(PREF_STATE, MAP_ROUTE_STATE_BUILT)
+            .putString(PREF_ROUTE_ID, routeId)
+            .putString(PREF_SAMPLED, sampled)
+            .remove(PREF_JAMS)
+            .apply()
+        currentSnapshot = buildSnapshot(context)
+        Log.d(
+            ROUTE_TELEMETRY_TAG,
+            "route polyline stored: id=${routeId.orEmpty()} points=${points.size} hasRoute=${currentSnapshot.hasRoute}"
+        )
+        listeners.forEach { it(currentSnapshot) }
+        notifyRouteStatusChanged(context, currentSnapshot)
+    }
+
+    fun clearRoutePolyline(context: Context) {
+        initialize(context)
+        context.getSharedPreferences(ROUTE_PREFS_NAME, Context.MODE_PRIVATE)
+            .edit()
+            .putString(PREF_STATE, MAP_ROUTE_STATE_CANCELLED)
+            .remove(PREF_START)
+            .remove(PREF_END)
+            .remove(PREF_SAMPLED)
+            .remove(PREF_ROUTE_ID)
+            .remove(PREF_PRE_MANEUVER)
+            .remove(PREF_WAYPOINTS)
+            .remove(PREF_JAMS)
+            .apply()
+        currentSnapshot = buildSnapshot(context)
+        Log.d(ROUTE_TELEMETRY_TAG, "route polyline cleared")
         listeners.forEach { it(currentSnapshot) }
         notifyRouteStatusChanged(context, currentSnapshot)
     }
@@ -121,14 +175,16 @@ object MapRouteTelemetryStore {
         val prefs = context.getSharedPreferences(ROUTE_PREFS_NAME, Context.MODE_PRIVATE)
         val sampledRaw = prefs.getString(PREF_SAMPLED, null)
         val startRaw = prefs.getString(PREF_START, null)
+        val routeId = prefs.getString(PREF_ROUTE_ID, null)
+        val jamsRaw = prefs.getString(PREF_JAMS, null)
         val points = parsePoints(sampledRaw).ifEmpty {
             listOfNotNull(parsePoint(startRaw), parsePoint(prefs.getString(PREF_END, null)))
         }
-        val jams = normalizeJams(prefs.getString(PREF_JAMS, null), points.size - 1)
+        val jams = normalizeJams(jamsRaw, points.size - 1)
         return MapRouteTelemetrySnapshot(
             state = prefs.getString(PREF_STATE, null),
             hasExternalTelemetry = sampledRaw != null || prefs.getString(PREF_STATE, null) != null,
-            routeToken = sampledRaw?.let { "$it|${prefs.getString(PREF_JAMS, null).orEmpty()}" },
+            routeToken = sampledRaw?.let { "$it|${routeId.orEmpty()}|${jamsRaw.orEmpty()}" },
             routePoints = points,
             routeJams = jams,
             startLocation = points.startLocation(),
@@ -147,6 +203,19 @@ object MapRouteTelemetryStore {
         val lat = parts[0].trim().toDoubleOrNull() ?: return null
         val lon = parts[1].trim().toDoubleOrNull() ?: return null
         return LatLng(lat, lon)
+    }
+
+    private fun serializePoints(points: List<LatLng>): String {
+        return points.joinToString(";") { point ->
+            "${point.latitude},${point.longitude}"
+        }
+    }
+
+    private fun countRoutePoints(raw: String?): Int = parsePoints(raw).size
+
+    private fun countDelimited(raw: String?): Int {
+        if (raw.isNullOrBlank()) return 0
+        return raw.split(';').count { it.isNotBlank() }
     }
 
     private fun normalizeJams(raw: String?, size: Int): List<String> {

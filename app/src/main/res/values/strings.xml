@@ -165,11 +165,21 @@
     <string name="map_settings_route_download">Подгружать маршрут в кэш</string>
     <string name="map_settings_route_download_hint">При включении приложение заранее прогревает кэш вдоль активного маршрута.</string>
     <string name="map_settings_offline_region">Оффлайн-регион</string>
+    <string name="map_settings_offline_downloads">Оффлайн загрузки</string>
     <string name="map_settings_region_pick">Выбрать регион</string>
     <string name="map_settings_region_none">Не выбран</string>
     <string name="map_settings_region_empty">Список оффлайн-регионов пуст</string>
     <string name="map_settings_region_search">Поиск региона</string>
     <string name="map_settings_region_close">Закрыть</string>
+    <string name="map_settings_offline_download_short">Скачать</string>
+    <string name="map_settings_offline_delete_short">Удалить</string>
+    <string name="map_settings_offline_downloaded_count">Скачано: %1$d</string>
+    <string name="map_settings_offline_row_preparing">подготовка</string>
+    <string name="map_settings_offline_row_downloading">скачивается: %1$d%% (%2$d/%3$d)</string>
+    <string name="map_settings_offline_row_error">ошибка: %1$s</string>
+    <string name="map_settings_offline_size_unknown">размер неизвестен</string>
+    <string name="map_settings_offline_size_single">примерно %1$.0f MB</string>
+    <string name="map_settings_offline_size_range">примерно %1$.0f-%2$.0f MB</string>
 
     <string name="settings_timeouts_section_title">Таймауты</string>
     <string name="settings_timeouts_section_hint">Камеры, светофоры и завершение поездки</string>

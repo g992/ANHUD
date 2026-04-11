@@ -2,15 +2,26 @@ package com.g992.anhud
 
 import android.content.Context
 import org.json.JSONArray
+import org.json.JSONObject
 
 data class OfflineRegionEntry(
     val id: String,
     val countryIso3: String,
     val countryRu: String,
-    val regionRu: String,
+    val countryName: String,
+    val level: String,
+    val name: String,
+    val shapeISO: String?,
+    val west: Double,
+    val south: Double,
+    val east: Double,
+    val north: Double,
 ) {
-    val displayLabel: String = "$regionRu · $countryRu"
-    val searchKey: String = "$regionRu $countryRu".lowercase()
+    val displayLabel: String = "$name · $countryRu"
+    val secondaryLabel: String = listOfNotNull(countryRu, level, shapeISO).joinToString(" · ")
+    val searchKey: String = listOf(name, countryRu, countryIso3, level, shapeISO.orEmpty())
+        .joinToString(" ")
+        .lowercase()
 }
 
 object OfflineRegionCatalog {
@@ -39,7 +50,10 @@ object OfflineRegionCatalog {
 
     private fun load(context: Context): List<OfflineRegionEntry> {
         val json = context.assets.open(ASSET_PATH).bufferedReader().use { it.readText() }
-        val array = JSONArray(json)
+        val array = when {
+            json.trimStart().startsWith("{") -> JSONObject(json).optJSONArray("regions") ?: JSONArray()
+            else -> JSONArray(json)
+        }
         return buildList(array.length()) {
             for (index in 0 until array.length()) {
                 val item = array.getJSONObject(index)
@@ -48,10 +62,17 @@ object OfflineRegionCatalog {
                         id = item.getString("id"),
                         countryIso3 = item.getString("countryIso3"),
                         countryRu = item.getString("countryRu"),
-                        regionRu = item.getString("regionRu"),
+                        countryName = item.optString("countryName", item.getString("countryIso3")),
+                        level = item.optString("level", "ADM1"),
+                        name = item.optString("name", item.optString("regionRu", "Unknown")),
+                        shapeISO = item.optString("shapeISO").takeIf { it.isNotBlank() },
+                        west = item.optJSONArray("bbox")?.optDouble(0) ?: 0.0,
+                        south = item.optJSONArray("bbox")?.optDouble(1) ?: 0.0,
+                        east = item.optJSONArray("bbox")?.optDouble(2) ?: 0.0,
+                        north = item.optJSONArray("bbox")?.optDouble(3) ?: 0.0,
                     )
                 )
             }
-        }.sortedWith(compareBy({ it.regionRu }, { it.countryRu }))
+        }.sortedWith(compareBy({ it.countryRu }, { it.level }, { it.name }))
     }
 }

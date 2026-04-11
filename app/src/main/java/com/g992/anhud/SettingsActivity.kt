@@ -14,6 +14,7 @@ import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Color
+import android.graphics.drawable.GradientDrawable
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -59,6 +60,10 @@ import java.util.Date
 import java.util.EnumMap
 import java.util.Locale
 import kotlin.math.roundToInt
+
+private const val SETTINGS_BUTTON_PRIMARY = 0
+private const val SETTINGS_BUTTON_SECONDARY = 1
+private const val SETTINGS_BUTTON_DANGER = 2
 
 class SettingsActivity : ScaledActivity() {
     private lateinit var tabLayout: TabLayout
@@ -116,6 +121,7 @@ class SettingsActivity : ScaledActivity() {
     private lateinit var mapRouteDownloadSwitch: SwitchCompat
     private var mapAutoZoomConfigRows: List<View> = emptyList()
     private var mapCacheButtons: List<Button> = emptyList()
+    private var offlineDownloadsAdapter: OfflineDownloadsAdapter? = null
 
     private var updateDownloadId: Long = -1L
     private var updatesTabIndex: Int = -1
@@ -190,6 +196,13 @@ class SettingsActivity : ScaledActivity() {
             runOnUiThread {
                 renderPerformanceSnapshot(snapshot)
             }
+        }
+    }
+
+    private val mapCacheListener: (MapCacheSnapshot) -> Unit = { snapshot ->
+        runOnUiThread {
+            syncMapCacheUi(snapshot)
+            offlineDownloadsAdapter?.updateSnapshot(snapshot)
         }
     }
 
@@ -312,10 +325,13 @@ class SettingsActivity : ScaledActivity() {
             IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE),
             ContextCompat.RECEIVER_EXPORTED
         )
+        MapCacheController.addListener(mapCacheListener)
+        syncMapCacheUi(MapCacheController.current())
         refreshUpdateUi()
     }
 
     override fun onStop() {
+        MapCacheController.removeListener(mapCacheListener)
         try {
             unregisterReceiver(updateReceiver)
         } catch (_: Exception) {
@@ -683,9 +699,8 @@ class SettingsActivity : ScaledActivity() {
         }
 
         val cacheButtons = MapCacheSizeOptionsMb.mapIndexed { index, valueMb ->
-            Button(this).apply {
+            createSettingsButton(formatCacheStepLabel(valueMb), SETTINGS_BUTTON_SECONDARY).apply {
                 text = formatCacheStepLabel(valueMb)
-                isAllCaps = false
                 setOnClickListener {
                     if (!isSyncingUi) {
                         MapRenderSettingsStore.update { it.copy(cacheSizeStep = index) }
@@ -708,10 +723,11 @@ class SettingsActivity : ScaledActivity() {
             }
         }
 
-        val regionButton = Button(this).apply {
-            text = getString(R.string.map_settings_region_pick)
-            isAllCaps = false
-            setOnClickListener { showOfflineRegionPicker() }
+        val offlineDownloadsButton = createSettingsButton(
+            getString(R.string.map_settings_offline_downloads),
+            SETTINGS_BUTTON_PRIMARY
+        ).apply {
+            setOnClickListener { showOfflineDownloadsDialog() }
         }
 
         val autoZoomRows = listOf(
@@ -734,7 +750,7 @@ class SettingsActivity : ScaledActivity() {
                     createMapSliderRow(getString(R.string.map_settings_arrow_scale), mapArrowValue, arrowSeek),
                     createMapValueRow(getString(R.string.map_settings_cache), mapCacheValue, cacheRow),
                     createMapSwitchRow(mapRouteDownloadSwitch, getString(R.string.map_settings_route_download_hint)),
-                    createMapValueRow(getString(R.string.map_settings_offline_region), mapOfflineRegionValue, regionButton),
+                    createMapValueRow(getString(R.string.map_settings_offline_region), mapOfflineRegionValue, offlineDownloadsButton),
                 )
             )
         )
@@ -869,24 +885,21 @@ class SettingsActivity : ScaledActivity() {
         mapTiltValue.text = getString(R.string.map_settings_tilt_value, settings.tilt.roundToInt())
         mapArrowValue.text = settings.arrowScalePercent.toString()
         mapCacheValue.text = formatMapCacheValue(settings.cacheSizeBytes())
-        mapOfflineRegionValue.text = formatOfflineRegion(settings.offlineRegionId)
+        mapOfflineRegionValue.text = formatOfflineRegion(settings)
         mapAutoZoomSwitch.isChecked = settings.autoZoomEnabled
         mapRouteDownloadSwitch.isChecked = settings.downloadRouteEnabled
         val autoZoomVisibility = if (settings.autoZoomEnabled) View.VISIBLE else View.GONE
         mapAutoZoomConfigRows.forEach { it.visibility = autoZoomVisibility }
         refreshMapCacheButtons(settings.cacheSizeStep)
+        syncMapCacheUi(MapCacheController.current())
     }
 
     private fun refreshMapCacheButtons(selectedStep: Int) {
         mapCacheButtons.forEachIndexed { index, button ->
             val selected = index == selectedStep
-            button.setBackgroundColor(
-                if (selected) ContextCompat.getColor(this, R.color.white)
-                else Color.parseColor("#2A2A2A")
-            )
-            button.setTextColor(
-                if (selected) Color.BLACK
-                else ContextCompat.getColor(this, R.color.white)
+            styleSettingsButton(
+                button = button,
+                variant = if (selected) SETTINGS_BUTTON_PRIMARY else SETTINGS_BUTTON_SECONDARY
             )
         }
     }
@@ -915,8 +928,9 @@ class SettingsActivity : ScaledActivity() {
         return if (valueMb >= 1024) "${valueMb / 1024}G" else "${valueMb}M"
     }
 
-    private fun formatOfflineRegion(regionId: String?): String {
-        val entry = OfflineRegionCatalog.findById(this, regionId)
+    private fun formatOfflineRegion(settings: MapRenderSettings): String {
+        settings.manualOfflineBoundsOrNull()?.let { return "${it.label} · bbox" }
+        val entry = OfflineRegionCatalog.findById(this, settings.offlineRegionId)
         return entry?.displayLabel ?: getString(R.string.map_settings_region_none)
     }
 
@@ -942,7 +956,16 @@ class SettingsActivity : ScaledActivity() {
             setBackgroundColor(Color.BLACK)
             setOnItemClickListener { _, _, position, _ ->
                 val item = regionAdapter.getItem(position)
-                MapRenderSettingsStore.update { it.copy(offlineRegionId = item.id) }
+                MapRenderSettingsStore.update {
+                    it.copy(
+                        offlineRegionId = item.id,
+                        offlineManualLabel = null,
+                        offlineManualLat1 = null,
+                        offlineManualLon1 = null,
+                        offlineManualLat2 = null,
+                        offlineManualLon2 = null,
+                    )
+                }
                 syncMapUiFromPrefs()
                 dialog?.dismiss()
             }
@@ -1021,10 +1044,327 @@ class SettingsActivity : ScaledActivity() {
                 )
             }
             val item = getItem(position)
-            row.findViewById<TextView>(android.R.id.text1).text = item.regionRu
-            row.findViewById<TextView>(android.R.id.text2).text = item.countryRu
+            row.findViewById<TextView>(android.R.id.text1).text = item.name
+            row.findViewById<TextView>(android.R.id.text2).text = item.secondaryLabel
             return row
         }
+    }
+
+    private inner class OfflineDownloadsAdapter(
+        private val items: MutableList<OfflineRegionEntry>,
+        private var snapshot: MapCacheSnapshot,
+    ) : BaseAdapter() {
+        override fun getCount(): Int = items.size
+
+        override fun getItem(position: Int): OfflineRegionEntry = items[position]
+
+        override fun getItemId(position: Int): Long = position.toLong()
+
+        fun replace(entries: List<OfflineRegionEntry>) {
+            items.clear()
+            items.addAll(entries)
+            notifyDataSetChanged()
+        }
+
+        fun updateSnapshot(snapshot: MapCacheSnapshot) {
+            this.snapshot = snapshot
+            notifyDataSetChanged()
+        }
+
+        override fun getView(position: Int, convertView: View?, parent: ViewGroup?): View {
+            val holder = convertView?.tag as? OfflineDownloadRowViews
+            val row = if (holder == null) {
+                createOfflineDownloadRow()
+            } else {
+                convertView as LinearLayout
+            }
+            val views = row.tag as OfflineDownloadRowViews
+            val item = getItem(position)
+            val downloaded = item.id in snapshot.offlineDownloadedRegionIds
+            val isCurrent = snapshot.offlineDownloadedRegionId == item.id
+            val inProgress = isCurrent && snapshot.offlineDownloadStatus != OFFLINE_STATUS_IDLE
+            views.title.text = item.name
+            views.subtitle.text = offlineRegionDetailsText(item, downloaded, isCurrent, inProgress)
+            views.progress.visibility = if (inProgress) View.VISIBLE else View.GONE
+            views.button.apply {
+                visibility = if (inProgress) View.GONE else View.VISIBLE
+                isEnabled = !inProgress
+                text = if (downloaded) {
+                    getString(R.string.map_settings_offline_delete_short)
+                } else {
+                    getString(R.string.map_settings_offline_download_short)
+                }
+                styleSettingsButton(
+                    button = this,
+                    variant = if (downloaded) SETTINGS_BUTTON_DANGER else SETTINGS_BUTTON_PRIMARY
+                )
+                setOnClickListener {
+                    if (downloaded) {
+                        MapCacheController.deleteOfflineRegion(item.id)
+                    } else {
+                        MapCacheController.startOfflineRegionDownload(item)
+                    }
+                }
+            }
+            return row
+        }
+
+        private fun createOfflineDownloadRow(): LinearLayout {
+            val title = TextView(this@SettingsActivity).apply {
+                setTextColor(ContextCompat.getColor(context, R.color.white))
+                textSize = 16f
+                setTypeface(typeface, android.graphics.Typeface.BOLD)
+            }
+            val subtitle = TextView(this@SettingsActivity).apply {
+                setTextColor(Color.parseColor("#99FFFFFF"))
+                textSize = 12f
+            }
+            val button = Button(this@SettingsActivity).apply {
+                isAllCaps = false
+                minHeight = dp(44)
+                minWidth = dp(96)
+            }
+            val progress = ProgressBar(this@SettingsActivity).apply {
+                isIndeterminate = true
+                visibility = View.GONE
+            }
+            return LinearLayout(this@SettingsActivity).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(dp(16), dp(12), dp(12), dp(12))
+                background = roundedDrawable(
+                    fill = Color.parseColor("#171717"),
+                    stroke = Color.parseColor("#2A2A2A"),
+                    radiusDp = 10
+                )
+                addView(
+                    LinearLayout(context).apply {
+                        orientation = LinearLayout.VERTICAL
+                        addView(title)
+                        addView(subtitle)
+                    },
+                    LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+                )
+                addView(
+                    FrameLayout(context).apply {
+                        addView(
+                            button,
+                            FrameLayout.LayoutParams(
+                                FrameLayout.LayoutParams.MATCH_PARENT,
+                                FrameLayout.LayoutParams.WRAP_CONTENT,
+                                Gravity.CENTER
+                            )
+                        )
+                        addView(
+                            progress,
+                            FrameLayout.LayoutParams(dp(44), dp(44), Gravity.CENTER)
+                        )
+                    },
+                    LinearLayout.LayoutParams(dp(108), LinearLayout.LayoutParams.WRAP_CONTENT)
+                )
+                tag = OfflineDownloadRowViews(title, subtitle, button, progress)
+            }
+        }
+
+        private fun offlineRegionDetailsText(
+            item: OfflineRegionEntry,
+            downloaded: Boolean,
+            isCurrent: Boolean,
+            inProgress: Boolean,
+        ): String {
+            val statusText = when {
+                inProgress && snapshot.offlineDownloadStatus == OFFLINE_STATUS_RESOLVING -> {
+                    getString(R.string.map_settings_offline_row_preparing)
+                }
+                inProgress && snapshot.offlineDownloadStatus == OFFLINE_STATUS_DOWNLOADING -> {
+                    getString(
+                        R.string.map_settings_offline_row_downloading,
+                        snapshot.offlineDownloadPercent,
+                        snapshot.offlineDownloadCompletedResources,
+                        snapshot.offlineDownloadRequiredResources,
+                    )
+                }
+                isCurrent && !snapshot.offlineLastError.isNullOrBlank() -> {
+                    getString(R.string.map_settings_offline_row_error, snapshot.offlineLastError.orEmpty())
+                }
+                else -> null
+            }
+            val sizeText = if (downloaded) {
+                snapshot.offlineDownloadedRegionSizesBytes[item.id]?.let { formatStorageBytes(it) }
+                    ?: getString(R.string.map_settings_offline_size_unknown)
+            } else {
+                estimateOfflineSizeText(item)
+            }
+            return listOfNotNull(item.countryRu, statusText, sizeText).joinToString(" · ")
+        }
+
+        private fun estimateOfflineSizeText(item: OfflineRegionEntry): String {
+            return OfflineRegionSizeEstimator
+                .estimate(this@SettingsActivity, item.boundsPreview(), currentOfflineMaxZoom())
+                .displayText(this@SettingsActivity)
+        }
+    }
+
+    private data class OfflineDownloadRowViews(
+        val title: TextView,
+        val subtitle: TextView,
+        val button: Button,
+        val progress: ProgressBar,
+    )
+
+    private fun createMapButtonRow(buttons: List<Button>): View {
+        return LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            weightSum = buttons.size.toFloat()
+            buttons.forEachIndexed { index, button ->
+                addView(
+                    button,
+                    LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+                        if (index > 0) marginStart = dp(8)
+                    }
+                )
+            }
+        }
+    }
+
+    private fun createSettingsButton(
+        label: String,
+        variant: Int = SETTINGS_BUTTON_SECONDARY,
+    ): Button {
+        return Button(this).apply {
+            text = label
+            isAllCaps = false
+            minHeight = dp(44)
+            setPadding(dp(14), dp(8), dp(14), dp(8))
+            styleSettingsButton(this, variant)
+        }
+    }
+
+    private fun styleSettingsButton(button: Button, variant: Int) {
+        val fill = when (variant) {
+            SETTINGS_BUTTON_PRIMARY -> ContextCompat.getColor(this, R.color.hud_blue)
+            SETTINGS_BUTTON_DANGER -> Color.parseColor("#3A1515")
+            else -> Color.parseColor("#222222")
+        }
+        val stroke = when (variant) {
+            SETTINGS_BUTTON_PRIMARY -> Color.parseColor("#4EA3FF")
+            SETTINGS_BUTTON_DANGER -> Color.parseColor("#FF4433")
+            else -> Color.parseColor("#3A3A3A")
+        }
+        val textColor = when (variant) {
+            SETTINGS_BUTTON_DANGER -> Color.parseColor("#FFE1E1")
+            else -> ContextCompat.getColor(this, R.color.white)
+        }
+        button.background = roundedDrawable(fill = fill, stroke = stroke, radiusDp = 10)
+        button.setTextColor(textColor)
+    }
+
+    private fun roundedDrawable(fill: Int, stroke: Int, radiusDp: Int): GradientDrawable {
+        return GradientDrawable().apply {
+            shape = GradientDrawable.RECTANGLE
+            setColor(fill)
+            setStroke(dp(1), stroke)
+            cornerRadius = dp(radiusDp).toFloat()
+        }
+    }
+
+    private fun syncMapCacheUi(snapshot: MapCacheSnapshot) {
+        if (!::mapOfflineRegionValue.isInitialized) return
+        mapOfflineRegionValue.text = getString(
+            R.string.map_settings_offline_downloaded_count,
+            snapshot.offlineDownloadedRegionIds.size
+        )
+    }
+
+    private fun currentOfflineMaxZoom(): Double {
+        val settings = MapRenderSettingsStore.current()
+        return if (settings.autoZoomEnabled) {
+            maxOf(settings.autoZoomAt0Kmh, settings.autoZoomAt60Kmh, settings.autoZoomAt90Kmh)
+        } else {
+            settings.zoom
+        }.coerceIn(MAP_ZOOM_MIN, MAP_ZOOM_MAX)
+    }
+
+    private fun showOfflineDownloadsDialog() {
+        val allEntries = OfflineRegionCatalog.all(this)
+        if (allEntries.isEmpty()) {
+            showToast(R.string.map_settings_region_empty)
+            return
+        }
+        val adapter = OfflineDownloadsAdapter(
+            items = allEntries.toMutableList(),
+            snapshot = MapCacheController.current()
+        )
+        offlineDownloadsAdapter = adapter
+        val searchInput = EditText(this).apply {
+            hint = getString(R.string.map_settings_region_search)
+            setTextColor(ContextCompat.getColor(this@SettingsActivity, R.color.white))
+            setHintTextColor(Color.parseColor("#66FFFFFF"))
+            background = roundedDrawable(
+                fill = Color.parseColor("#111111"),
+                stroke = ContextCompat.getColor(this@SettingsActivity, R.color.hud_blue),
+                radiusDp = 10
+            )
+            setPadding(dp(16), dp(16), dp(16), dp(16))
+            textSize = 18f
+        }
+        val listView = ListView(this).apply {
+            dividerHeight = 0
+            setAdapter(adapter)
+            setBackgroundColor(Color.parseColor("#101010"))
+            cacheColorHint = Color.TRANSPARENT
+        }
+        searchInput.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                adapter.replace(OfflineRegionCatalog.search(this@SettingsActivity, s?.toString().orEmpty()))
+            }
+            override fun afterTextChanged(s: Editable?) = Unit
+        })
+        val dialog = AlertDialog.Builder(this)
+            .setTitle(R.string.map_settings_offline_downloads)
+            .setView(
+                LinearLayout(this).apply {
+                    orientation = LinearLayout.VERTICAL
+                    background = roundedDrawable(
+                        fill = Color.parseColor("#101010"),
+                        stroke = ContextCompat.getColor(this@SettingsActivity, R.color.hud_blue),
+                        radiusDp = 12
+                    )
+                    setPadding(dp(24), dp(24), dp(24), dp(24))
+                    addView(
+                        searchInput,
+                        LinearLayout.LayoutParams(
+                            LinearLayout.LayoutParams.MATCH_PARENT,
+                            LinearLayout.LayoutParams.WRAP_CONTENT
+                        ).apply {
+                            topMargin = dp(12)
+                        }
+                    )
+                    addView(
+                        listView,
+                        LinearLayout.LayoutParams(
+                            LinearLayout.LayoutParams.MATCH_PARENT,
+                            dp(520)
+                        ).apply {
+                            topMargin = dp(12)
+                        }
+                    )
+                }
+            )
+            .setNegativeButton(R.string.map_settings_region_close, null)
+            .create()
+        dialog.setOnDismissListener {
+            if (offlineDownloadsAdapter === adapter) {
+                offlineDownloadsAdapter = null
+            }
+        }
+        dialog.show()
+        listOf(AlertDialog.BUTTON_NEGATIVE).forEach { which ->
+            dialog.getButton(which)?.let { styleSettingsButton(it, SETTINGS_BUTTON_SECONDARY) }
+        }
+        dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
+        dialog.window?.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
     }
 
     private fun exportSettingsToDownloads() {

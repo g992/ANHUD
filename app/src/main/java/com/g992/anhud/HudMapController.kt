@@ -43,6 +43,7 @@ private const val MAP_ROUTE_COLOR_PROP = "routeColor"
 private const val MAP_MAX_FPS = 15
 private const val MAP_MAX_LAST_KNOWN_LOCATION_AGE_MS = 10_000L
 private const val MAP_TRACKING_TOP_PADDING_RATIO = 0.97f
+private const val HUD_MAP_TAG = "HudMapController"
 
 class HudMapController(
     private val context: Context,
@@ -72,6 +73,7 @@ class HudMapController(
     private var currentSnapshot = MapRouteTelemetryStore.current()
     private var currentLocation: Location? = currentSnapshot.startLocation
     private var currentSpeedBucketKmh: Int = initialSpeedBucket(NavigationHudStore.snapshot().speedKmh)
+    private var lastRouteRenderDebugKey: String? = null
 
     private val settingsListener: (MapRenderSettings) -> Unit = { settings ->
         currentSettings = settings
@@ -80,6 +82,11 @@ class HudMapController(
     }
 
     private val routeListener: (MapRouteTelemetrySnapshot) -> Unit = { snapshot ->
+        Log.d(
+            HUD_MAP_TAG,
+            "route snapshot received: state=${snapshot.state} hasRoute=${snapshot.hasRoute} " +
+                "points=${snapshot.routePoints.size} jams=${snapshot.routeJams.size}"
+        )
         currentSnapshot = snapshot
         applyTelemetrySnapshot()
     }
@@ -158,6 +165,7 @@ class HudMapController(
         map.uiSettings.setLogoEnabled(false)
         map.uiSettings.setAttributionEnabled(false)
         map.setStyle(buildHudMapStyle(context)) { style ->
+            Log.d(HUD_MAP_TAG, "map style loaded")
             ensureRouteLayer(style)
             enableLocationComponent(map, style)
             startDeviceLocationTracking()
@@ -211,8 +219,15 @@ class HudMapController(
     }
 
     private fun applyTelemetrySnapshot() {
-        val style = mapLibreMap?.style ?: return
-        val source = style.getSourceAs<GeoJsonSource>(MAP_ROUTE_SOURCE_ID) ?: return
+        val style = mapLibreMap?.style ?: run {
+            Log.d(HUD_MAP_TAG, "route render skipped: style is not ready, points=${currentSnapshot.routePoints.size}")
+            return
+        }
+        ensureRouteLayer(style)
+        val source = style.getSourceAs<GeoJsonSource>(MAP_ROUTE_SOURCE_ID) ?: run {
+            Log.w(HUD_MAP_TAG, "route render skipped: source is missing")
+            return
+        }
         val points = currentSnapshot.routePoints
         if (points.size >= 2) {
             val visibleSegments = trimRouteSegments(points, currentSnapshot.routeJams, currentLocation)
@@ -228,13 +243,26 @@ class HudMapController(
                     addStringProperty(MAP_ROUTE_COLOR_PROP, routeJamColor(segment.jam))
                 }
             }
+            logRouteRender(points.size, segmentFeatures.size)
             source.setGeoJson(FeatureCollection.fromFeatures(segmentFeatures))
         } else {
+            logRouteRender(points.size, 0)
             source.setGeoJson(FeatureCollection.fromFeatures(emptyArray()))
         }
         resolveDisplayLocation()?.let { location ->
             locationComponent?.forceLocationUpdate(location)
         }
+    }
+
+    private fun logRouteRender(pointCount: Int, visibleSegmentCount: Int) {
+        val debugKey = "${currentSnapshot.routeToken.orEmpty()}|${currentSnapshot.state}|$pointCount|$visibleSegmentCount"
+        if (debugKey == lastRouteRenderDebugKey) return
+        lastRouteRenderDebugKey = debugKey
+        Log.d(
+            HUD_MAP_TAG,
+            "route rendered: state=${currentSnapshot.state} points=$pointCount visibleSegments=$visibleSegmentCount " +
+                "hasLocation=${currentLocation != null}"
+        )
     }
 
     private fun applyLocationStyle() {
@@ -285,7 +313,7 @@ class HudMapController(
             runCatching {
                 manager.requestLocationUpdates(provider, 1000L, 3f, listener, android.os.Looper.getMainLooper())
             }.onFailure {
-                Log.w("HudMapController", "requestLocationUpdates failed for $provider: ${it.message}")
+                Log.w(HUD_MAP_TAG, "requestLocationUpdates failed for $provider: ${it.message}")
             }
         }
         applyTelemetrySnapshot()

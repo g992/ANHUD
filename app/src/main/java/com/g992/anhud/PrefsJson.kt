@@ -296,6 +296,11 @@ object PrefsJson {
         putInt("cache_size_step", settings.cacheSizeStep)
         putBoolean("download_route_enabled", settings.downloadRouteEnabled)
         putString("offline_region_id", settings.offlineRegionId)
+        putString("offline_manual_label", settings.offlineManualLabel)
+        settings.offlineManualLat1?.let { putFloat("offline_manual_lat1", it) }
+        settings.offlineManualLon1?.let { putFloat("offline_manual_lon1", it) }
+        settings.offlineManualLat2?.let { putFloat("offline_manual_lat2", it) }
+        settings.offlineManualLon2?.let { putFloat("offline_manual_lon2", it) }
         return items
     }
 
