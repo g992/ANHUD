@@ -53,5 +53,8 @@ YN_Patch
 /YN_src_extracted/
 /YM_src
 /YN_src
+<<<<<<< HEAD
 /src_button/
+=======
 /com/android/builder/
+>>>>>>> hur_navigation

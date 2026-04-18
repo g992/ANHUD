@@ -33,6 +33,7 @@ class NavigationService : Service() {
             addAction(NavigationReceiver.ACTION_YANDEX_ROUTE_POLYLINE)
             addAction(NavigationReceiver.ACTION_NATIVE_NAV_STOP)
             addAction(NavigationReceiver.ACTION_HUDSPEED_UPDATE)
+            addAction(NavigationReceiver.ACTION_HEADUNIT_NAVIGATION_UPDATE)
         }
         ContextCompat.registerReceiver(
             this,
