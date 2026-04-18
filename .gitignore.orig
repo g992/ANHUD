@@ -1,0 +1,60 @@
+# Gradle
+.gradle/
+build/
+**/build/
+**/out/
+**/bin/
+**/gen/
+
+# Android Studio / IntelliJ
+*.iml
+.idea/
+!.idea/codeStyles/
+!.idea/inspectionProfiles/
+
+# Local config
+local.properties
+
+# Native build
+.externalNativeBuild/
+.cxx/
+
+# Captures
+captures/
+
+# Package files
+*.apk
+*.ap_
+*.aab
+
+# Java/Kotlin
+*.class
+*.dex
+
+# OS files
+.DS_Store
+
+./CLAUDE.md
+./.claude/*
+/yandex_maps_mod_workspace/
+/YN_decompile/
+/MODIFICATIONS.md
+/my-release-key.jks
+/CLAUDE.md
+/apply_changes.sh
+/.claude/
+/app/release/
+/.kotlin/
+
+YN_Patch/*
+YN_Patch
+/YN_Patch/
+/YN_src_decompiled/
+/YN_src_extracted/
+/YM_src
+/YN_src
+<<<<<<< HEAD
+/src_button/
+=======
+/com/android/builder/
+>>>>>>> hur_navigation

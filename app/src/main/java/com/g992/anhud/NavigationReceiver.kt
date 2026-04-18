@@ -297,47 +297,61 @@ class NavigationReceiver : BroadcastReceiver() {
             ACTION_HEADUNIT_NAVIGATION_UPDATE -> {
                 try {
                     val distanceMeters = intent.getIntExtra(EXTRA_HEADUNIT_DISTANCE_METERS, -1)
-                    val timeSeconds = intent.getIntExtra(EXTRA_HEADUNIT_TIME_SECONDS, -1)
+                    val totalSeconds = intent.getLongExtra(EXTRA_HEADUNIT_ARRIVAL_TIME_SECONDS, -1)
+                    val rawTotalTime = intent.getStringExtra(EXTRA_HEADUNIT_ARRIVAL_TIME_RAW)
+                    val maneuverTime = intent.getLongExtra(EXTRA_HEADUNIT_STEP_TIME_SECONDS, -1)
                     val road = normalizeText(intent.getStringExtra(EXTRA_HEADUNIT_ROAD).orEmpty())
                     val nextEventType = intent.getIntExtra(EXTRA_HEADUNIT_NEXT_EVENT_TYPE, 0)
                     val turnSide = intent.getIntExtra(EXTRA_HEADUNIT_TURN_SIDE, TURN_SIDE_UNSPECIFIED)
                     val turnNumber = intent.getIntExtra(EXTRA_HEADUNIT_TURN_NUMBER, -1)
                     val turnAngle = intent.getIntExtra(EXTRA_HEADUNIT_TURN_ANGLE, -1)
                     val actionText = normalizeText(intent.getStringExtra(EXTRA_HEADUNIT_ACTION_TEXT).orEmpty())
-                    Log.d(TAG, "Headunit nav: distance=$distanceMeters m time=$timeSeconds s road=\"$road\" eventType=$nextEventType side=$turnSide action=\"$actionText\"")
+                    Log.d(TAG, "Headunit nav: distance=$distanceMeters m time=$totalSeconds s road=\"$road\" eventType=$nextEventType side=$turnSide action=\"$actionText\"")
                     UiLogStore.append(
                         LogCategory.NAVIGATION,
-                        "headunit: ${distanceMeters}м ${timeSeconds}с улица=\"$road\" event=$nextEventType side=$turnSide действие=\"$actionText\""
+                        "headunit: ${distanceMeters}м ${totalSeconds}с улица=\"$road\" event=$nextEventType side=$turnSide действие=\"$actionText\""
                     )
-                    val primaryText = when {
-                        distanceMeters >= 0 && actionText.isNotBlank() -> "$distanceMeters м — $actionText"
-                        distanceMeters >= 0 -> "$distanceMeters м"
-                        actionText.isNotBlank() -> actionText
-                        else -> ""
+                    if (distanceMeters == -1 && nextEventType == 0) {
+                        endNavigation(context, action, "HUR: стоп")
                     }
-                    val rawNextText = if (distanceMeters >= 0) "$distanceMeters м" else ""
-                    val distanceUnit = if (distanceMeters >= 0) "м" else ""
-                    val rawTime = if (timeSeconds >= 0) "${timeSeconds} сек" else ""
-                    val maneuverTypeKey = headunitEventTypeToManeuverKey(nextEventType, turnSide, turnNumber, turnAngle, distanceMeters)
-                    NavigationHudStore.update { state ->
-                        state.copy(
-                            // Headunit doesn't provide bitmap; force icon resolution from maneuverType.
-                            maneuverBitmap = null,
-                            primaryText = primaryText.ifBlank { state.primaryText },
-                            secondaryText = road.ifBlank { state.secondaryText },
-                            maneuverType = maneuverTypeKey.ifBlank { state.maneuverType },
-                            source = SOURCE_HEADUNIT,
-                            routeActive = true,
-                            lastUpdated = System.currentTimeMillis(),
-                            lastAction = action,
-                            rawNextText = rawNextText.ifBlank { state.rawNextText },
-                            rawNextStreet = road.ifBlank { state.rawNextStreet },
-                            rawTime = rawTime.ifBlank { state.rawTime },
-                            distanceUnit = distanceUnit.ifBlank { state.distanceUnit }
+                    else {
+                        val primaryText = when {
+                            distanceMeters >= 0 && actionText.isNotBlank() -> "$distanceMeters м — $actionText"
+                            distanceMeters >= 0 -> "$distanceMeters м"
+                            actionText.isNotBlank() -> actionText
+                            else -> ""
+                        }
+                        val rawNextText = if (distanceMeters >= 0) "$distanceMeters м" else ""
+                        val distanceUnit = if (distanceMeters >= 0) "м" else ""
+                        val rawTime = rawTotalTime ?: ""
+                        val maneuverTypeKey = headunitEventTypeToManeuverKey(
+                            nextEventType,
+                            turnSide,
+                            turnNumber,
+                            turnAngle
                         )
+                        NavigationHudStore.update { state ->
+                            state.copy(
+                                // Headunit doesn't provide bitmap; force icon resolution from maneuverType.
+                                maneuverBitmap = null,
+                                primaryText = primaryText.ifBlank { state.primaryText },
+                                secondaryText = road.ifBlank { state.secondaryText },
+                                maneuverType = maneuverTypeKey.ifBlank { state.maneuverType },
+                                source = SOURCE_HEADUNIT,
+                                routeActive = true,
+                                lastUpdated = System.currentTimeMillis(),
+                                lastAction = action,
+                                rawNextText = rawNextText.ifBlank { state.rawNextText },
+                                rawNextStreet = road.ifBlank { state.rawNextStreet },
+                                time = if (maneuverTime > 0) "$maneuverTime" else "",
+                                arrival = rawTime.ifBlank { state.rawTime },
+                                //rawArrival = if (maneuverTime > 0) "$maneuverTime сек" else "",
+                                distanceUnit = distanceUnit.ifBlank { state.distanceUnit },
+                            )
+                        }
+                        val state = NavigationHudStore.snapshot()
+                        maybeUpdateNativeNavigation(context, state, NativeNavUpdateTrigger.DISTANCE)
                     }
-                    val state = NavigationHudStore.snapshot()
-                    maybeUpdateNativeNavigation(context, state, NativeNavUpdateTrigger.DISTANCE)
                 } catch (e: Exception) {
                     Log.e(TAG, "Headunit nav: failed to process broadcast", e)
                     UiLogStore.append(LogCategory.NAVIGATION, "headunit ошибка: ${e.message}")
@@ -474,7 +488,9 @@ class NavigationReceiver : BroadcastReceiver() {
         private const val ACTION_NAV_UPDATES_TIMEOUT = "nav_updates_timeout"
 
         private const val EXTRA_HEADUNIT_DISTANCE_METERS = "distance_meters"
-        private const val EXTRA_HEADUNIT_TIME_SECONDS = "time_seconds"
+        private const val EXTRA_HEADUNIT_ARRIVAL_TIME_SECONDS = "total_time_seconds"
+        private const val EXTRA_HEADUNIT_STEP_TIME_SECONDS = "time_seconds"
+        private const val EXTRA_HEADUNIT_ARRIVAL_TIME_RAW = "estimated_arrival"
         private const val EXTRA_HEADUNIT_ROAD = "road"
         private const val EXTRA_HEADUNIT_NEXT_EVENT_TYPE = "next_event_type"
         private const val EXTRA_HEADUNIT_ACTION_TEXT = "action_text"
@@ -566,8 +582,7 @@ class NavigationReceiver : BroadcastReceiver() {
             nextEventType: Int,
             turnSide: Int,
             turnNumber: Int,
-            turnAngle: Int,
-            distanceMeters: Int
+            turnAngle: Int
         ): String {
             val isLeft = turnSide == TURN_SIDE_LEFT
             val isRight = turnSide == TURN_SIDE_RIGHT
