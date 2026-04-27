@@ -163,6 +163,7 @@ object MapCacheController {
         notifyListeners()
         ioExecutor.execute {
             try {
+                selectReachableMapTileProvider(appContext)
                 val resolved = GeoBoundariesRegionResolver.resolveSelected(appContext, settings)
                 mainHandler.post {
                     if (operationToken != offlineOperationToken) return@post
@@ -231,6 +232,7 @@ object MapCacheController {
         notifyListeners()
         ioExecutor.execute {
             try {
+                selectReachableMapTileProvider(appContext)
                 val resolved = resolve()
                 mainHandler.post {
                     if (operationToken != offlineOperationToken) return@post
@@ -526,8 +528,12 @@ object MapCacheController {
     private fun createOfflineRegion(resolved: ResolvedOfflineGeometry, operationToken: Long) {
         val settings = MapRenderSettingsStore.current()
         val offlineMaxZoom = resolveOfflinePackMaxZoom(settings)
-        val offlineStyleUrl = prepareOfflineStyleUrl()
-        Log.d(MAP_CACHE_TAG, "create offline region label=${resolved.label} regionId=${resolved.regionId} maxZoom=$offlineMaxZoom styleUrl=$offlineStyleUrl")
+        val provider = currentMapTileProvider(appContext)
+        val offlineStyleUrl = prepareOfflineStyleUrl(provider)
+        Log.d(
+            MAP_CACHE_TAG,
+            "create offline region label=${resolved.label} regionId=${resolved.regionId} maxZoom=$offlineMaxZoom provider=${provider.id} styleUrl=$offlineStyleUrl"
+        )
         val definition = OfflineGeometryRegionDefinition(
             offlineStyleUrl,
             resolved.geometry,
@@ -555,6 +561,8 @@ object MapCacheController {
                         region = offlineRegion,
                         label = resolved.label,
                         regionId = resolved.regionId,
+                        resolved = resolved,
+                        provider = provider,
                         operationToken = operationToken,
                     )
                     offlineRegion.setDownloadState(OfflineRegion.STATE_ACTIVE)
@@ -578,6 +586,8 @@ object MapCacheController {
         region: OfflineRegion,
         label: String,
         regionId: String?,
+        resolved: ResolvedOfflineGeometry? = null,
+        provider: MapTileProvider? = null,
         operationToken: Long,
     ) {
         region.setDeliverInactiveMessages(true)
@@ -597,6 +607,13 @@ object MapCacheController {
             override fun onError(error: OfflineRegionError) {
                 if (operationToken != offlineOperationToken && region != currentOfflineRegion) return
                 Log.e(MAP_CACHE_TAG, "offline observer error label=$label reason=${error.reason} message=${error.message}")
+                if (resolved != null &&
+                    provider != null &&
+                    shouldRetryOfflineWithFallback(error) &&
+                    retryOfflineRegionWithFallback(region, resolved, provider, operationToken, error.message.orEmpty())
+                ) {
+                    return
+                }
                 snapshot = snapshot.copy(
                     offlineDownloadStatus = OFFLINE_STATUS_IDLE,
                     offlineDownloadedLabel = label,
@@ -710,6 +727,57 @@ object MapCacheController {
         )
     }
 
+    private fun shouldRetryOfflineWithFallback(error: OfflineRegionError): Boolean {
+        val reason = error.reason.orEmpty().lowercase()
+        val message = error.message.orEmpty().lowercase()
+        return "timeout" in reason ||
+            "server" in reason ||
+            "connection" in reason ||
+            "timeout" in message ||
+            "timed out" in message ||
+            "connection timed out" in message
+    }
+
+    private fun retryOfflineRegionWithFallback(
+        region: OfflineRegion,
+        resolved: ResolvedOfflineGeometry,
+        provider: MapTileProvider,
+        operationToken: Long,
+        errorMessage: String,
+    ): Boolean {
+        val fallback = advanceMapTileProvider(appContext, provider.id) ?: return false
+        Log.w(
+            MAP_CACHE_TAG,
+            "offline provider ${provider.id} failed for ${resolved.label}: $errorMessage; retrying with ${fallback.id}"
+        )
+        snapshot = snapshot.copy(
+            offlineDownloadStatus = OFFLINE_STATUS_RESOLVING,
+            offlineDownloadedLabel = resolved.label,
+            offlineDownloadedRegionId = resolved.regionId,
+            offlineLastError = "Источник ${provider.displayName} недоступен, пробуем ${fallback.displayName}"
+        )
+        notifyListeners()
+        runCatching { region.setDownloadState(OfflineRegion.STATE_INACTIVE) }
+        region.delete(object : OfflineRegion.OfflineRegionDeleteCallback {
+            override fun onDelete() {
+                if (operationToken != offlineOperationToken) return
+                createOfflineRegion(resolved, operationToken)
+            }
+
+            override fun onError(error: String) {
+                Log.e(MAP_CACHE_TAG, "offline region delete before fallback failed: $error")
+                snapshot = snapshot.copy(
+                    offlineDownloadStatus = OFFLINE_STATUS_IDLE,
+                    offlineDownloadedLabel = resolved.label,
+                    offlineDownloadedRegionId = resolved.regionId,
+                    offlineLastError = error,
+                )
+                notifyListeners()
+            }
+        })
+        return true
+    }
+
     private fun refreshCompletedOfflineRegionIds(regions: List<OfflineRegion>) {
         if (regions.isEmpty()) return
         val completedIds = mutableSetOf<String>()
@@ -782,6 +850,7 @@ object MapCacheController {
             .put("owner", OFFLINE_METADATA_OWNER)
             .put("label", resolved.label)
             .put("regionId", resolved.regionId)
+            .put("providerId", currentMapTileProvider(appContext).id)
             .put("maxZoom", maxZoom)
             .put("estimatedTileCount", estimatedTileCount)
             .toString()
@@ -832,8 +901,8 @@ object MapCacheController {
         return maxDynamicZoom.coerceIn(MAP_ZOOM_MIN, MAP_ZOOM_MAX)
     }
 
-    private fun prepareOfflineStyleUrl(): String {
-        return ensureHudMapStyleCached(appContext)
+    private fun prepareOfflineStyleUrl(provider: MapTileProvider): String {
+        return ensureHudMapStyleCached(appContext, provider)
     }
 
     private fun buildBounds(points: List<LatLng>): LatLngBounds {

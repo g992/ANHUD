@@ -164,6 +164,12 @@
     <string name="map_settings_cache">Размер кэша карт</string>
     <string name="map_settings_route_download">Подгружать маршрут в кэш</string>
     <string name="map_settings_route_download_hint">При включении приложение заранее прогревает кэш вдоль активного маршрута.</string>
+    <string name="map_settings_route_snap">Привязывать маршрут к дорогам</string>
+    <string name="map_settings_route_snap_hint">Перед отрисовкой маршрут подгоняется к ближайшим видимым дорогам карты.</string>
+    <string name="map_settings_location_snap">Привязывать стрелку к дороге</string>
+    <string name="map_settings_location_snap_hint">Маркер положения визуально подгоняется к ближайшей дороге карты; GPS-данные не меняются.</string>
+    <string name="map_settings_route_snap_distance">Дистанция привязки</string>
+    <string name="map_settings_route_snap_distance_value">%1$d м</string>
     <string name="map_settings_offline_region">Оффлайн-регион</string>
     <string name="map_settings_offline_downloads">Оффлайн загрузки</string>
     <string name="map_settings_region_pick">Выбрать регион</string>
@@ -198,7 +204,7 @@
     <string name="nav_updates_end_timeout_hint">0 - отключить, 1-360 секунд. Завершает поездку, если нет интентов навигатора, даже при активном уведомлении</string>
     <string name="speed_correction_label">Корректировка скорости спидометра</string>
     <string name="speed_correction_value">%1$+d км/ч</string>
-    <string name="speedometer_freeze_timeout_label">Таймаут зависания спидометра (gbinder)</string>
+    <string name="speedometer_freeze_timeout_label">Таймаут зависания спидометра (ECarX)</string>
     <string name="speedometer_freeze_timeout_hint">0 - отключить, 1-360 секунд. Если скорость не меняется, выполняется переподписка на датчик.</string>
     <string name="speed_from_gps_label">Брать скорость по GPS</string>
     <string name="speed_from_gps_hint">Скорость рассчитывается по дельте координат GPS, корректировка не применяется.</string>

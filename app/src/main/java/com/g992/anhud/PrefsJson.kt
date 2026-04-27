@@ -295,6 +295,9 @@ object PrefsJson {
         putInt("arrow_scale_percent", settings.arrowScalePercent)
         putInt("cache_size_step", settings.cacheSizeStep)
         putBoolean("download_route_enabled", settings.downloadRouteEnabled)
+        putBoolean("snap_route_to_roads_enabled", settings.snapRouteToRoadsEnabled)
+        putBoolean("snap_location_to_roads_enabled", settings.snapLocationToRoadsEnabled)
+        putInt("route_snap_distance_meters", settings.routeSnapDistanceMeters)
         putString("offline_region_id", settings.offlineRegionId)
         putString("offline_manual_label", settings.offlineManualLabel)
         settings.offlineManualLat1?.let { putFloat("offline_manual_lat1", it) }

@@ -15,13 +15,15 @@ private const val MIN_ARROW_NATIVE_UPDATE_INTERVAL_MS = 3000L
 class NavigationReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val action = intent.action.orEmpty()
+        touchNavigatorIntentTimeout(context, action)
+        if (action.startsWith("com.yandex.") && shouldSuppressDuplicateYandexIntent(intent, action)) {
+            return
+        }
         if (action.startsWith("com.yandex.")) {
             Log.d(TAG, "Yandex intent: $action extras=${formatExtras(intent)}")
         } else {
             Log.d(TAG, "not Yandex intent: $action extras=${formatExtras(intent)}")
-
         }
-        touchNavigatorIntentTimeout(context, action)
         when (action) {
             ACTION_NAV_UPDATE, ACTION_NAV_UPDATE_DEBUG -> {
                 Log.d(
@@ -389,6 +391,7 @@ class NavigationReceiver : BroadcastReceiver() {
         private const val TAG = "NavigationReceiver"
         private const val NATIVE_NAV_DEBOUNCE_MS = 100L
         private const val STREET_RESET_DELAY_MS = 2000L
+        private const val YANDEX_DUPLICATE_SUPPRESSION_MS = 400L
 
         private val nativeNavHandler = android.os.Handler(android.os.Looper.getMainLooper())
         private var pendingNativeNavUpdate: Runnable? = null
@@ -412,6 +415,7 @@ class NavigationReceiver : BroadcastReceiver() {
         private var lastNavigatorIntentAt: Long = 0L
         @Volatile
         private var lastNativeNavPayload: NativeNavPayload? = null
+        private val recentYandexPayloads = LinkedHashMap<String, Long>()
 
         const val ACTION_NAV_UPDATE = "plus.monjaro.NAVIGATION_UPDATE"
         const val ACTION_NAV_UPDATE_DEBUG = "debug.monjaro.NAVIGATION_UPDATE"
@@ -587,6 +591,59 @@ class NavigationReceiver : BroadcastReceiver() {
                 .replace(Regex("\\s+"), " ")
                 .trim()
             return normalized
+        }
+
+        private fun shouldSuppressDuplicateYandexIntent(intent: Intent, action: String): Boolean {
+            val signature = buildYandexDuplicateSignature(intent, action) ?: return false
+            val now = System.currentTimeMillis()
+            pruneRecentYandexPayloads(now)
+            val previousAt = recentYandexPayloads.put(signature, now)
+            return previousAt != null && now - previousAt < YANDEX_DUPLICATE_SUPPRESSION_MS
+        }
+
+        private fun buildYandexDuplicateSignature(intent: Intent, action: String): String? {
+            return when (action) {
+                ACTION_YANDEX_MANEUVER -> {
+                    val bitmap = getBitmapExtra(intent, EXTRA_MANEUVER_BITMAP)
+                    val bitmapKey = if (bitmap != null) {
+                        "${bitmap.width}x${bitmap.height}:${bitmap.config}"
+                    } else {
+                        "none"
+                    }
+                    val maneuverType = normalizeText(intent.getStringExtra(EXTRA_MANEUVER_TYPE).orEmpty())
+                    "$action:$maneuverType:$bitmapKey"
+                }
+                ACTION_YANDEX_NEXT_TEXT -> {
+                    "$action:${normalizeText(intent.getStringExtra(EXTRA_NEXT_TEXT).orEmpty())}"
+                }
+                ACTION_YANDEX_NEXT_STREET -> {
+                    "$action:${normalizeText(intent.getStringExtra(EXTRA_NEXT_STREET).orEmpty())}"
+                }
+                ACTION_YANDEX_SPEEDLIMIT -> {
+                    "$action:${normalizeText(intent.getStringExtra(EXTRA_SPEEDLIMIT_TEXT).orEmpty())}"
+                }
+                ACTION_YANDEX_ARRIVAL -> {
+                    "$action:${normalizeText(intent.getStringExtra(EXTRA_ARRIVAL_TEXT).orEmpty())}"
+                }
+                ACTION_YANDEX_DISTANCE -> {
+                    "$action:${normalizeText(intent.getStringExtra(EXTRA_DISTANCE_TEXT).orEmpty())}"
+                }
+                ACTION_YANDEX_TIME -> {
+                    "$action:${normalizeText(intent.getStringExtra(EXTRA_TIME_TEXT).orEmpty())}"
+                }
+                ACTION_YANDEX_NAV_ACTIVE -> {
+                    "$action:${intent.getBooleanExtra(EXTRA_NAV_IS_ACTIVE, false)}"
+                }
+                else -> null
+            }
+        }
+
+        private fun pruneRecentYandexPayloads(now: Long) {
+            if (recentYandexPayloads.isEmpty()) {
+                return
+            }
+            val cutoff = now - YANDEX_DUPLICATE_SUPPRESSION_MS
+            recentYandexPayloads.entries.removeIf { (_, updatedAt) -> updatedAt < cutoff }
         }
 
         private fun extractTrailingUnit(text: String): String {
@@ -801,6 +858,7 @@ class NavigationReceiver : BroadcastReceiver() {
             Log.d(TAG, "Navigation ended: $reason")
             UiLogStore.append(LogCategory.NAVIGATION, reason)
             cancelNavigatorIntentTimeout()
+            recentYandexPayloads.clear()
             // Only stop native navigation if it was enabled
             if (OverlayPrefs.nativeNavEnabled(context)) {
                 NativeNavigationController.stopNavigation(context)

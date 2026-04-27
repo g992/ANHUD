@@ -13,6 +13,7 @@ class AnhudApp : Application() {
         super.onCreate()
         PerformanceDebugMonitor.start(this)
         MapLibre.getInstance(applicationContext, null, WellKnownTileServer.MapLibre)
+        initializeMapTileProviderFallbacks(applicationContext)
         MapRenderSettingsStore.initialize(applicationContext)
         MapRouteTelemetryStore.initialize(applicationContext)
         MapCacheController.initialize(applicationContext)

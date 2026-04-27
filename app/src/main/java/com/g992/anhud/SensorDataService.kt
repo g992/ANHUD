@@ -2,11 +2,9 @@ package com.g992.anhud
 
 import android.Manifest
 import android.app.Service
-import android.content.BroadcastReceiver
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
-import android.content.IntentFilter
 import android.content.ServiceConnection
 import android.content.pm.PackageManager
 import android.location.Location
@@ -26,17 +24,18 @@ class SensorDataService : Service() {
     private var isLocationSubscribed = false
     private val gpsSpeedSamples = ArrayDeque<Location>()
     private var lastGpsSpeedUpdateElapsedMs: Long = 0L
-    private var lastGbinderSpeedKmh: Int? = null
-    private var lastGbinderSpeedChangedElapsedMs: Long = 0L
+    private var lastVehicleSpeedKmh: Int? = null
+    private var lastVehicleSpeedChangedElapsedMs: Long = 0L
     private var carProxyBinder: IBinder? = null
     private var carProxyConnection: ServiceConnection? = null
     private var lastTurnSignalRaw: Int? = null
+    private var speedSensorClient: EcarxSpeedSensorClient? = null
 
     private val staleSpeedHandler = Handler(Looper.getMainLooper())
     private val staleSpeedRunnable = object : Runnable {
         override fun run() {
             clearStaleGpsSpeedIfNeeded()
-            resubscribeGbinderSpeedIfNeeded()
+            resubscribeVehicleSpeedIfNeeded()
             staleSpeedHandler.postDelayed(this, GPS_STALE_CHECK_INTERVAL_MS)
         }
     }
@@ -48,16 +47,6 @@ class SensorDataService : Service() {
     }
     private val carProxyReconnectRunnable = Runnable { bindTurnSignalCarProxy() }
 
-    private val vehicleDataReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context, intent: Intent) {
-            val action = intent.action ?: return
-            when (action) {
-                ACTION_SENSOR_FLOAT_CHANGED,
-                ACTION_SENSOR_FLOAT_RESULT -> handleSpeedIntent(context, intent)
-            }
-        }
-    }
-
     private val gpsLocationListener = LocationListener { location -> handleGpsLocation(location) }
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -65,18 +54,19 @@ class SensorDataService : Service() {
     override fun onCreate() {
         super.onCreate()
         UiLogStore.append(LogCategory.SENSORS, "Сервис создан")
-        val vehicleFilter = IntentFilter().apply {
-            addAction(ACTION_SENSOR_FLOAT_CHANGED)
-            addAction(ACTION_SENSOR_FLOAT_RESULT)
-        }
-        ContextCompat.registerReceiver(this, vehicleDataReceiver, vehicleFilter, ContextCompat.RECEIVER_EXPORTED)
+        speedSensorClient = EcarxSpeedSensorClient(
+            context = applicationContext,
+            sensorId = SENSOR_ID_CAR_SPEED,
+            onSpeedMetersPerSecond = ::handleVehicleSpeed,
+            onLog = { message -> UiLogStore.append(LogCategory.SENSORS, message) }
+        )
         staleSpeedHandler.postDelayed(staleSpeedRunnable, GPS_STALE_CHECK_INTERVAL_MS)
         initTurnSignalIntegration()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         UiLogStore.append(LogCategory.SENSORS, "Сервис запущен")
-        subscribeToSpeedSensor()
+        speedSensorClient?.start()
         subscribeToTurnSignalSensors()
         ensureLocationUpdates()
         return START_STICKY
@@ -84,26 +74,16 @@ class SensorDataService : Service() {
 
     override fun onDestroy() {
         UiLogStore.append(LogCategory.SENSORS, "Сервис остановлен")
-        try { unregisterReceiver(vehicleDataReceiver) } catch (_: Exception) {}
         staleSpeedHandler.removeCallbacks(staleSpeedRunnable)
         staleSpeedHandler.removeCallbacks(turnSignalPollRunnable)
         staleSpeedHandler.removeCallbacks(carProxyReconnectRunnable)
+        speedSensorClient?.stop()
+        speedSensorClient = null
         unbindTurnSignalCarProxy()
         clearTurnSignalState()
-        resetGbinderSpeedWatchdog()
+        resetVehicleSpeedWatchdog()
         stopLocationUpdates()
         super.onDestroy()
-    }
-
-    private fun subscribeToSpeedSensor() {
-        sendBroadcast(Intent(ACTION_LISTEN_SENSOR_CHANGES).apply {
-            setPackage(GBINDER_PACKAGE)
-            putExtra(EXTRA_ID, SENSOR_ID_CAR_SPEED)
-        })
-        sendBroadcast(Intent(ACTION_GET_FLOAT_SENSOR).apply {
-            setPackage(GBINDER_PACKAGE)
-            putExtra(EXTRA_ID, SENSOR_ID_CAR_SPEED)
-        })
     }
 
     private fun initTurnSignalIntegration() {
@@ -132,22 +112,19 @@ class SensorDataService : Service() {
         }
     }
 
-    private fun handleSpeedIntent(context: Context, intent: Intent) {
-        if (OverlayPrefs.speedFromGps(context)) {
-            resetGbinderSpeedWatchdog()
+    private fun handleVehicleSpeed(speedMetersPerSecond: Float) {
+        if (OverlayPrefs.speedFromGps(this)) {
+            resetVehicleSpeedWatchdog()
             return
         }
-        val id = readIntExtra(intent, EXTRA_ID) ?: return
-        if (id != SENSOR_ID_CAR_SPEED) return
-        val value = readFloatExtra(intent, EXTRA_VALUE) ?: return
-        val rawSpeed = (value * MS_TO_KMH).roundToInt()
-        val correction = OverlayPrefs.speedCorrection(context)
+        val rawSpeed = (speedMetersPerSecond * MS_TO_KMH).roundToInt()
+        val correction = OverlayPrefs.speedCorrection(this)
         val speedKmh = (rawSpeed + correction).coerceAtLeast(0)
-        markGbinderSpeedObserved(speedKmh)
+        markVehicleSpeedObserved(speedKmh)
         NavigationHudStore.update { current -> current.copy(speedKmh = speedKmh) }
         UiLogStore.append(
             LogCategory.SENSORS,
-            "Скорость: $speedKmh км/ч (gbinder, raw=$rawSpeed, коррекция=$correction)"
+            "Скорость: $speedKmh км/ч (ecarx, raw=$rawSpeed, коррекция=$correction)"
         )
     }
 
@@ -428,41 +405,41 @@ class SensorDataService : Service() {
         if (cleared) UiLogStore.append(LogCategory.SENSORS, "GPS-скорость: сброс ($reason)")
     }
 
-    private fun markGbinderSpeedObserved(speedKmh: Int) {
+    private fun markVehicleSpeedObserved(speedKmh: Int) {
         val now = SystemClock.elapsedRealtime()
-        if (lastGbinderSpeedKmh != speedKmh) {
-            lastGbinderSpeedKmh = speedKmh
-            lastGbinderSpeedChangedElapsedMs = now
+        if (lastVehicleSpeedKmh != speedKmh) {
+            lastVehicleSpeedKmh = speedKmh
+            lastVehicleSpeedChangedElapsedMs = now
             return
         }
-        if (lastGbinderSpeedChangedElapsedMs <= 0L) {
-            lastGbinderSpeedChangedElapsedMs = now
+        if (lastVehicleSpeedChangedElapsedMs <= 0L) {
+            lastVehicleSpeedChangedElapsedMs = now
         }
     }
 
-    private fun resetGbinderSpeedWatchdog() {
-        lastGbinderSpeedKmh = null
-        lastGbinderSpeedChangedElapsedMs = 0L
+    private fun resetVehicleSpeedWatchdog() {
+        lastVehicleSpeedKmh = null
+        lastVehicleSpeedChangedElapsedMs = 0L
     }
 
-    private fun resubscribeGbinderSpeedIfNeeded() {
+    private fun resubscribeVehicleSpeedIfNeeded() {
         if (OverlayPrefs.speedFromGps(this)) {
-            resetGbinderSpeedWatchdog()
+            resetVehicleSpeedWatchdog()
             return
         }
         val timeoutSeconds = OverlayPrefs.speedometerFreezeTimeout(this)
         if (timeoutSeconds <= 0) return
-        val speedKmh = lastGbinderSpeedKmh ?: return
-        val lastChanged = lastGbinderSpeedChangedElapsedMs
+        val speedKmh = lastVehicleSpeedKmh ?: return
+        val lastChanged = lastVehicleSpeedChangedElapsedMs
         if (lastChanged <= 0L) return
         val elapsed = SystemClock.elapsedRealtime() - lastChanged
         if (elapsed < timeoutSeconds * MILLIS_PER_SECOND_LONG) return
         UiLogStore.append(
             LogCategory.SENSORS,
-            "Скорость не менялась $timeoutSeconds c (gbinder=$speedKmh), переподписка на датчик"
+            "Скорость не менялась $timeoutSeconds c (ecarx=$speedKmh), переподписка на датчик"
         )
-        subscribeToSpeedSensor()
-        lastGbinderSpeedChangedElapsedMs = SystemClock.elapsedRealtime()
+        speedSensorClient?.resubscribe()
+        lastVehicleSpeedChangedElapsedMs = SystemClock.elapsedRealtime()
     }
 
     private fun resolveDeltaSeconds(previous: Location, current: Location): Float {
@@ -473,11 +450,6 @@ class SensorDataService : Service() {
         }
         val deltaMillis = (current.time - previous.time).coerceAtLeast(0L)
         return deltaMillis / MILLIS_IN_SECOND
-    }
-
-    private fun readIntExtra(intent: Intent, key: String): Int? {
-        val value = readIntExtraAllowZero(intent, key) ?: return null
-        return value.takeIf { it != 0 }
     }
 
     private fun readIntExtraAllowZero(intent: Intent, key: String): Int? {
@@ -493,20 +465,6 @@ class SensorDataService : Service() {
             is String -> raw.toIntOrNull()
             is Boolean -> if (raw) 1 else 0
             else -> raw?.toString()?.toIntOrNull()
-        }
-    }
-
-    private fun readFloatExtra(intent: Intent, key: String): Float? {
-        val extras = intent.extras ?: return null
-        if (!extras.containsKey(key)) return null
-        @Suppress("DEPRECATION")
-        return when (val raw = extras.get(key)) {
-            is Float -> raw
-            is Double -> raw.toFloat()
-            is Number -> raw.toFloat()
-            is String -> raw.toFloatOrNull()
-            is Boolean -> if (raw) 1f else 0f
-            else -> raw?.toString()?.toFloatOrNull()
         }
     }
 
@@ -539,13 +497,6 @@ class SensorDataService : Service() {
     )
 
     companion object {
-        private const val GBINDER_PACKAGE = "com.salat.gbinder"
-        private const val ACTION_GET_FLOAT_SENSOR = "com.salat.gbinder.GET_FLOAT_SENSOR"
-        private const val ACTION_LISTEN_SENSOR_CHANGES = "com.salat.gbinder.LISTEN_SENSOR_CHANGES"
-        private const val ACTION_SENSOR_FLOAT_RESULT = "com.salat.gbinder.SENSOR_FLOAT_RESULT"
-        private const val ACTION_SENSOR_FLOAT_CHANGED = "com.salat.gbinder.SENSOR_FLOAT_CHANGED"
-        private const val EXTRA_ID = "id"
-        private const val EXTRA_VALUE = "value"
         private const val SENSOR_ID_CAR_SPEED = 1055232
         private const val CAR_PROXY_PACKAGE = "com.autolink.carproxyservice"
         private const val CAR_PROXY_SERVICE = "com.autolink.carproxyservice.CarProxyService"

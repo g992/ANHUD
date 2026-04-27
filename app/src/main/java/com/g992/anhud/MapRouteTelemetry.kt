@@ -27,6 +27,7 @@ data class MapRouteTelemetrySnapshot(
     val state: String? = null,
     val hasExternalTelemetry: Boolean = false,
     val routeToken: String? = null,
+    val routeJamsToken: String? = null,
     val routePoints: List<LatLng> = emptyList(),
     val routeJams: List<String> = emptyList(),
     val startLocation: Location? = null,
@@ -51,6 +52,8 @@ object MapRouteTelemetryStore {
     private var initialized = false
     @Volatile
     private var currentSnapshot = MapRouteTelemetrySnapshot()
+    private var parsedSampledRouteCache: ParsedSampledRoute? = null
+    private var lastSnapshotLogKey: String? = null
 
     fun initialize(context: Context) {
         if (initialized) return
@@ -78,87 +81,104 @@ object MapRouteTelemetryStore {
             MAP_ROUTE_TELEMETRY_ACTION -> {
                 val sampled = intent.getStringExtra(MAP_EXTRA_ROUTE_SAMPLED)
                 val jams = intent.getStringExtra(MAP_EXTRA_ROUTE_JAMS)
-                Log.d(
-                    ROUTE_TELEMETRY_TAG,
-                    "route telemetry: sampled=${countRoutePoints(sampled)} jams=${countDelimited(jams)} " +
-                        "start=${intent.hasExtra(MAP_EXTRA_ROUTE_START)} end=${intent.hasExtra(MAP_EXTRA_ROUTE_END)}"
-                )
-                prefs.edit()
-                    .putString(PREF_START, intent.getStringExtra(MAP_EXTRA_ROUTE_START))
-                    .putString(PREF_END, intent.getStringExtra(MAP_EXTRA_ROUTE_END))
-                    .putString(PREF_SAMPLED, sampled)
-                    .putString(PREF_PRE_MANEUVER, intent.getStringExtra(MAP_EXTRA_ROUTE_PRE_MANEUVER))
-                    .putString(PREF_WAYPOINTS, intent.getStringExtra(MAP_EXTRA_ROUTE_WAYPOINTS))
-                    .putString(PREF_JAMS, jams)
-                    .apply()
+                val changed = prefs.editIfChanged {
+                    putStringIfChanged(PREF_START, intent.getStringExtra(MAP_EXTRA_ROUTE_START))
+                    putStringIfChanged(PREF_END, intent.getStringExtra(MAP_EXTRA_ROUTE_END))
+                    putStringIfChanged(PREF_SAMPLED, sampled)
+                    putStringIfChanged(PREF_PRE_MANEUVER, intent.getStringExtra(MAP_EXTRA_ROUTE_PRE_MANEUVER))
+                    putStringIfChanged(PREF_WAYPOINTS, intent.getStringExtra(MAP_EXTRA_ROUTE_WAYPOINTS))
+                    putStringIfChanged(PREF_JAMS, jams)
+                }
+                if (!changed) {
+                    return
+                }
             }
 
             MAP_ROUTE_STATE_ACTION -> {
                 val state = intent.getStringExtra(MAP_EXTRA_ROUTE_STATE)
                 Log.d(ROUTE_TELEMETRY_TAG, "route state: $state")
-                prefs.edit()
-                    .putString(PREF_STATE, state)
-                    .apply()
-                if (state == MAP_ROUTE_STATE_ARRIVED || state == MAP_ROUTE_STATE_CANCELLED) {
-                    prefs.edit()
-                        .remove(PREF_START)
-                        .remove(PREF_END)
-                        .remove(PREF_SAMPLED)
-                        .remove(PREF_ROUTE_ID)
-                        .remove(PREF_PRE_MANEUVER)
-                        .remove(PREF_WAYPOINTS)
-                        .remove(PREF_JAMS)
-                        .apply()
+                val changed = prefs.editIfChanged {
+                    putStringIfChanged(PREF_STATE, state)
+                    if (state == MAP_ROUTE_STATE_ARRIVED || state == MAP_ROUTE_STATE_CANCELLED) {
+                        removeIfPresent(PREF_START)
+                        removeIfPresent(PREF_END)
+                        removeIfPresent(PREF_SAMPLED)
+                        removeIfPresent(PREF_ROUTE_ID)
+                        removeIfPresent(PREF_PRE_MANEUVER)
+                        removeIfPresent(PREF_WAYPOINTS)
+                        removeIfPresent(PREF_JAMS)
+                    }
+                }
+                if (!changed) {
+                    return
                 }
             }
         }
-        currentSnapshot = buildSnapshot(context)
-        Log.d(
-            ROUTE_TELEMETRY_TAG,
-            "snapshot: state=${currentSnapshot.state} hasRoute=${currentSnapshot.hasRoute} " +
-                "built=${currentSnapshot.routeBuilt} points=${currentSnapshot.routePoints.size} jams=${currentSnapshot.routeJams.size}"
-        )
+        publishSnapshotIfChanged(context, buildSnapshot(context))
+    }
+
+    private fun publishSnapshotIfChanged(context: Context, snapshot: MapRouteTelemetrySnapshot) {
+        if (snapshot.sameRouteContentAs(currentSnapshot)) {
+            currentSnapshot = snapshot
+            return
+        }
+        currentSnapshot = snapshot
+        logSnapshot(currentSnapshot)
         listeners.forEach { it(currentSnapshot) }
         notifyRouteStatusChanged(context, currentSnapshot)
+    }
+
+    private fun logSnapshot(snapshot: MapRouteTelemetrySnapshot) {
+        val debugKey = "${snapshot.state}|${snapshot.routeToken.orEmpty()}|${snapshot.hasRoute}|" +
+            "${snapshot.routePoints.size}|${snapshot.routeJams.size}"
+        if (debugKey == lastSnapshotLogKey) return
+        lastSnapshotLogKey = debugKey
+        Log.d(
+            ROUTE_TELEMETRY_TAG,
+            "snapshot: state=${snapshot.state} hasRoute=${snapshot.hasRoute} " +
+                "built=${snapshot.routeBuilt} points=${snapshot.routePoints.size} " +
+                "routeToken=${snapshot.routeToken.orEmpty()}"
+        )
     }
 
     fun replaceRoutePolyline(context: Context, routeId: String?, points: List<LatLng>) {
         if (points.size < 2) return
         initialize(context)
+        val routeToken = points.routePointsToken(routeId)
+        if (currentSnapshot.state == MAP_ROUTE_STATE_BUILT &&
+            currentSnapshot.routeToken == routeToken &&
+            currentSnapshot.routeJams.isEmpty()
+        ) {
+            return
+        }
         val sampled = serializePoints(points)
-        context.getSharedPreferences(ROUTE_PREFS_NAME, Context.MODE_PRIVATE)
-            .edit()
-            .putString(PREF_STATE, MAP_ROUTE_STATE_BUILT)
-            .putString(PREF_ROUTE_ID, routeId)
-            .putString(PREF_SAMPLED, sampled)
-            .remove(PREF_JAMS)
-            .apply()
-        currentSnapshot = buildSnapshot(context)
-        Log.d(
-            ROUTE_TELEMETRY_TAG,
-            "route polyline stored: id=${routeId.orEmpty()} points=${points.size} hasRoute=${currentSnapshot.hasRoute}"
-        )
-        listeners.forEach { it(currentSnapshot) }
-        notifyRouteStatusChanged(context, currentSnapshot)
+        context.getSharedPreferences(ROUTE_PREFS_NAME, Context.MODE_PRIVATE).editIfChanged {
+            putStringIfChanged(PREF_STATE, MAP_ROUTE_STATE_BUILT)
+            putStringIfChanged(PREF_ROUTE_ID, routeId)
+            putStringIfChanged(PREF_SAMPLED, sampled)
+            removeIfPresent(PREF_JAMS)
+        }
+        publishSnapshotIfChanged(context, buildSnapshot(context))
+        Log.d(ROUTE_TELEMETRY_TAG, "route polyline stored: id=${routeId.orEmpty()} points=${points.size}")
     }
 
     fun clearRoutePolyline(context: Context) {
         initialize(context)
-        context.getSharedPreferences(ROUTE_PREFS_NAME, Context.MODE_PRIVATE)
-            .edit()
-            .putString(PREF_STATE, MAP_ROUTE_STATE_CANCELLED)
-            .remove(PREF_START)
-            .remove(PREF_END)
-            .remove(PREF_SAMPLED)
-            .remove(PREF_ROUTE_ID)
-            .remove(PREF_PRE_MANEUVER)
-            .remove(PREF_WAYPOINTS)
-            .remove(PREF_JAMS)
-            .apply()
-        currentSnapshot = buildSnapshot(context)
+        val changed = context.getSharedPreferences(ROUTE_PREFS_NAME, Context.MODE_PRIVATE).editIfChanged {
+            putStringIfChanged(PREF_STATE, MAP_ROUTE_STATE_CANCELLED)
+            removeIfPresent(PREF_START)
+            removeIfPresent(PREF_END)
+            removeIfPresent(PREF_SAMPLED)
+            removeIfPresent(PREF_ROUTE_ID)
+            removeIfPresent(PREF_PRE_MANEUVER)
+            removeIfPresent(PREF_WAYPOINTS)
+            removeIfPresent(PREF_JAMS)
+        }
+        if (!changed) {
+            return
+        }
+        publishSnapshotIfChanged(context, buildSnapshot(context))
         Log.d(ROUTE_TELEMETRY_TAG, "route polyline cleared")
-        listeners.forEach { it(currentSnapshot) }
-        notifyRouteStatusChanged(context, currentSnapshot)
     }
 
     private fun notifyRouteStatusChanged(context: Context, snapshot: MapRouteTelemetrySnapshot) {
@@ -177,18 +197,39 @@ object MapRouteTelemetryStore {
         val startRaw = prefs.getString(PREF_START, null)
         val routeId = prefs.getString(PREF_ROUTE_ID, null)
         val jamsRaw = prefs.getString(PREF_JAMS, null)
-        val points = parsePoints(sampledRaw).ifEmpty {
-            listOfNotNull(parsePoint(startRaw), parsePoint(prefs.getString(PREF_END, null)))
-        }
+        val parsedSampled = parseSampledRoute(sampledRaw, routeId)
+        val points = parsedSampled?.points ?: listOfNotNull(
+            parsePoint(startRaw),
+            parsePoint(prefs.getString(PREF_END, null))
+        )
+        val routeToken = parsedSampled?.token ?: listOfNotNull(parsePoint(startRaw), parsePoint(prefs.getString(PREF_END, null)))
+            .takeIf { it.size >= 2 }
+            ?.routePointsToken(routeId)
         val jams = normalizeJams(jamsRaw, points.size - 1)
         return MapRouteTelemetrySnapshot(
             state = prefs.getString(PREF_STATE, null),
             hasExternalTelemetry = sampledRaw != null || prefs.getString(PREF_STATE, null) != null,
-            routeToken = sampledRaw?.let { "$it|${routeId.orEmpty()}|${jamsRaw.orEmpty()}" },
+            routeToken = routeToken,
+            routeJamsToken = jamsRaw.routeRawToken(),
             routePoints = points,
             routeJams = jams,
-            startLocation = points.startLocation(),
+            startLocation = parsedSampled?.startLocation ?: points.startLocation(),
         )
+    }
+
+    private fun parseSampledRoute(raw: String?, routeId: String?): ParsedSampledRoute? {
+        if (raw.isNullOrBlank()) return null
+        parsedSampledRouteCache?.takeIf { it.raw == raw && it.routeId == routeId }?.let { return it }
+        val points = parsePoints(raw)
+        val parsed = ParsedSampledRoute(
+            raw = raw,
+            routeId = routeId,
+            points = points,
+            startLocation = points.startLocation(),
+            token = points.routePointsToken(routeId),
+        )
+        parsedSampledRouteCache = parsed
+        return parsed
     }
 
     private fun parsePoints(raw: String?): List<LatLng> {
@@ -211,13 +252,6 @@ object MapRouteTelemetryStore {
         }
     }
 
-    private fun countRoutePoints(raw: String?): Int = parsePoints(raw).size
-
-    private fun countDelimited(raw: String?): Int {
-        if (raw.isNullOrBlank()) return 0
-        return raw.split(';').count { it.isNotBlank() }
-    }
-
     private fun normalizeJams(raw: String?, size: Int): List<String> {
         if (size <= 0) return emptyList()
         val base = raw.orEmpty()
@@ -236,6 +270,87 @@ object MapRouteTelemetryStore {
             base += base.lastOrNull() ?: "low"
         }
         return base.take(size)
+    }
+
+    private data class ParsedSampledRoute(
+        val raw: String,
+        val routeId: String?,
+        val points: List<LatLng>,
+        val startLocation: Location?,
+        val token: String,
+    )
+
+    private class PrefsChangeBuilder(
+        private val prefs: android.content.SharedPreferences,
+        private val editor: android.content.SharedPreferences.Editor,
+    ) {
+        var changed: Boolean = false
+            private set
+
+        fun putStringIfChanged(key: String, value: String?) {
+            if (prefs.getString(key, null) == value) return
+            editor.putString(key, value)
+            changed = true
+        }
+
+        fun removeIfPresent(key: String) {
+            if (!prefs.contains(key)) return
+            editor.remove(key)
+            changed = true
+        }
+    }
+
+    private fun android.content.SharedPreferences.editIfChanged(block: PrefsChangeBuilder.() -> Unit): Boolean {
+        val editor = edit()
+        val builder = PrefsChangeBuilder(this, editor)
+        builder.block()
+        if (builder.changed) {
+            editor.apply()
+        }
+        return builder.changed
+    }
+
+    private fun MapRouteTelemetrySnapshot.sameRouteContentAs(other: MapRouteTelemetrySnapshot): Boolean {
+        return state == other.state &&
+            hasExternalTelemetry == other.hasExternalTelemetry &&
+            routeToken == other.routeToken &&
+            routeJamsToken == other.routeJamsToken &&
+            routePoints.size == other.routePoints.size &&
+            routeJams == other.routeJams
+    }
+
+    private fun String?.routeRawToken(extra: String? = null): String? {
+        if (this.isNullOrBlank()) return null
+        return buildString {
+            append(this@routeRawToken.length)
+            append(':')
+            append(stableHash64(this@routeRawToken).toString(16))
+            if (!extra.isNullOrBlank()) {
+                append(':')
+                append(stableHash64(extra).toString(16))
+            }
+        }
+    }
+
+    private fun List<LatLng>.routePointsToken(routeId: String?): String {
+        var hash = 1125899906842597L
+        forEach { point ->
+            hash = (hash * 31L) + point.latitude.toBits()
+            hash = (hash * 31L) + point.longitude.toBits()
+        }
+        if (!routeId.isNullOrBlank()) {
+            hash = (hash * 31L) + stableHash64(routeId)
+        }
+        return "$size:${hash.toString(16)}"
+    }
+
+    private fun stableHash64(value: String): Long {
+        var hash = -3750763034362895579L
+        value.forEach { char ->
+            hash = hash xor char.code.toLong()
+            hash *= 1099511628211L
+        }
+        return hash
     }
 
     private fun List<LatLng>.startLocation(): Location? {

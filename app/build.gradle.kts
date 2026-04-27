@@ -12,6 +12,13 @@ val localProperties = Properties().apply {
     }
 }
 
+fun buildConfigString(value: String?): String {
+    val escaped = value.orEmpty()
+        .replace("\\", "\\\\")
+        .replace("\"", "\\\"")
+    return "\"$escaped\""
+}
+
 val versionCodeProp = (project.findProperty("VERSION_CODE") as String?)
     ?.toIntOrNull()
     ?: System.getenv("VERSION_CODE")?.toIntOrNull()
@@ -28,6 +35,10 @@ val signingKeyAlias = System.getenv("SIGNING_KEY_ALIAS")
     ?: localProperties.getProperty("SIGNING_KEY_ALIAS")
 val signingKeyPassword = System.getenv("SIGNING_KEY_PASSWORD")
     ?: localProperties.getProperty("SIGNING_KEY_PASSWORD")
+val mapTilerApiKey = System.getenv("MAPTILER_API_KEY")
+    ?: localProperties.getProperty("MAPTILER_API_KEY")
+val stadiaMapsApiKey = System.getenv("STADIA_MAPS_API_KEY")
+    ?: localProperties.getProperty("STADIA_MAPS_API_KEY")
 val hasSigning = !signingStoreFilePath.isNullOrBlank() &&
     !signingStorePassword.isNullOrBlank() &&
     !signingKeyAlias.isNullOrBlank() &&
@@ -45,6 +56,8 @@ android {
         versionName = versionNameProp
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        buildConfigField("String", "MAPTILER_API_KEY", buildConfigString(mapTilerApiKey))
+        buildConfigField("String", "STADIA_MAPS_API_KEY", buildConfigString(stadiaMapsApiKey))
     }
 
     val releaseSigning = if (hasSigning) {

@@ -116,10 +116,14 @@ class SettingsActivity : ScaledActivity() {
     private lateinit var mapTiltValue: TextView
     private lateinit var mapArrowValue: TextView
     private lateinit var mapCacheValue: TextView
+    private lateinit var mapRouteSnapDistanceValue: TextView
     private lateinit var mapOfflineRegionValue: TextView
     private lateinit var mapAutoZoomSwitch: SwitchCompat
     private lateinit var mapRouteDownloadSwitch: SwitchCompat
+    private lateinit var mapRouteSnapSwitch: SwitchCompat
+    private lateinit var mapLocationSnapSwitch: SwitchCompat
     private var mapAutoZoomConfigRows: List<View> = emptyList()
+    private var mapRouteSnapConfigRows: List<View> = emptyList()
     private var mapCacheButtons: List<Button> = emptyList()
     private var offlineDownloadsAdapter: OfflineDownloadsAdapter? = null
 
@@ -586,6 +590,7 @@ class SettingsActivity : ScaledActivity() {
         mapTiltValue = createMapValueView()
         mapArrowValue = createMapValueView()
         mapCacheValue = createMapValueView()
+        mapRouteSnapDistanceValue = createMapValueView()
         mapOfflineRegionValue = createMapValueView()
         mapAutoZoomSwitch = SwitchCompat(this).apply {
             text = getString(R.string.map_settings_auto_zoom)
@@ -603,6 +608,26 @@ class SettingsActivity : ScaledActivity() {
             setOnCheckedChangeListener { _, isChecked ->
                 if (!isSyncingUi) {
                     MapRenderSettingsStore.update { it.copy(downloadRouteEnabled = isChecked) }
+                }
+            }
+        }
+        mapRouteSnapSwitch = SwitchCompat(this).apply {
+            text = getString(R.string.map_settings_route_snap)
+            setTextColor(ContextCompat.getColor(this@SettingsActivity, R.color.white))
+            setOnCheckedChangeListener { _, isChecked ->
+                if (!isSyncingUi) {
+                    MapRenderSettingsStore.update { it.copy(snapRouteToRoadsEnabled = isChecked) }
+                    syncMapUiFromPrefs()
+                }
+            }
+        }
+        mapLocationSnapSwitch = SwitchCompat(this).apply {
+            text = getString(R.string.map_settings_location_snap)
+            setTextColor(ContextCompat.getColor(this@SettingsActivity, R.color.white))
+            setOnCheckedChangeListener { _, isChecked ->
+                if (!isSyncingUi) {
+                    MapRenderSettingsStore.update { it.copy(snapLocationToRoadsEnabled = isChecked) }
+                    syncMapUiFromPrefs()
                 }
             }
         }
@@ -697,6 +722,21 @@ class SettingsActivity : ScaledActivity() {
                 override fun onStopTrackingTouch(seekBar: SeekBar?) = Unit
             })
         }
+        val routeSnapDistanceSeek = SeekBar(this).apply {
+            max = MAP_ROUTE_SNAP_MAX_METERS - MAP_ROUTE_SNAP_MIN_METERS
+            setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                    val value = MAP_ROUTE_SNAP_MIN_METERS + progress
+                    mapRouteSnapDistanceValue.text = getString(R.string.map_settings_route_snap_distance_value, value)
+                    if (fromUser && !isSyncingUi) {
+                        MapRenderSettingsStore.update { it.copy(routeSnapDistanceMeters = value) }
+                    }
+                }
+
+                override fun onStartTrackingTouch(seekBar: SeekBar?) = Unit
+                override fun onStopTrackingTouch(seekBar: SeekBar?) = Unit
+            })
+        }
 
         val cacheButtons = MapCacheSizeOptionsMb.mapIndexed { index, valueMb ->
             createSettingsButton(formatCacheStepLabel(valueMb), SETTINGS_BUTTON_SECONDARY).apply {
@@ -736,6 +776,10 @@ class SettingsActivity : ScaledActivity() {
             createMapSliderRow(getString(R.string.map_settings_auto_zoom_at_90), mapAutoZoomNinetyValue, autoZoomNinetySeek),
         )
         mapAutoZoomConfigRows = autoZoomRows
+        val routeSnapRows = listOf(
+            createMapSliderRow(getString(R.string.map_settings_route_snap_distance), mapRouteSnapDistanceValue, routeSnapDistanceSeek),
+        )
+        mapRouteSnapConfigRows = routeSnapRows
 
         tabMapContent.removeAllViews()
         tabMapContent.addView(
@@ -750,6 +794,9 @@ class SettingsActivity : ScaledActivity() {
                     createMapSliderRow(getString(R.string.map_settings_arrow_scale), mapArrowValue, arrowSeek),
                     createMapValueRow(getString(R.string.map_settings_cache), mapCacheValue, cacheRow),
                     createMapSwitchRow(mapRouteDownloadSwitch, getString(R.string.map_settings_route_download_hint)),
+                    createMapSwitchRow(mapRouteSnapSwitch, getString(R.string.map_settings_route_snap_hint)),
+                    createMapSwitchRow(mapLocationSnapSwitch, getString(R.string.map_settings_location_snap_hint)),
+                    *routeSnapRows.toTypedArray(),
                     createMapValueRow(getString(R.string.map_settings_offline_region), mapOfflineRegionValue, offlineDownloadsButton),
                 )
             )
@@ -768,6 +815,8 @@ class SettingsActivity : ScaledActivity() {
             tiltSeek.progress = settings.tilt.roundToInt().coerceIn(0, 80)
             arrowSeek.progress = settings.arrowScalePercent
                 .coerceIn(MAP_ARROW_SCALE_MIN_PERCENT, MAP_ARROW_SCALE_MAX_PERCENT) - MAP_ARROW_SCALE_MIN_PERCENT
+            routeSnapDistanceSeek.progress = settings.routeSnapDistanceMeters
+                .coerceIn(MAP_ROUTE_SNAP_MIN_METERS, MAP_ROUTE_SNAP_MAX_METERS) - MAP_ROUTE_SNAP_MIN_METERS
         } finally {
             isSyncingUi = false
         }
@@ -885,11 +934,22 @@ class SettingsActivity : ScaledActivity() {
         mapTiltValue.text = getString(R.string.map_settings_tilt_value, settings.tilt.roundToInt())
         mapArrowValue.text = settings.arrowScalePercent.toString()
         mapCacheValue.text = formatMapCacheValue(settings.cacheSizeBytes())
+        mapRouteSnapDistanceValue.text = getString(
+            R.string.map_settings_route_snap_distance_value,
+            settings.routeSnapDistanceMeters
+        )
         mapOfflineRegionValue.text = formatOfflineRegion(settings)
         mapAutoZoomSwitch.isChecked = settings.autoZoomEnabled
         mapRouteDownloadSwitch.isChecked = settings.downloadRouteEnabled
+        mapRouteSnapSwitch.isChecked = settings.snapRouteToRoadsEnabled
+        mapLocationSnapSwitch.isChecked = settings.snapLocationToRoadsEnabled
         val autoZoomVisibility = if (settings.autoZoomEnabled) View.VISIBLE else View.GONE
         mapAutoZoomConfigRows.forEach { it.visibility = autoZoomVisibility }
+        val routeSnapVisibility = if (
+            settings.snapRouteToRoadsEnabled ||
+            settings.snapLocationToRoadsEnabled
+        ) View.VISIBLE else View.GONE
+        mapRouteSnapConfigRows.forEach { it.visibility = routeSnapVisibility }
         refreshMapCacheButtons(settings.cacheSizeStep)
         syncMapCacheUi(MapCacheController.current())
     }

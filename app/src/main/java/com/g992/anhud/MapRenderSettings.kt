@@ -53,6 +53,9 @@ data class MapRenderSettings(
     val arrowScalePercent: Int = MAP_ARROW_SCALE_MAX_PERCENT,
     val cacheSizeStep: Int = 2,
     val downloadRouteEnabled: Boolean = false,
+    val snapRouteToRoadsEnabled: Boolean = false,
+    val snapLocationToRoadsEnabled: Boolean = false,
+    val routeSnapDistanceMeters: Int = MAP_ROUTE_SNAP_DEFAULT_METERS,
     val offlineRegionId: String? = null,
     val offlineManualLabel: String? = null,
     val offlineManualLat1: Double? = null,
@@ -63,6 +66,9 @@ data class MapRenderSettings(
 
 const val MAP_ARROW_SCALE_MIN_PERCENT = 7
 const val MAP_ARROW_SCALE_MAX_PERCENT = 30
+const val MAP_ROUTE_SNAP_MIN_METERS = 3
+const val MAP_ROUTE_SNAP_MAX_METERS = 10
+const val MAP_ROUTE_SNAP_DEFAULT_METERS = 5
 const val MAP_ZOOM_MIN = 10.0
 const val MAP_ZOOM_MAX = 21.0
 
@@ -100,6 +106,10 @@ fun MapRenderSettings.normalized(): MapRenderSettings {
             MAP_ARROW_SCALE_MAX_PERCENT
         ),
         cacheSizeStep = cacheSizeStep.coerceIn(0, MapCacheSizeOptionsMb.lastIndex),
+        routeSnapDistanceMeters = routeSnapDistanceMeters.coerceIn(
+            MAP_ROUTE_SNAP_MIN_METERS,
+            MAP_ROUTE_SNAP_MAX_METERS
+        ),
         offlineRegionId = offlineRegionId?.takeIf { it.isNotBlank() },
     )
     return if (base.offlineRegionId != null) {
@@ -143,6 +153,9 @@ object MapRenderSettingsStore {
     private const val KEY_ARROW_SCALE = "arrow_scale_percent"
     private const val KEY_CACHE_SIZE_STEP = "cache_size_step"
     private const val KEY_DOWNLOAD_ROUTE = "download_route_enabled"
+    private const val KEY_SNAP_ROUTE_TO_ROADS = "snap_route_to_roads_enabled"
+    private const val KEY_SNAP_LOCATION_TO_ROADS = "snap_location_to_roads_enabled"
+    private const val KEY_ROUTE_SNAP_DISTANCE = "route_snap_distance_meters"
     private const val KEY_OFFLINE_REGION_ID = "offline_region_id"
     private const val KEY_OFFLINE_MANUAL_LABEL = "offline_manual_label"
     private const val KEY_OFFLINE_MANUAL_LAT1 = "offline_manual_lat1"
@@ -189,6 +202,9 @@ object MapRenderSettingsStore {
             .putInt(KEY_ARROW_SCALE, updated.arrowScalePercent)
             .putInt(KEY_CACHE_SIZE_STEP, updated.cacheSizeStep)
             .putBoolean(KEY_DOWNLOAD_ROUTE, updated.downloadRouteEnabled)
+            .putBoolean(KEY_SNAP_ROUTE_TO_ROADS, updated.snapRouteToRoadsEnabled)
+            .putBoolean(KEY_SNAP_LOCATION_TO_ROADS, updated.snapLocationToRoadsEnabled)
+            .putInt(KEY_ROUTE_SNAP_DISTANCE, updated.routeSnapDistanceMeters)
             .putString(KEY_OFFLINE_REGION_ID, updated.offlineRegionId)
             .putString(KEY_OFFLINE_MANUAL_LABEL, updated.offlineManualLabel)
             .putOptionalFloat(KEY_OFFLINE_MANUAL_LAT1, updated.offlineManualLat1)
@@ -223,6 +239,9 @@ object MapRenderSettingsStore {
             arrowScalePercent = prefs.getInt(KEY_ARROW_SCALE, MAP_ARROW_SCALE_MAX_PERCENT),
             cacheSizeStep = prefs.getInt(KEY_CACHE_SIZE_STEP, 2),
             downloadRouteEnabled = prefs.getBoolean(KEY_DOWNLOAD_ROUTE, false),
+            snapRouteToRoadsEnabled = prefs.getBoolean(KEY_SNAP_ROUTE_TO_ROADS, false),
+            snapLocationToRoadsEnabled = prefs.getBoolean(KEY_SNAP_LOCATION_TO_ROADS, false),
+            routeSnapDistanceMeters = prefs.getInt(KEY_ROUTE_SNAP_DISTANCE, MAP_ROUTE_SNAP_DEFAULT_METERS),
             offlineRegionId = prefs.getString(KEY_OFFLINE_REGION_ID, null),
             offlineManualLabel = prefs.getString(KEY_OFFLINE_MANUAL_LABEL, null),
             offlineManualLat1 = prefs.getOptionalFloat(KEY_OFFLINE_MANUAL_LAT1),
