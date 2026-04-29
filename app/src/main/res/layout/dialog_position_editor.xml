@@ -38,6 +38,13 @@
                     android:textColor="@color/white"
                     android:textSize="12sp"
                     android:textStyle="bold" />
+
+                <com.g992.anhud.MapTripStatusView
+                    android:id="@+id/dialogPreviewMapTripStatus"
+                    android:layout_width="match_parent"
+                    android:layout_height="24dp"
+                    android:layout_gravity="bottom"
+                    android:visibility="gone" />
             </FrameLayout>
 
             <LinearLayout
@@ -608,6 +615,25 @@
             android:layout_height="wrap_content"
             android:layout_marginStart="12dp"
             android:text="@string/common_configure" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/dialogTripStatusRow"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:visibility="gone">
+
+        <CheckBox
+            android:id="@+id/dialogTripStatusCheck"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="@string/map_trip_status_button"
+            android:textColor="@color/white"
+            android:textSize="16sp" />
     </LinearLayout>
 
     <CheckBox

@@ -1,0 +1,306 @@
+[
+    {
+        "tags": {
+            "any": [
+                "urban_area",
+                "locality"
+            ],
+            "none": "building"
+        },
+        "elements": "geometry",
+        "stylers": {
+            "visibility": "off"
+        }
+    },
+    {
+        "tags": {
+            "any": [
+                "terrain",
+                "bathymetry",
+                "landscape"
+            ],
+            "none": "land"
+        },
+        "stylers": {
+            "visibility": "off"
+        }
+    },
+    {
+        "tags": {
+            "any": [
+                "park",
+                "cemetery"
+            ]
+        },
+        "stylers": {
+            "visibility": "off"
+        }
+    },
+    {
+        "tags": {
+            "any": [
+                "vegetation"
+            ]
+        },
+        "stylers": {
+            "visibility": "off"
+        }
+    },
+    {
+        "tags": {
+            "any": [
+                "industrial",
+                "construction_site",
+                "medical",
+                "sports_ground",
+                "beach"
+            ]
+        },
+        "types": "polygon",
+        "stylers": {
+            "visibility": "off"
+        }
+    },
+    {
+        "tags": {
+            "any": "transit",
+            "none": [
+                "transit_location",
+                "transit_line",
+                "transit_schema",
+                "is_unclassified_transit"
+            ]
+        },
+        "stylers": {
+            "visibility": "off"
+        }
+    },
+    {
+        "tags": {
+            "any": "urban_area",
+            "none": [
+                "residential",
+                "industrial",
+                "cemetery",
+                "park",
+                "medical",
+                "sports_ground",
+                "beach",
+                "construction_site"
+            ]
+        },
+        "stylers": {
+            "visibility": "off"
+        }
+    },
+    {
+        "tags": {
+            "any": [
+                "road_construction",
+                "road_minor",
+                "road_unclassified",
+                "path",
+                "road_limited"
+            ]
+        },
+        "stylers": {
+            "visibility": "off"
+        }
+    },
+    {
+        "elements": "label.text",
+        "tags": {
+            "none": [
+                "poi",
+                "transit"
+            ]
+        },
+        "stylers": {
+            "visibility": "off"
+        }
+    },
+    {
+        "tags": "locality",
+        "elements": "label",
+        "stylers": {
+            "visibility": "off"
+        }
+    },
+    {
+        "tags": {
+            "any": [
+                "region",
+                "road_1",
+                "road_2",
+                "road_3",
+                "road_4"
+            ]
+        },
+        "elements": "label",
+        "stylers": {
+            "visibility": "off"
+        }
+    },
+    {
+        "tags": {
+            "any": [
+                "district"
+            ]
+        },
+        "elements": "label",
+        "stylers": {
+            "visibility": "off"
+        }
+    },
+    {
+        "tags": {
+            "any": "admin",
+            "none": [
+                "country",
+                "region",
+                "locality",
+                "district",
+                "address"
+            ]
+        },
+        "elements": "label",
+        "stylers": {
+            "visibility": "off"
+        }
+    },
+    {
+        "tags": {
+            "any": [
+                "road_5",
+                "road_6"
+            ]
+        },
+        "elements": "label",
+        "stylers": {
+            "visibility": "off"
+        }
+    },
+    {
+        "tags": {
+            "any": [
+                "address",
+                "road_7",
+                "road_limited",
+                "road_unclassified",
+                "road_minor",
+                "road_construction",
+                "path"
+            ]
+        },
+        "elements": "label",
+        "stylers": {
+            "visibility": "off"
+        }
+    },
+    {
+        "tags": {
+            "any": [
+                "transit"
+            ]
+        },
+        "stylers": {
+            "visibility": "off"
+        }
+    },
+    {
+        "tags": {
+            "any": [
+                "country",
+                "region",
+                "district",
+                "locality",
+                "water",
+                "vegetation",
+                "park",
+                "structure"
+            ]
+        },
+        "elements": "geometry.fill",
+        "stylers": [
+            {
+                "color": "#000000"
+            }
+        ]
+    },
+    {
+        "tags": {
+            "any": [
+                "road_1",
+                "road_2",
+                "road_3",
+                "road_4",
+                "road_5",
+                "road_6",
+                "road_7",
+                "road_limited",
+                "road_unclassified",
+                "road_minor",
+                "road_construction"
+            ]
+        },
+        "elements": "geometry.fill",
+        "stylers": [
+            {
+                "color": "#707070"
+            }
+        ]
+    },
+    {
+        "tags": {
+            "any": [
+                "road_1",
+                "road_2",
+                "road_3",
+                "road_4",
+                "road_5",
+                "road_6",
+                "road_7",
+                "road_limited",
+                "road_unclassified",
+                "road_minor",
+                "road_construction"
+            ]
+        },
+        "elements": "geometry.outline",
+        "stylers": [
+            {
+                "color": "#707070"
+            }
+        ]
+    },
+    {
+        "tags": {
+            "any": "road"
+        },
+        "elements": "geometry.fill.pattern",
+        "types": "polyline",
+        "stylers": [
+            {
+                "color": "#707070"
+            }
+        ]
+    },
+    {
+        "tags": "building",
+        "elements": "geometry.fill",
+        "stylers": [
+            {
+                "color": "#6f6f6f"
+            }
+        ]
+    },
+    {
+        "tags": "building",
+        "elements": "geometry.outline",
+        "stylers": [
+            {
+                "color": "#6f6f6f"
+            }
+        ]
+    }
+]

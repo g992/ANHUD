@@ -34,24 +34,11 @@ captures/
 # OS files
 .DS_Store
 
-./CLAUDE.md
-./.claude/*
-/yandex_maps_mod_workspace/
-/YN_decompile/
 /MODIFICATIONS.md
 /my-release-key.jks
-/CLAUDE.md
 /apply_changes.sh
-/.claude/
 /app/release/
 /.kotlin/
 
-YN_Patch/*
-YN_Patch
-/YN_Patch/
-/YN_src_decompiled/
-/YN_src_extracted/
-/YM_src
-/YN_src
-/src_button/
-/maptest/
+
+/aleksan-navi-src/

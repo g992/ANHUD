@@ -39,6 +39,7 @@ data class NavigationHudState(
     val rawTitle: String = "",
     val rawText: String = "",
     val rawSubtext: String = "",
+    val tripStatusBitmap: Bitmap? = null,
     val distanceUnit: String = "",
     val nativeTurnId: Int? = null,
     val hudSpeedHasCamera: Boolean = false,
@@ -70,6 +71,7 @@ data class NavigationHudState(
             trafficCountdown.isBlank() &&
             maneuverBitmap == null &&
             maneuverType.isBlank() &&
+            tripStatusBitmap == null &&
             !hudSpeedHasCamera &&
             !hudSpeedHasGps &&
             trafficLights.isEmpty() &&
@@ -140,6 +142,7 @@ object NavigationHudStore {
                 rawTitle = "",
                 rawText = "",
                 rawSubtext = "",
+                tripStatusBitmap = null,
                 distanceUnit = "",
                 nativeTurnId = null,
                 hudSpeedHasCamera = if (preserveHudSpeed) current.hudSpeedHasCamera else false,

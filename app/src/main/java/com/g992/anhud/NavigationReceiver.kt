@@ -208,6 +208,21 @@ class NavigationReceiver : BroadcastReceiver() {
                 }
                 updated?.let { maybeUpdateNativeNavigation(context, it, NativeNavUpdateTrigger.TIME) }
             }
+            ACTION_YANDEX_TRIP_STATUS_BITMAP -> {
+                val bitmap = getBitmapExtra(intent, EXTRA_TRIP_STATUS_BITMAP)
+                    ?.takeUnless { it.isRecycled || it.width <= 0 || it.height <= 0 }
+                val size = if (bitmap != null) "${bitmap.width}x${bitmap.height}" else "none"
+                Log.d(TAG, "Yandex trip status bitmap: $size")
+                UiLogStore.append(LogCategory.NAVIGATION, "яндекс trip status bitmap=$size")
+                NavigationHudStore.update { state ->
+                    state.copy(
+                        tripStatusBitmap = bitmap,
+                        source = SOURCE_YANDEX,
+                        lastUpdated = System.currentTimeMillis(),
+                        lastAction = action
+                    )
+                }
+            }
             ACTION_YANDEX_NAV_ACTIVE -> {
                 val isActive = intent.getBooleanExtra(EXTRA_NAV_IS_ACTIVE, false)
                 Log.d(TAG, "Yandex navigation state: isActive=$isActive")
@@ -440,6 +455,7 @@ class NavigationReceiver : BroadcastReceiver() {
         const val ACTION_YANDEX_ARRIVAL = "com.yandex.ARRIVAL"
         const val ACTION_YANDEX_DISTANCE = "com.yandex.DISTANCE"
         const val ACTION_YANDEX_TIME = "com.yandex.TIME"
+        const val ACTION_YANDEX_TRIP_STATUS_BITMAP = "com.yandex.TRIP_STATUS_BITMAP"
         const val ACTION_YANDEX_NAV_ACTIVE = "com.yandex.NAV_ACTIVE"
         const val ACTION_YANDEX_ROADCAMERA = "com.yandex.ROADCAMERA"
         const val ACTION_YANDEX_TRAFFICLIGHT = "com.yandex.TRAFFICLIGHT"
@@ -456,6 +472,7 @@ class NavigationReceiver : BroadcastReceiver() {
         const val EXTRA_ARRIVAL_TEXT = "Arrival_text"
         const val EXTRA_DISTANCE_TEXT = "Distance_text"
         const val EXTRA_TIME_TEXT = "Time_text"
+        const val EXTRA_TRIP_STATUS_BITMAP = "trip_status_bitmap"
         const val EXTRA_NAV_IS_ACTIVE = "is_active"
         const val EXTRA_CAMERA_ID = "camera_id"
         const val EXTRA_CAMERA_DISTANCE = "distance_text"
@@ -516,6 +533,7 @@ class NavigationReceiver : BroadcastReceiver() {
                 action == ACTION_YANDEX_ARRIVAL ||
                 action == ACTION_YANDEX_DISTANCE ||
                 action == ACTION_YANDEX_TIME ||
+                action == ACTION_YANDEX_TRIP_STATUS_BITMAP ||
                 action == ACTION_YANDEX_NAV_ACTIVE ||
                 action == ACTION_YANDEX_ROADCAMERA ||
                 action == ACTION_YANDEX_TRAFFICLIGHT ||
@@ -574,8 +592,10 @@ class NavigationReceiver : BroadcastReceiver() {
                 state.rawNextText.isNotBlank() ||
                 state.rawNextStreet.isNotBlank() ||
                 state.rawDistance.isNotBlank() ||
+                state.rawArrival.isNotBlank() ||
                 state.rawTime.isNotBlank() ||
                 state.maneuverBitmap != null ||
+                state.tripStatusBitmap != null ||
                 state.maneuverType.isNotBlank()
         }
 
@@ -634,6 +654,15 @@ class NavigationReceiver : BroadcastReceiver() {
                 }
                 ACTION_YANDEX_TIME -> {
                     "$action:${normalizeText(intent.getStringExtra(EXTRA_TIME_TEXT).orEmpty())}"
+                }
+                ACTION_YANDEX_TRIP_STATUS_BITMAP -> {
+                    val bitmap = getBitmapExtra(intent, EXTRA_TRIP_STATUS_BITMAP)
+                    val bitmapKey = if (bitmap != null) {
+                        "${bitmap.width}x${bitmap.height}:${bitmap.generationId}"
+                    } else {
+                        "none"
+                    }
+                    "$action:$bitmapKey"
                 }
                 ACTION_YANDEX_NAV_ACTIVE -> {
                     "$action:${intent.getBooleanExtra(EXTRA_NAV_IS_ACTIVE, false)}"

@@ -50,6 +50,7 @@ internal fun MainActivity.openPositionDialog(
     val previewContainer = dialogView.findViewById<FrameLayout>(R.id.dialogPreviewContainer)
     val previewHudContainer = dialogView.findViewById<FrameLayout>(R.id.dialogPreviewHudContainer)
     val previewMapBlock = dialogView.findViewById<View>(R.id.dialogPreviewMapBlock)
+    val previewMapTripStatus = dialogView.findViewById<MapTripStatusView>(R.id.dialogPreviewMapTripStatus)
     val previewNavBlock = dialogView.findViewById<View>(R.id.dialogPreviewNavBlock)
     val previewLaneGuidanceBlock = dialogView.findViewById<View>(R.id.dialogPreviewLaneGuidanceBlock)
     val previewNavTextColumn = dialogView.findViewById<LinearLayout>(R.id.dialogPreviewNavTextColumn)
@@ -81,6 +82,8 @@ internal fun MainActivity.openPositionDialog(
     val roadEventsRow = dialogView.findViewById<View>(R.id.dialogRoadEventsRow)
     val roadEventsCheck = dialogView.findViewById<CheckBox>(R.id.dialogRoadEventsCheck)
     val roadEventsButton = dialogView.findViewById<Button>(R.id.dialogRoadEventsButton)
+    val tripStatusRow = dialogView.findViewById<View>(R.id.dialogTripStatusRow)
+    val tripStatusCheck = dialogView.findViewById<CheckBox>(R.id.dialogTripStatusCheck)
     val laneGuidanceRow = dialogView.findViewById<View>(R.id.dialogLaneGuidanceRow)
     val laneGuidanceCheck = dialogView.findViewById<CheckBox>(R.id.dialogLaneGuidanceCheck)
     val laneGuidanceButton = dialogView.findViewById<Button>(R.id.dialogLaneGuidanceButton)
@@ -276,8 +279,10 @@ internal fun MainActivity.openPositionDialog(
         mapStyleLabel.visibility = View.VISIBLE
         mapStyleSpinner.visibility = View.VISIBLE
         roadEventsRow.visibility = View.VISIBLE
+        tripStatusRow.visibility = View.VISIBLE
         laneGuidanceRow.visibility = View.VISIBLE
         roadEventsCheck.isChecked = MapRenderSettingsStore.current().roadEventsEnabled
+        tripStatusCheck.isChecked = MapRenderSettingsStore.current().tripStatusEnabled
         laneGuidanceCheck.isChecked = MapRenderSettingsStore.current().laneGuidanceEnabled
         val styleAdapter = object : ArrayAdapter<String>(
             this,
@@ -323,6 +328,16 @@ internal fun MainActivity.openPositionDialog(
         roadEventsButton.setOnClickListener {
             showRoadEventsDialog()
         }
+        tripStatusCheck.setOnCheckedChangeListener { _, isChecked ->
+            if (isChecked == MapRenderSettingsStore.current().tripStatusEnabled) return@setOnCheckedChangeListener
+            MapRenderSettingsStore.update { it.copy(tripStatusEnabled = isChecked) }
+            previewMapTripStatus.visibility = if (isChecked) View.VISIBLE else View.GONE
+            notifyOverlaySettingsChanged(
+                preview = true,
+                previewTarget = target,
+                previewShowOthers = showOthersCheck.isChecked
+            )
+        }
         laneGuidanceCheck.setOnCheckedChangeListener { _, isChecked ->
             if (isChecked == MapRenderSettingsStore.current().laneGuidanceEnabled) return@setOnCheckedChangeListener
             MapRenderSettingsStore.update { it.copy(laneGuidanceEnabled = isChecked) }
@@ -339,6 +354,7 @@ internal fun MainActivity.openPositionDialog(
         mapStyleLabel.visibility = View.GONE
         mapStyleSpinner.visibility = View.GONE
         roadEventsRow.visibility = View.GONE
+        tripStatusRow.visibility = View.GONE
         laneGuidanceRow.visibility = View.GONE
     }
 
@@ -507,6 +523,12 @@ internal fun MainActivity.openPositionDialog(
         val containerHeightPx = containerHeightDp * density
         if (showMap) {
             clampMapSize()
+            previewMapTripStatus.updateContent(
+                distance = activity.getString(R.string.preview_distance_text),
+                arrival = activity.getString(R.string.preview_trip_status_arrival_text),
+                time = activity.getString(R.string.preview_trip_status_eta_text),
+                bitmap = null
+            )
             previewMapBlock.layoutParams = (previewMapBlock.layoutParams as? FrameLayout.LayoutParams)?.apply {
                 width = (mapWidthDp * density).roundToInt().coerceAtLeast(1)
                 height = (mapHeightDp * density).roundToInt().coerceAtLeast(1)
@@ -529,6 +551,22 @@ internal fun MainActivity.openPositionDialog(
                 brightnessSeek.progress.coerceIn(0, 100) / 100f
             } else {
                 OverlayPrefs.mapAlpha(activity).coerceIn(0f, 1f)
+            }
+            val previewMapHeightPx = (mapHeightDp * density).roundToInt().coerceAtLeast(1)
+            previewMapTripStatus.layoutParams =
+                (previewMapTripStatus.layoutParams as? FrameLayout.LayoutParams)?.apply {
+                    width = FrameLayout.LayoutParams.MATCH_PARENT
+                    height = resolveMapTripStatusHeightPx(previewMapHeightPx, false)
+                    gravity = Gravity.BOTTOM
+                } ?: FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.MATCH_PARENT,
+                    resolveMapTripStatusHeightPx(previewMapHeightPx, false),
+                    Gravity.BOTTOM
+                )
+            previewMapTripStatus.visibility = if (MapRenderSettingsStore.current().tripStatusEnabled) {
+                View.VISIBLE
+            } else {
+                View.GONE
             }
         }
         if (showNav) {

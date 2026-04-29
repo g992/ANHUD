@@ -17,6 +17,7 @@ import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
 import android.util.Log
+import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
@@ -72,6 +73,8 @@ class HudMapController(
     private var laneManeuverPlacemark: PlacemarkMapObject? = null
     private var locationCollection: MapObjectCollection? = null
     private var locationPlacemark: PlacemarkMapObject? = null
+    private var hostContainer: FrameLayout? = null
+    private var tripStatusView: MapTripStatusView? = null
     private val locationArrowProvider by lazy { ImageProvider.fromBitmap(createLocationArrowBitmap()) }
     private var deviceLocationListener: LocationListener? = null
     private var released = false
@@ -82,6 +85,7 @@ class HudMapController(
     private var currentSnapshot = MapRouteTelemetryStore.current()
     private var currentLocation: Location? = null
     private var currentDisplayLocation: Location? = null
+    private var currentNavState: NavigationHudState = NavigationHudStore.snapshot()
     private var locationAnimation: LocationAnimation? = null
     private var lastRawDeviceLocation: Location? = null
     private var lastResolvedDeviceBearing: Float? = null
@@ -109,12 +113,16 @@ class HudMapController(
 
     private val navStateListener = object : NavigationHudStore.Listener {
         override fun onStateUpdated(state: NavigationHudState) {
+            currentNavState = state
             val newBucket = applySpeedBucketHysteresis(currentSpeedBucketKmh, state.speedKmh)
-            if (newBucket == currentSpeedBucketKmh) return
-            currentSpeedBucketKmh = newBucket
-            if (currentSettings.autoZoomEnabled) {
+            val bucketChanged = newBucket != currentSpeedBucketKmh
+            if (bucketChanged) {
+                currentSpeedBucketKmh = newBucket
+            }
+            if (bucketChanged && currentSettings.autoZoomEnabled) {
                 applyTrackingConfig()
             }
+            requestTelemetryRender()
         }
     }
 
@@ -134,6 +142,7 @@ class HudMapController(
 
     fun attachTo(container: FrameLayout) {
         if (released) return
+        hostContainer = container
         val currentParent = mapView.parent as? ViewGroup
         if (currentParent !== container) {
             currentParent?.removeView(mapView)
@@ -146,14 +155,21 @@ class HudMapController(
                 )
             )
         }
+        ensureTripStatusView(container)
         mapView.visibility = View.VISIBLE
         applyTrackingConfig()
         requestTelemetryRender()
+        container.post {
+            if (!released && hostContainer === container) {
+                requestTelemetryRender()
+            }
+        }
     }
 
     fun setVisible(visible: Boolean) {
         if (released) return
         mapView.visibility = if (visible) View.VISIBLE else View.INVISIBLE
+        tripStatusView?.visibility = if (visible) View.VISIBLE else View.INVISIBLE
     }
 
     fun release() {
@@ -168,6 +184,9 @@ class HudMapController(
         stopDeviceLocationTracking()
         mapView.onStop()
         stopMapKit()
+        (tripStatusView?.parent as? ViewGroup)?.removeView(tripStatusView)
+        tripStatusView = null
+        hostContainer = null
         (mapView.parent as? ViewGroup)?.removeView(mapView)
     }
 
@@ -270,6 +289,7 @@ class HudMapController(
         renderRoute(displayLocation)
         renderRouteAlerts(displayLocation)
         renderLaneManeuver()
+        renderTripStatus()
         moveCamera(displayLocation)
         if (locationAnimation != null) {
             requestTelemetryRender()
@@ -467,6 +487,78 @@ class HudMapController(
         )
         placemark.zIndex = 19f
         lastLaneManeuverRenderKey = renderKey
+    }
+
+    private fun renderTripStatus() {
+        val container = hostContainer ?: return
+        val tripStatus = ensureTripStatusView(container)
+        if (mapView.visibility != View.VISIBLE) {
+            tripStatus.visibility = View.INVISIBLE
+            return
+        }
+        val bitmap = currentNavState.tripStatusBitmap?.takeUnless {
+            it.isRecycled || it.width <= 0 || it.height <= 0
+        }
+        val distance = currentNavState.rawDistance.ifBlank { currentNavState.distance }
+        val arrival = currentNavState.rawArrival.ifBlank { currentNavState.arrival }
+        val time = currentNavState.rawTime.ifBlank { currentNavState.time }
+        val shouldShow = currentSettings.tripStatusEnabled &&
+            (currentSnapshot.hasRoute || currentNavState.routeActive == true) &&
+            (distance.isNotBlank() || arrival.isNotBlank() || time.isNotBlank() || bitmap != null)
+        if (!shouldShow) {
+            tripStatus.visibility = View.GONE
+            return
+        }
+        val heightPx = resolveMapTripStatusHeightPx(container.height, bitmap != null)
+        val layoutParams = (tripStatus.layoutParams as? FrameLayout.LayoutParams)
+            ?: FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                heightPx,
+                Gravity.BOTTOM
+            )
+        layoutParams.width = FrameLayout.LayoutParams.MATCH_PARENT
+        layoutParams.height = heightPx
+        layoutParams.gravity = Gravity.BOTTOM
+        tripStatus.layoutParams = layoutParams
+        tripStatus.updateContent(
+            distance = distance,
+            arrival = arrival,
+            time = time,
+            bitmap = bitmap
+        )
+        tripStatus.visibility = View.VISIBLE
+        container.bringChildToFront(tripStatus)
+    }
+
+    private fun ensureTripStatusView(container: FrameLayout): MapTripStatusView {
+        val existing = tripStatusView
+        if (existing != null) {
+            val parent = existing.parent as? ViewGroup
+            if (parent !== container) {
+                parent?.removeView(existing)
+                container.addView(
+                    existing,
+                    FrameLayout.LayoutParams(
+                        FrameLayout.LayoutParams.MATCH_PARENT,
+                        FrameLayout.LayoutParams.WRAP_CONTENT,
+                        Gravity.BOTTOM
+                    )
+                )
+            }
+            return existing
+        }
+        return MapTripStatusView(context).also { view ->
+            view.visibility = View.GONE
+            container.addView(
+                view,
+                FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.MATCH_PARENT,
+                    FrameLayout.LayoutParams.WRAP_CONTENT,
+                    Gravity.BOTTOM
+                )
+            )
+            tripStatusView = view
+        }
     }
 
     private fun renderResourceToBitmap(resourceId: Int): Bitmap? {

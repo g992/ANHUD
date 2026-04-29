@@ -60,6 +60,7 @@ data class MapRenderSettings(
     val roadEventsEnabled: Boolean = true,
     val roadEventIconSizePx: Int = ROAD_EVENT_ICON_SIZE_DEFAULT_PX,
     val hiddenRoadEventTypes: Set<String> = emptySet(),
+    val tripStatusEnabled: Boolean = true,
     val laneGuidanceEnabled: Boolean = true,
     val laneGuidanceWidthPx: Int = LANE_GUIDANCE_WIDTH_DEFAULT_PX,
     val offlineRegionId: String? = null,
@@ -272,6 +273,7 @@ object MapRenderSettingsStore {
     private const val KEY_ROAD_EVENTS_ENABLED = "road_events_enabled"
     private const val KEY_ROAD_EVENT_ICON_SIZE = "road_event_icon_size_px"
     private const val KEY_HIDDEN_ROAD_EVENT_TYPES = "hidden_road_event_types"
+    private const val KEY_TRIP_STATUS_ENABLED = "trip_status_enabled"
     private const val KEY_LANE_GUIDANCE_ENABLED = "lane_guidance_enabled"
     private const val KEY_LANE_GUIDANCE_WIDTH = "lane_guidance_width_px"
     private const val KEY_OFFLINE_REGION_ID = "offline_region_id"
@@ -327,6 +329,7 @@ object MapRenderSettingsStore {
             .putBoolean(KEY_ROAD_EVENTS_ENABLED, updated.roadEventsEnabled)
             .putInt(KEY_ROAD_EVENT_ICON_SIZE, updated.roadEventIconSizePx)
             .putStringSet(KEY_HIDDEN_ROAD_EVENT_TYPES, updated.hiddenRoadEventTypes)
+            .putBoolean(KEY_TRIP_STATUS_ENABLED, updated.tripStatusEnabled)
             .putBoolean(KEY_LANE_GUIDANCE_ENABLED, updated.laneGuidanceEnabled)
             .putInt(KEY_LANE_GUIDANCE_WIDTH, updated.laneGuidanceWidthPx)
             .putString(KEY_OFFLINE_REGION_ID, updated.offlineRegionId)
@@ -370,6 +373,7 @@ object MapRenderSettingsStore {
             roadEventsEnabled = prefs.getBoolean(KEY_ROAD_EVENTS_ENABLED, true),
             roadEventIconSizePx = prefs.getInt(KEY_ROAD_EVENT_ICON_SIZE, ROAD_EVENT_ICON_SIZE_DEFAULT_PX),
             hiddenRoadEventTypes = prefs.getStringSet(KEY_HIDDEN_ROAD_EVENT_TYPES, emptySet()).orEmpty(),
+            tripStatusEnabled = prefs.getBoolean(KEY_TRIP_STATUS_ENABLED, true),
             laneGuidanceEnabled = prefs.getBoolean(KEY_LANE_GUIDANCE_ENABLED, true),
             laneGuidanceWidthPx = prefs.getInt(KEY_LANE_GUIDANCE_WIDTH, LANE_GUIDANCE_WIDTH_DEFAULT_PX),
             offlineRegionId = prefs.getString(KEY_OFFLINE_REGION_ID, null),
