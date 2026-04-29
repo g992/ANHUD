@@ -1,11 +1,8 @@
 package com.g992.anhud
 
 import android.content.Context
+import org.json.JSONArray
 import org.json.JSONObject
-import org.maplibre.geojson.Feature
-import org.maplibre.geojson.Geometry
-import org.maplibre.geojson.Point
-import org.maplibre.geojson.Polygon
 import java.io.PushbackReader
 import java.io.File
 import java.io.InputStreamReader
@@ -22,7 +19,7 @@ data class ResolvedOfflineGeometry(
     val label: String,
     val regionId: String,
     val bounds: OfflineRegionBounds,
-    val geometry: Geometry,
+    val geometryJson: String,
 )
 
 object GeoBoundariesRegionResolver {
@@ -32,7 +29,7 @@ object GeoBoundariesRegionResolver {
                 label = manual.label,
                 regionId = manual.offlineRegionId(),
                 bounds = manual.boundsPreview(),
-                geometry = manual.toPolygonGeometry(),
+                geometryJson = manual.toPolygonFeatureJson(),
             )
         }
         val entry = OfflineRegionCatalog.findById(context, settings.offlineRegionId)
@@ -50,8 +47,7 @@ object GeoBoundariesRegionResolver {
                 label = entry.displayLabel,
                 regionId = entry.id,
                 bounds = entry.boundsPreview(),
-                geometry = Feature.fromJson(cacheFile.readText(Charsets.UTF_8)).geometry()
-                    ?: error("Cached geometry is empty for ${entry.id}")
+                geometryJson = cacheFile.readText(Charsets.UTF_8),
             )
         }
 
@@ -62,15 +58,19 @@ object GeoBoundariesRegionResolver {
             .ifBlank { error("geoBoundaries did not return a GeoJSON URL") }
         val sourceFeatureJson = findFeatureJson(geometryUrl, entry)
             ?: error("Не удалось найти границы для ${entry.displayLabel}")
-        val feature = Feature.fromJson(sourceFeatureJson)
-        val geometry = feature.geometry() ?: error("geoBoundaries returned empty geometry")
-        val featureJson = Feature.fromGeometry(geometry).toJson()
+        val geometry = JSONObject(sourceFeatureJson).optJSONObject("geometry")
+            ?: error("geoBoundaries returned empty geometry")
+        val featureJson = JSONObject()
+            .put("type", "Feature")
+            .put("properties", JSONObject())
+            .put("geometry", geometry)
+            .toString()
         cacheFile.writeText(featureJson, Charsets.UTF_8)
         return ResolvedOfflineGeometry(
             label = entry.displayLabel,
             regionId = entry.id,
             bounds = entry.boundsPreview(),
-            geometry = geometry,
+            geometryJson = featureJson,
         )
     }
 
@@ -231,18 +231,23 @@ object GeoBoundariesRegionResolver {
     }
 }
 
-private fun ManualOfflineBounds.toPolygonGeometry(): Polygon {
-    return Polygon.fromLngLats(
-        listOf(
-            listOf(
-                Point.fromLngLat(west, south),
-                Point.fromLngLat(east, south),
-                Point.fromLngLat(east, north),
-                Point.fromLngLat(west, north),
-                Point.fromLngLat(west, south),
-            )
+private fun ManualOfflineBounds.toPolygonFeatureJson(): String {
+    val ring = JSONArray()
+        .put(JSONArray().put(west).put(south))
+        .put(JSONArray().put(east).put(south))
+        .put(JSONArray().put(east).put(north))
+        .put(JSONArray().put(west).put(north))
+        .put(JSONArray().put(west).put(south))
+    return JSONObject()
+        .put("type", "Feature")
+        .put("properties", JSONObject())
+        .put(
+            "geometry",
+            JSONObject()
+                .put("type", "Polygon")
+                .put("coordinates", JSONArray().put(ring))
         )
-    )
+        .toString()
 }
 
 private fun ManualOfflineBounds.offlineRegionId(): String {

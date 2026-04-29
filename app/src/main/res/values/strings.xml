@@ -66,7 +66,12 @@
     <string name="position_blocks_hint">Нажмите блок, чтобы открыть настройку положения.</string>
     <string name="position_container_label">Контейнер HUD</string>
     <string name="position_map_block_label">Блок карты</string>
+    <string name="position_map_style_label">Стиль карты</string>
+    <string name="map_road_events_button">Дорожные события</string>
+    <string name="map_lane_guidance_button">Подсказки перестроения</string>
+    <string name="common_configure">Настроить</string>
     <string name="position_nav_block_label">Блок навигации</string>
+    <string name="position_lane_guidance_block_label">Блок подсказок перестроения</string>
     <string name="position_arrow_block_label">Блок стрелки</string>
     <string name="position_speed_block_label">Ограничитель скорости</string>
     <string name="position_hudspeed_block_label">Блок HUD Speed</string>
@@ -186,6 +191,8 @@
     <string name="map_settings_offline_size_unknown">размер неизвестен</string>
     <string name="map_settings_offline_size_single">примерно %1$.0f MB</string>
     <string name="map_settings_offline_size_range">примерно %1$.0f-%2$.0f MB</string>
+    <string name="map_lane_guidance_dialog_title">Подсказки перестроения</string>
+    <string name="map_lane_guidance_width_label">Максимальная ширина блока на карте: %1$d px</string>
 
     <string name="settings_timeouts_section_title">Таймауты</string>
     <string name="settings_timeouts_section_hint">Камеры, светофоры и завершение поездки</string>

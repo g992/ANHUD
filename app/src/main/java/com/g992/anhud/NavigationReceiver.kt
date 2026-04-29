@@ -7,7 +7,6 @@ import android.graphics.Bitmap
 import android.os.Bundle
 import android.os.Build
 import android.util.Log
-import org.maplibre.android.geometry.LatLng
 import java.util.Locale
 
 private const val MIN_ARROW_NATIVE_UPDATE_INTERVAL_MS = 3000L
@@ -306,9 +305,14 @@ class NavigationReceiver : BroadcastReceiver() {
                     UiLogStore.append(LogCategory.NAVIGATION, "получена полилиния: ${points.size} точек")
                     MapRouteTelemetryStore.replaceRoutePolyline(context.applicationContext, routeId, points)
                 } else if (!routeActive) {
-                    Log.d(TAG, "Route polyline: route cleared")
-                    UiLogStore.append(LogCategory.NAVIGATION, "полилиния очищена (маршрут завершен)")
+                    Log.d(TAG, "Route polyline: inactive update, clearing current route")
+                    UiLogStore.append(LogCategory.NAVIGATION, "полилиния inactive: очищаем текущий маршрут")
                     MapRouteTelemetryStore.clearRoutePolyline(context.applicationContext)
+                } else {
+                    Log.w(
+                        TAG,
+                        "Route polyline ignored: invalid payload active=$routeActive safeCount=$safeCount"
+                    )
                 }
             }
             ACTION_NATIVE_NAV_STOP -> {

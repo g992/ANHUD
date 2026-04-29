@@ -45,6 +45,7 @@ data class ManualOfflineBounds(
 
 data class MapRenderSettings(
     val zoom: Double = 17.8,
+    val mapStyleId: String = MAP_STYLE_ID_MINIMAL,
     val autoZoomEnabled: Boolean = false,
     val autoZoomAt0Kmh: Double = 20.0,
     val autoZoomAt60Kmh: Double = 15.0,
@@ -56,6 +57,11 @@ data class MapRenderSettings(
     val snapRouteToRoadsEnabled: Boolean = false,
     val snapLocationToRoadsEnabled: Boolean = false,
     val routeSnapDistanceMeters: Int = MAP_ROUTE_SNAP_DEFAULT_METERS,
+    val roadEventsEnabled: Boolean = true,
+    val roadEventIconSizePx: Int = ROAD_EVENT_ICON_SIZE_DEFAULT_PX,
+    val hiddenRoadEventTypes: Set<String> = emptySet(),
+    val laneGuidanceEnabled: Boolean = true,
+    val laneGuidanceWidthPx: Int = LANE_GUIDANCE_WIDTH_DEFAULT_PX,
     val offlineRegionId: String? = null,
     val offlineManualLabel: String? = null,
     val offlineManualLat1: Double? = null,
@@ -71,6 +77,99 @@ const val MAP_ROUTE_SNAP_MAX_METERS = 10
 const val MAP_ROUTE_SNAP_DEFAULT_METERS = 5
 const val MAP_ZOOM_MIN = 10.0
 const val MAP_ZOOM_MAX = 21.0
+const val MAP_STYLE_ID_MINIMAL = "minimal"
+const val ROAD_EVENT_ICON_SIZE_MIN_PX = 20
+const val ROAD_EVENT_ICON_SIZE_MAX_PX = 60
+const val ROAD_EVENT_ICON_SIZE_DEFAULT_PX = 35
+const val LANE_GUIDANCE_WIDTH_MIN_PX = 40
+const val LANE_GUIDANCE_WIDTH_MAX_PX = 180
+const val LANE_GUIDANCE_WIDTH_DEFAULT_PX = 60
+
+data class RoadEventOption(
+    val typeKey: String,
+    val title: String,
+    val iconRes: Int,
+)
+
+val RoadEventOptions = listOf(
+    RoadEventOption("SPEED_CONTROL", "Камера контроля скорости", R.drawable.pin_alerts_speed_camera),
+    RoadEventOption("NO_STOPPING_CONTROL", "Камера на остановку", R.drawable.pin_alerts_no_stopping_control),
+    RoadEventOption("LANE_CONTROL", "Камера контроля полосы", R.drawable.pin_alerts_lane_control),
+    RoadEventOption("ROAD_MARKING_CONTROL", "Камера на разметку", R.drawable.pin_alerts_lane_control),
+    RoadEventOption("CROSS_ROAD_CONTROL", "Камера контроля перекрёстка", R.drawable.pin_alerts_cross_road_control),
+    RoadEventOption("MOBILE_CONTROL", "Мобильная засада", R.drawable.pin_alerts_mobile_control),
+    RoadEventOption("DANGER", "Опасный участок", R.drawable.pin_alerts_danger),
+    RoadEventOption("ACCIDENT", "ДТП", R.drawable.pin_alerts_accident),
+    RoadEventOption("RECONSTRUCTION", "Дорожные работы", R.drawable.pin_alerts_road_works),
+    RoadEventOption("CHAT", "Разговорчики", R.drawable.pin_alerts_chat),
+    RoadEventOption("CLOSED", "Перекрытие", R.drawable.pin_alerts_closed),
+    RoadEventOption("DRAWBRIDGE", "Разводной мост", R.drawable.pin_alerts_drawbridge),
+    RoadEventOption("TRAFFIC_LIGHT", "Светофоры", R.drawable.route_alert_trafficlight),
+    RoadEventOption("RAILWAY_CROSSING", "Ж/Д переезд", R.drawable.pin_alerts_railway_crossing),
+    RoadEventOption("SPEED_BUMP", "Искусственная неровность", R.drawable.pin_alerts_speed_bump),
+    RoadEventOption("RUGGED_ROAD", "Неровная дорога", R.drawable.pin_alerts_road_rugged),
+    RoadEventOption("SCHOOL", "Школа", R.drawable.pin_alerts_school_ahead),
+    RoadEventOption("EVENT", "Прочее", R.drawable.pin_alerts_other),
+)
+
+fun resolveRoadEventToggleKey(typeRaw: String?): String {
+    val type = typeRaw.orEmpty().trim().uppercase()
+    return when {
+        "SCHOOL" in type -> "SCHOOL"
+        "TRAFFIC_LIGHT" in type -> "TRAFFIC_LIGHT"
+        "RAILWAY" in type -> "RAILWAY_CROSSING"
+        "SPEED_BUMP" in type -> "SPEED_BUMP"
+        "RUGGED" in type -> "RUGGED_ROAD"
+        "SPEED_CONTROL" in type -> "SPEED_CONTROL"
+        "NO_STOPPING" in type -> "NO_STOPPING_CONTROL"
+        "LANE_CONTROL" in type -> "LANE_CONTROL"
+        "ROAD_MARKING" in type -> "ROAD_MARKING_CONTROL"
+        "CROSS_ROAD_CONTROL" in type -> "CROSS_ROAD_CONTROL"
+        "MOBILE_CONTROL" in type || "POLICE" in type -> "MOBILE_CONTROL"
+        "DANGER" in type -> "DANGER"
+        "ACCIDENT" in type -> "ACCIDENT"
+        "RECONSTRUCTION" in type || "ROAD_WORKS" in type -> "RECONSTRUCTION"
+        "CHAT" in type -> "CHAT"
+        "CLOSED" in type -> "CLOSED"
+        "DRAWBRIDGE" in type -> "DRAWBRIDGE"
+        else -> "EVENT"
+    }
+}
+
+fun resolveRoadEventIconRes(typeRaw: String?): Int =
+    RoadEventOptions.firstOrNull { it.typeKey == resolveRoadEventToggleKey(typeRaw) }?.iconRes
+        ?: R.drawable.pin_alerts_other
+
+data class MapStyleOption(
+    val id: String,
+    val title: String,
+    val assetPath: String,
+)
+
+val MapStyleOptions = listOf(
+    MapStyleOption(
+        id = MAP_STYLE_ID_MINIMAL,
+        title = "Минимальный",
+        assetPath = "styles/map_minimal.json"
+    ),
+    MapStyleOption(
+        id = "buildings",
+        title = "Здания",
+        assetPath = "styles/map_buildings.json"
+    ),
+)
+
+fun resolveMapStyleOption(styleId: String?): MapStyleOption =
+    MapStyleOptions.firstOrNull { it.id == normalizeMapStyleId(styleId) } ?: MapStyleOptions.first()
+
+private fun normalizeMapStyleId(styleId: String?): String {
+    return when (styleId) {
+        "hud_minimal" -> MAP_STYLE_ID_MINIMAL
+        "minimal_trafficlights" -> MAP_STYLE_ID_MINIMAL
+        "buildings_trafficlights" -> "buildings"
+        else -> styleId ?: MAP_STYLE_ID_MINIMAL
+    }
+}
 
 val MapCacheSizeOptionsMb = intArrayOf(256, 512, 1024, 2048, 4096)
 
@@ -97,6 +196,7 @@ fun MapRenderSettings.manualOfflineBoundsOrNull(): ManualOfflineBounds? {
 fun MapRenderSettings.normalized(): MapRenderSettings {
     val base = copy(
         zoom = zoom.coerceIn(MAP_ZOOM_MIN, MAP_ZOOM_MAX),
+        mapStyleId = resolveMapStyleOption(mapStyleId).id,
         autoZoomAt0Kmh = autoZoomAt0Kmh.coerceIn(MAP_ZOOM_MIN, MAP_ZOOM_MAX),
         autoZoomAt60Kmh = autoZoomAt60Kmh.coerceIn(MAP_ZOOM_MIN, MAP_ZOOM_MAX),
         autoZoomAt90Kmh = autoZoomAt90Kmh.coerceIn(MAP_ZOOM_MIN, MAP_ZOOM_MAX),
@@ -110,6 +210,18 @@ fun MapRenderSettings.normalized(): MapRenderSettings {
             MAP_ROUTE_SNAP_MIN_METERS,
             MAP_ROUTE_SNAP_MAX_METERS
         ),
+        roadEventIconSizePx = roadEventIconSizePx.coerceIn(
+            ROAD_EVENT_ICON_SIZE_MIN_PX,
+            ROAD_EVENT_ICON_SIZE_MAX_PX
+        ),
+        laneGuidanceWidthPx = laneGuidanceWidthPx.coerceIn(
+            LANE_GUIDANCE_WIDTH_MIN_PX,
+            LANE_GUIDANCE_WIDTH_MAX_PX
+        ),
+        hiddenRoadEventTypes = hiddenRoadEventTypes
+            .map(::resolveRoadEventToggleKey)
+            .filter { key -> RoadEventOptions.any { it.typeKey == key } }
+            .toSet(),
         offlineRegionId = offlineRegionId?.takeIf { it.isNotBlank() },
     )
     return if (base.offlineRegionId != null) {
@@ -145,6 +257,7 @@ fun MapRenderSettings.normalized(): MapRenderSettings {
 object MapRenderSettingsStore {
     private const val PREFS_NAME = "map_render_settings"
     private const val KEY_ZOOM = "zoom"
+    private const val KEY_MAP_STYLE_ID = "map_style_id"
     private const val KEY_AUTO_ZOOM_ENABLED = "auto_zoom_enabled"
     private const val KEY_AUTO_ZOOM_AT_0 = "auto_zoom_at_0"
     private const val KEY_AUTO_ZOOM_AT_60 = "auto_zoom_at_60"
@@ -156,6 +269,11 @@ object MapRenderSettingsStore {
     private const val KEY_SNAP_ROUTE_TO_ROADS = "snap_route_to_roads_enabled"
     private const val KEY_SNAP_LOCATION_TO_ROADS = "snap_location_to_roads_enabled"
     private const val KEY_ROUTE_SNAP_DISTANCE = "route_snap_distance_meters"
+    private const val KEY_ROAD_EVENTS_ENABLED = "road_events_enabled"
+    private const val KEY_ROAD_EVENT_ICON_SIZE = "road_event_icon_size_px"
+    private const val KEY_HIDDEN_ROAD_EVENT_TYPES = "hidden_road_event_types"
+    private const val KEY_LANE_GUIDANCE_ENABLED = "lane_guidance_enabled"
+    private const val KEY_LANE_GUIDANCE_WIDTH = "lane_guidance_width_px"
     private const val KEY_OFFLINE_REGION_ID = "offline_region_id"
     private const val KEY_OFFLINE_MANUAL_LABEL = "offline_manual_label"
     private const val KEY_OFFLINE_MANUAL_LAT1 = "offline_manual_lat1"
@@ -194,6 +312,7 @@ object MapRenderSettingsStore {
         val updated = transform(currentSettings).normalized()
         prefs.edit()
             .putFloat(KEY_ZOOM, updated.zoom.toFloat())
+            .putString(KEY_MAP_STYLE_ID, updated.mapStyleId)
             .putBoolean(KEY_AUTO_ZOOM_ENABLED, updated.autoZoomEnabled)
             .putFloat(KEY_AUTO_ZOOM_AT_0, updated.autoZoomAt0Kmh.toFloat())
             .putFloat(KEY_AUTO_ZOOM_AT_60, updated.autoZoomAt60Kmh.toFloat())
@@ -205,6 +324,11 @@ object MapRenderSettingsStore {
             .putBoolean(KEY_SNAP_ROUTE_TO_ROADS, updated.snapRouteToRoadsEnabled)
             .putBoolean(KEY_SNAP_LOCATION_TO_ROADS, updated.snapLocationToRoadsEnabled)
             .putInt(KEY_ROUTE_SNAP_DISTANCE, updated.routeSnapDistanceMeters)
+            .putBoolean(KEY_ROAD_EVENTS_ENABLED, updated.roadEventsEnabled)
+            .putInt(KEY_ROAD_EVENT_ICON_SIZE, updated.roadEventIconSizePx)
+            .putStringSet(KEY_HIDDEN_ROAD_EVENT_TYPES, updated.hiddenRoadEventTypes)
+            .putBoolean(KEY_LANE_GUIDANCE_ENABLED, updated.laneGuidanceEnabled)
+            .putInt(KEY_LANE_GUIDANCE_WIDTH, updated.laneGuidanceWidthPx)
             .putString(KEY_OFFLINE_REGION_ID, updated.offlineRegionId)
             .putString(KEY_OFFLINE_MANUAL_LABEL, updated.offlineManualLabel)
             .putOptionalFloat(KEY_OFFLINE_MANUAL_LAT1, updated.offlineManualLat1)
@@ -231,6 +355,7 @@ object MapRenderSettingsStore {
     private fun readSettings(): MapRenderSettings {
         return MapRenderSettings(
             zoom = prefs.getFloat(KEY_ZOOM, 17.8f).toDouble(),
+            mapStyleId = prefs.getString(KEY_MAP_STYLE_ID, MAP_STYLE_ID_MINIMAL) ?: MAP_STYLE_ID_MINIMAL,
             autoZoomEnabled = prefs.getBoolean(KEY_AUTO_ZOOM_ENABLED, false),
             autoZoomAt0Kmh = prefs.getFloat(KEY_AUTO_ZOOM_AT_0, 20.0f).toDouble(),
             autoZoomAt60Kmh = prefs.getFloat(KEY_AUTO_ZOOM_AT_60, 15.0f).toDouble(),
@@ -242,6 +367,11 @@ object MapRenderSettingsStore {
             snapRouteToRoadsEnabled = prefs.getBoolean(KEY_SNAP_ROUTE_TO_ROADS, false),
             snapLocationToRoadsEnabled = prefs.getBoolean(KEY_SNAP_LOCATION_TO_ROADS, false),
             routeSnapDistanceMeters = prefs.getInt(KEY_ROUTE_SNAP_DISTANCE, MAP_ROUTE_SNAP_DEFAULT_METERS),
+            roadEventsEnabled = prefs.getBoolean(KEY_ROAD_EVENTS_ENABLED, true),
+            roadEventIconSizePx = prefs.getInt(KEY_ROAD_EVENT_ICON_SIZE, ROAD_EVENT_ICON_SIZE_DEFAULT_PX),
+            hiddenRoadEventTypes = prefs.getStringSet(KEY_HIDDEN_ROAD_EVENT_TYPES, emptySet()).orEmpty(),
+            laneGuidanceEnabled = prefs.getBoolean(KEY_LANE_GUIDANCE_ENABLED, true),
+            laneGuidanceWidthPx = prefs.getInt(KEY_LANE_GUIDANCE_WIDTH, LANE_GUIDANCE_WIDTH_DEFAULT_PX),
             offlineRegionId = prefs.getString(KEY_OFFLINE_REGION_ID, null),
             offlineManualLabel = prefs.getString(KEY_OFFLINE_MANUAL_LABEL, null),
             offlineManualLat1 = prefs.getOptionalFloat(KEY_OFFLINE_MANUAL_LAT1),

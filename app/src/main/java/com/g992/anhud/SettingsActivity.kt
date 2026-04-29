@@ -792,12 +792,6 @@ class SettingsActivity : ScaledActivity() {
                     *autoZoomRows.toTypedArray(),
                     createMapSliderRow(getString(R.string.map_settings_tilt), mapTiltValue, tiltSeek),
                     createMapSliderRow(getString(R.string.map_settings_arrow_scale), mapArrowValue, arrowSeek),
-                    createMapValueRow(getString(R.string.map_settings_cache), mapCacheValue, cacheRow),
-                    createMapSwitchRow(mapRouteDownloadSwitch, getString(R.string.map_settings_route_download_hint)),
-                    createMapSwitchRow(mapRouteSnapSwitch, getString(R.string.map_settings_route_snap_hint)),
-                    createMapSwitchRow(mapLocationSnapSwitch, getString(R.string.map_settings_location_snap_hint)),
-                    *routeSnapRows.toTypedArray(),
-                    createMapValueRow(getString(R.string.map_settings_offline_region), mapOfflineRegionValue, offlineDownloadsButton),
                 )
             )
         )

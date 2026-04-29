@@ -30,6 +30,8 @@ class HudBackgroundService : Service() {
                 val navX = intent.getFloatExtra(OverlayBroadcasts.EXTRA_NAV_X_DP, Float.NaN)
                 val navY = intent.getFloatExtra(OverlayBroadcasts.EXTRA_NAV_Y_DP, Float.NaN)
                 val navWidth = intent.getFloatExtra(OverlayBroadcasts.EXTRA_NAV_WIDTH_DP, Float.NaN)
+                val laneGuidanceX = intent.getFloatExtra(OverlayBroadcasts.EXTRA_LANE_GUIDANCE_X_DP, Float.NaN)
+                val laneGuidanceY = intent.getFloatExtra(OverlayBroadcasts.EXTRA_LANE_GUIDANCE_Y_DP, Float.NaN)
                 val arrowX = intent.getFloatExtra(OverlayBroadcasts.EXTRA_ARROW_X_DP, Float.NaN)
                 val arrowY = intent.getFloatExtra(OverlayBroadcasts.EXTRA_ARROW_Y_DP, Float.NaN)
                 val speedX = intent.getFloatExtra(OverlayBroadcasts.EXTRA_SPEED_X_DP, Float.NaN)
@@ -55,6 +57,7 @@ class HudBackgroundService : Service() {
                 val mapWidth = intent.getFloatExtra(OverlayBroadcasts.EXTRA_MAP_WIDTH_DP, Float.NaN)
                 val mapHeight = intent.getFloatExtra(OverlayBroadcasts.EXTRA_MAP_HEIGHT_DP, Float.NaN)
                 val navScale = intent.getFloatExtra(OverlayBroadcasts.EXTRA_NAV_SCALE, Float.NaN)
+                val laneGuidanceScale = intent.getFloatExtra(OverlayBroadcasts.EXTRA_LANE_GUIDANCE_SCALE, Float.NaN)
                 val navTextScale = intent.getFloatExtra(OverlayBroadcasts.EXTRA_NAV_TEXT_SCALE, Float.NaN)
                 val speedTextScale = intent.getFloatExtra(OverlayBroadcasts.EXTRA_SPEED_TEXT_SCALE, Float.NaN)
                 val arrowScale = intent.getFloatExtra(OverlayBroadcasts.EXTRA_ARROW_SCALE, Float.NaN)
@@ -75,6 +78,7 @@ class HudBackgroundService : Service() {
                 }
                 val clockScale = intent.getFloatExtra(OverlayBroadcasts.EXTRA_CLOCK_SCALE, Float.NaN)
                 val navAlpha = intent.getFloatExtra(OverlayBroadcasts.EXTRA_NAV_ALPHA, Float.NaN)
+                val laneGuidanceAlpha = intent.getFloatExtra(OverlayBroadcasts.EXTRA_LANE_GUIDANCE_ALPHA, Float.NaN)
                 val arrowAlpha = intent.getFloatExtra(OverlayBroadcasts.EXTRA_ARROW_ALPHA, Float.NaN)
                 val speedAlpha = intent.getFloatExtra(OverlayBroadcasts.EXTRA_SPEED_ALPHA, Float.NaN)
                 val hudSpeedAlpha = intent.getFloatExtra(OverlayBroadcasts.EXTRA_HUDSPEED_ALPHA, Float.NaN)
@@ -87,6 +91,11 @@ class HudBackgroundService : Service() {
                 val mapAlpha = intent.getFloatExtra(OverlayBroadcasts.EXTRA_MAP_ALPHA, Float.NaN)
                 val navEnabled = if (intent.hasExtra(OverlayBroadcasts.EXTRA_NAV_ENABLED)) {
                     intent.getBooleanExtra(OverlayBroadcasts.EXTRA_NAV_ENABLED, true)
+                } else {
+                    null
+                }
+                val laneGuidanceEnabled = if (intent.hasExtra(OverlayBroadcasts.EXTRA_LANE_GUIDANCE_ENABLED)) {
+                    intent.getBooleanExtra(OverlayBroadcasts.EXTRA_LANE_GUIDANCE_ENABLED, true)
                 } else {
                     null
                 }
@@ -200,6 +209,11 @@ class HudBackgroundService : Service() {
                 } else {
                     null
                 }
+                val laneGuidancePosition = if (!laneGuidanceX.isNaN() && !laneGuidanceY.isNaN()) {
+                    android.graphics.PointF(laneGuidanceX, laneGuidanceY)
+                } else {
+                    null
+                }
                 val speedPosition = if (!speedX.isNaN() && !speedY.isNaN()) {
                     android.graphics.PointF(speedX, speedY)
                 } else {
@@ -251,6 +265,7 @@ class HudBackgroundService : Service() {
                 val mapHeightValue = mapHeight.takeIf { !it.isNaN() }
                 val navWidthValue = navWidth.takeIf { !it.isNaN() }
                 val navScaleValue = navScale.takeIf { !it.isNaN() }
+                val laneGuidanceScaleValue = laneGuidanceScale.takeIf { !it.isNaN() }
                 val navTextScaleValue = navTextScale.takeIf { !it.isNaN() }
                 val speedTextScaleValue = speedTextScale.takeIf { !it.isNaN() }
                 val arrowScaleValue = arrowScale.takeIf { !it.isNaN() }
@@ -263,6 +278,7 @@ class HudBackgroundService : Service() {
                 val turnSignalsSpacingValue = turnSignalsSpacingDp.takeIf { !it.isNaN() }
                 val clockScaleValue = clockScale.takeIf { !it.isNaN() }
                 val navAlphaValue = navAlpha.takeIf { !it.isNaN() }
+                val laneGuidanceAlphaValue = laneGuidanceAlpha.takeIf { !it.isNaN() }
                 val arrowAlphaValue = arrowAlpha.takeIf { !it.isNaN() }
                 val speedAlphaValue = speedAlpha.takeIf { !it.isNaN() }
                 val hudSpeedAlphaValue = hudSpeedAlpha.takeIf { !it.isNaN() }
@@ -282,6 +298,7 @@ class HudBackgroundService : Service() {
                     mapHeightValue,
                     navPosition,
                     navWidthValue,
+                    laneGuidancePosition,
                     arrowPosition,
                     speedPosition,
                     hudSpeedPosition,
@@ -291,6 +308,7 @@ class HudBackgroundService : Service() {
                     turnSignalsPosition,
                     clockPosition,
                     navScaleValue,
+                    laneGuidanceScaleValue,
                     navTextScaleValue,
                     speedTextScaleValue,
                     arrowScaleValue,
@@ -304,6 +322,7 @@ class HudBackgroundService : Service() {
                     turnSignalsIconStyle,
                     clockScaleValue,
                     navAlphaValue,
+                    laneGuidanceAlphaValue,
                     arrowAlphaValue,
                     speedAlphaValue,
                     hudSpeedAlphaValue,
@@ -315,6 +334,7 @@ class HudBackgroundService : Service() {
                     containerAlphaValue,
                     mapAlphaValue,
                     navEnabled,
+                    laneGuidanceEnabled,
                     arrowEnabled,
                     arrowOnlyWhenNoIcon,
                     speedEnabled,

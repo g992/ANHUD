@@ -91,6 +91,9 @@ class HudOverlayController(private val context: Context) {
     private var maneuverContainer: FrameLayout? = null
     private var maneuverView: ImageView? = null
     private var maneuverLabel: TextView? = null
+    private var laneGuidanceContainer: FrameLayout? = null
+    private var laneGuidanceImageView: ImageView? = null
+    private var laneGuidancePlaceholderView: TextView? = null
     private var arrowContainer: FrameLayout? = null
     private var arrowView: ImageView? = null
     private var arrowLabel: TextView? = null
@@ -128,12 +131,19 @@ class HudOverlayController(private val context: Context) {
     private var mapContainerView: FrameLayout? = null
     private var mapContentView: FrameLayout? = null
     private var hudMapController: HudMapController? = null
-    private var mapPlaceholderView: TextView? = null
+    private var mapPlaceholderView: FrameLayout? = null
+    private var mapPlaceholderIconView: ImageView? = null
+    private var mapPlaceholderLabelView: TextView? = null
     private var currentDisplayId: Int? = null
     private var lastState: NavigationHudState = NavigationHudState()
     private var lastRenderSignature: RenderSignature? = null
     private var lastMapDebugKey: String? = null
     private var trafficLightPreviewArrow: Bitmap? = null
+    private var laneGuidanceHudBitmapSourceToken: Int = Int.MIN_VALUE
+    private var laneGuidanceHudBitmapSourceGenId: Int = -1
+    private var laneGuidanceHudBitmapSourceWidth: Int = 0
+    private var laneGuidanceHudBitmapSourceHeight: Int = 0
+    private var laneGuidanceHudBitmap: Bitmap? = null
     private var containerPositionDp: PointF = OverlayPrefs.containerPositionDp(context)
     private var containerWidthDp: Float = OverlayPrefs.containerSizeDp(context).x
     private var containerHeightDp: Float = OverlayPrefs.containerSizeDp(context).y
@@ -142,6 +152,7 @@ class HudOverlayController(private val context: Context) {
     private var mapHeightDp: Float = OverlayPrefs.mapSizeDp(context).y
     private var navPositionDp: PointF = OverlayPrefs.navPositionDp(context)
     private var navWidthDp: Float = OverlayPrefs.navWidthDp(context)
+    private var laneGuidancePositionDp: PointF = OverlayPrefs.laneGuidancePositionDp(context)
     private var arrowPositionDp: PointF = OverlayPrefs.arrowPositionDp(context)
     private var speedPositionDp: PointF = OverlayPrefs.speedPositionDp(context)
     private var hudSpeedPositionDp: PointF = OverlayPrefs.hudSpeedPositionDp(context)
@@ -151,6 +162,7 @@ class HudOverlayController(private val context: Context) {
     private var turnSignalsPositionDp: PointF = OverlayPrefs.turnSignalsPositionDp(context)
     private var clockPositionDp: PointF = OverlayPrefs.clockPositionDp(context)
     private var navScale: Float = OverlayPrefs.navScale(context)
+    private var laneGuidanceScale: Float = OverlayPrefs.laneGuidanceScale(context)
     private var navTextScale: Float = OverlayPrefs.navTextScale(context)
     private var speedTextScale: Float = OverlayPrefs.speedTextScale(context)
     private var arrowScale: Float = OverlayPrefs.arrowScale(context)
@@ -164,6 +176,7 @@ class HudOverlayController(private val context: Context) {
     private var turnSignalsIconStyle: Int = OverlayPrefs.turnSignalsIconStyle(context)
     private var clockScale: Float = OverlayPrefs.clockScale(context)
     private var navAlpha: Float = OverlayPrefs.navAlpha(context)
+    private var laneGuidanceAlpha: Float = OverlayPrefs.laneGuidanceAlpha(context)
     private var arrowAlpha: Float = OverlayPrefs.arrowAlpha(context)
     private var speedAlpha: Float = OverlayPrefs.speedAlpha(context)
     private var hudSpeedAlpha: Float = OverlayPrefs.hudSpeedAlpha(context)
@@ -175,6 +188,7 @@ class HudOverlayController(private val context: Context) {
     private var containerAlpha: Float = OverlayPrefs.containerAlpha(context)
     private var mapAlpha: Float = OverlayPrefs.mapAlpha(context)
     private var navEnabled: Boolean = OverlayPrefs.navEnabled(context)
+    private var laneGuidanceEnabled: Boolean = OverlayPrefs.laneGuidanceEnabled(context)
     private var arrowEnabled: Boolean = OverlayPrefs.arrowEnabled(context)
     private var arrowOnlyWhenNoIcon: Boolean = OverlayPrefs.arrowOnlyWhenNoIcon(context)
     private var speedEnabled: Boolean = OverlayPrefs.speedEnabled(context)
@@ -278,6 +292,11 @@ class HudOverlayController(private val context: Context) {
                 target == OverlayBroadcasts.PREVIEW_TARGET_NAV ||
                 previewShowOthers
             )
+        val previewLaneGuidance = showPreview && (
+            target == null ||
+                target == OverlayBroadcasts.PREVIEW_TARGET_LANE_GUIDANCE ||
+                previewShowOthers
+            )
         val previewArrow = showPreview && (
             target == null ||
                 target == OverlayBroadcasts.PREVIEW_TARGET_ARROW ||
@@ -345,6 +364,7 @@ class HudOverlayController(private val context: Context) {
         val roadCameraDistanceText = state.roadCameraDistance.orEmpty()
         val roadCameraBitmap = state.roadCameraIcon
         val bitmap = state.maneuverBitmap
+        val laneGuidanceManeuver = MapRouteTelemetryStore.current().laneManeuver
         val trafficLightSignatures = state.trafficLights.map { light ->
             TrafficLightSignature(
                 id = light.id,
@@ -365,11 +385,20 @@ class HudOverlayController(private val context: Context) {
             roadCameraGenId = roadCameraBitmap?.generationId ?: -1,
             roadCameraWidth = roadCameraBitmap?.width ?: 0,
             roadCameraHeight = roadCameraBitmap?.height ?: 0,
+            laneGuidanceToken = laneGuidanceManeuver?.token ?: -1,
+            laneGuidanceGenId = laneGuidanceManeuver?.bitmap?.generationId ?: -1,
+            laneGuidanceWidth = laneGuidanceManeuver?.bitmap?.width ?: 0,
+            laneGuidanceHeight = laneGuidanceManeuver?.bitmap?.height ?: 0,
             maneuverGenId = bitmap?.generationId ?: -1,
             maneuverWidth = bitmap?.width ?: 0,
             maneuverHeight = bitmap?.height ?: 0,
             nativeTurnId = state.nativeTurnId,
             previewNav = previewNav,
+            previewLaneGuidance = showPreview && (
+                target == null ||
+                    target == OverlayBroadcasts.PREVIEW_TARGET_LANE_GUIDANCE ||
+                    previewShowOthers
+                ),
             previewArrow = previewArrow,
             previewSpeed = previewSpeed,
             previewSpeedometer = previewSpeedometer,
@@ -401,11 +430,16 @@ class HudOverlayController(private val context: Context) {
         val roadCameraGenId: Int,
         val roadCameraWidth: Int,
         val roadCameraHeight: Int,
+        val laneGuidanceToken: Int,
+        val laneGuidanceGenId: Int,
+        val laneGuidanceWidth: Int,
+        val laneGuidanceHeight: Int,
         val maneuverGenId: Int,
         val maneuverWidth: Int,
         val maneuverHeight: Int,
         val nativeTurnId: Int?,
         val previewNav: Boolean,
+        val previewLaneGuidance: Boolean,
         val previewArrow: Boolean,
         val previewSpeed: Boolean,
         val previewSpeedometer: Boolean,
@@ -440,6 +474,7 @@ class HudOverlayController(private val context: Context) {
             val container = overlayView ?: return@post
             // Hide navigation-specific elements.
             navContainer?.visibility = View.GONE
+            laneGuidanceContainer?.visibility = View.GONE
             arrowContainer?.visibility = View.GONE
             trafficLightContainer?.visibility = View.GONE
             // Keep clock visible only when enabled in settings.
@@ -467,6 +502,7 @@ class HudOverlayController(private val context: Context) {
         mapHeightDp: Float?,
         navPosition: PointF?,
         navWidthDp: Float?,
+        laneGuidancePosition: PointF?,
         arrowPosition: PointF?,
         speedPosition: PointF?,
         hudSpeedPosition: PointF?,
@@ -476,6 +512,7 @@ class HudOverlayController(private val context: Context) {
         turnSignalsPosition: PointF?,
         clockPosition: PointF?,
         navScale: Float?,
+        laneGuidanceScale: Float?,
         navTextScale: Float?,
         speedTextScale: Float?,
         arrowScale: Float?,
@@ -489,6 +526,7 @@ class HudOverlayController(private val context: Context) {
         turnSignalsIconStyle: Int?,
         clockScale: Float?,
         navAlpha: Float?,
+        laneGuidanceAlpha: Float?,
         arrowAlpha: Float?,
         speedAlpha: Float?,
         hudSpeedAlpha: Float?,
@@ -500,6 +538,7 @@ class HudOverlayController(private val context: Context) {
         containerAlpha: Float?,
         mapAlpha: Float?,
         navEnabled: Boolean?,
+        laneGuidanceEnabled: Boolean?,
         arrowEnabled: Boolean?,
         arrowOnlyWhenNoIcon: Boolean?,
         speedEnabled: Boolean?,
@@ -551,6 +590,9 @@ class HudOverlayController(private val context: Context) {
             if (navWidthDp != null) {
                 this.navWidthDp = navWidthDp.coerceAtLeast(OverlayPrefs.NAV_WIDTH_MIN_DP)
             }
+            if (laneGuidancePosition != null) {
+                laneGuidancePositionDp = laneGuidancePosition
+            }
             if (arrowPosition != null) {
                 arrowPositionDp = arrowPosition
             }
@@ -577,6 +619,9 @@ class HudOverlayController(private val context: Context) {
             }
             if (navScale != null) {
                 this.navScale = navScale.coerceAtLeast(0f)
+            }
+            if (laneGuidanceScale != null) {
+                this.laneGuidanceScale = laneGuidanceScale.coerceAtLeast(0f)
             }
             if (navTextScale != null) {
                 this.navTextScale = navTextScale.coerceIn(NAV_TEXT_SCALE_MIN, NAV_TEXT_SCALE_MAX)
@@ -623,6 +668,9 @@ class HudOverlayController(private val context: Context) {
             if (navAlpha != null) {
                 this.navAlpha = navAlpha.coerceIn(0f, 1f)
             }
+            if (laneGuidanceAlpha != null) {
+                this.laneGuidanceAlpha = laneGuidanceAlpha.coerceIn(0f, 1f)
+            }
             if (arrowAlpha != null) {
                 this.arrowAlpha = arrowAlpha.coerceIn(0f, 1f)
             }
@@ -655,6 +703,9 @@ class HudOverlayController(private val context: Context) {
             }
             if (navEnabled != null) {
                 this.navEnabled = navEnabled
+            }
+            if (laneGuidanceEnabled != null) {
+                this.laneGuidanceEnabled = laneGuidanceEnabled
             }
             if (arrowEnabled != null) {
                 this.arrowEnabled = arrowEnabled
@@ -922,6 +973,45 @@ class HudOverlayController(private val context: Context) {
         textColumn.addView(timeText)
         navBlock.addView(maneuverBox)
         navBlock.addView(textColumn)
+
+        val laneGuidancePlaceholderWidth = (96 * metrics.density).roundToInt().coerceAtLeast(1)
+        val laneGuidancePlaceholderHeight = (48 * metrics.density).roundToInt().coerceAtLeast(1)
+        val laneGuidanceBlock = FrameLayout(displayContext).apply {
+            layoutParams = FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                FrameLayout.LayoutParams.WRAP_CONTENT
+            )
+            clipChildren = false
+            clipToPadding = false
+            visibility = View.GONE
+        }
+
+        val laneGuidanceImage = ImageView(displayContext).apply {
+            layoutParams = FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                FrameLayout.LayoutParams.WRAP_CONTENT
+            )
+            adjustViewBounds = true
+            scaleType = ImageView.ScaleType.FIT_CENTER
+            visibility = View.GONE
+        }
+
+        val laneGuidancePlaceholder = TextView(displayContext).apply {
+            layoutParams = FrameLayout.LayoutParams(
+                laneGuidancePlaceholderWidth,
+                laneGuidancePlaceholderHeight
+            )
+            gravity = Gravity.CENTER
+            text = displayContext.getString(R.string.position_lane_guidance_block_label)
+            setTextColor(Color.WHITE)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 10f)
+            setTypeface(typeface, Typeface.BOLD)
+            visibility = View.GONE
+            setPadding(8, 8, 8, 8)
+        }
+
+        laneGuidanceBlock.addView(laneGuidancePlaceholder)
+        laneGuidanceBlock.addView(laneGuidanceImage)
 
         val arrowBox = FrameLayout(displayContext).apply {
             layoutParams = FrameLayout.LayoutParams(iconSize, iconSize)
@@ -1244,25 +1334,44 @@ class HudOverlayController(private val context: Context) {
             setBackgroundColor(Color.TRANSPARENT)
         }
 
-        val mapPlaceholder = TextView(displayContext).apply {
+        val mapPlaceholder = FrameLayout(displayContext).apply {
             layoutParams = FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.MATCH_PARENT
             )
+            background = ColorDrawable(Color.argb(96, 33, 150, 243))
+            visibility = View.GONE
+        }
+        val mapPlaceholderContent = LinearLayout(displayContext).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            layoutParams = FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT
+            )
+            setPadding(4, 4, 4, 4)
+        }
+        val mapPlaceholderLabel = TextView(displayContext).apply {
             gravity = Gravity.CENTER
             text = displayContext.getString(R.string.position_map_block_label)
             setTextColor(Color.WHITE)
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
             setTypeface(typeface, Typeface.BOLD)
-            background = ColorDrawable(Color.argb(96, 33, 150, 243))
-            visibility = View.GONE
         }
+        val mapPlaceholderIcon = ImageView(displayContext).apply {
+            setImageResource(R.drawable.pin_alerts_speed_camera)
+            scaleType = ImageView.ScaleType.FIT_CENTER
+        }
+        mapPlaceholderContent.addView(mapPlaceholderLabel)
+        mapPlaceholderContent.addView(mapPlaceholderIcon)
+        mapPlaceholder.addView(mapPlaceholderContent)
 
         mapBlock.addView(mapContent)
         mapBlock.addView(mapPlaceholder)
 
         root.addView(mapBlock)
         root.addView(navBlock)
+        root.addView(laneGuidanceBlock)
         root.addView(arrowBox)
         root.addView(speedText)
         root.addView(hudSpeedBlock)
@@ -1294,6 +1403,9 @@ class HudOverlayController(private val context: Context) {
             maneuverContainer = maneuverBox
             maneuverView = maneuverImage
             maneuverLabel = maneuverText
+            laneGuidanceContainer = laneGuidanceBlock
+            laneGuidanceImageView = laneGuidanceImage
+            laneGuidancePlaceholderView = laneGuidancePlaceholder
             arrowContainer = arrowBox
             arrowView = arrowImage
             arrowLabel = arrowText
@@ -1330,6 +1442,8 @@ class HudOverlayController(private val context: Context) {
             mapContainerView = mapBlock
             mapContentView = mapContent
             mapPlaceholderView = mapPlaceholder
+            mapPlaceholderIconView = mapPlaceholderIcon
+            mapPlaceholderLabelView = mapPlaceholderLabel
             currentDisplayId = display.displayId
             applyTurnSignalsSpacing(metrics.density)
             applyNavTextScale()
@@ -1343,6 +1457,9 @@ class HudOverlayController(private val context: Context) {
             maneuverContainer = null
             maneuverView = null
             maneuverLabel = null
+            laneGuidanceContainer = null
+            laneGuidanceImageView = null
+            laneGuidancePlaceholderView = null
             arrowContainer = null
             arrowView = null
             arrowLabel = null
@@ -1380,6 +1497,8 @@ class HudOverlayController(private val context: Context) {
             mapContainerView = null
             mapContentView = null
             mapPlaceholderView = null
+            mapPlaceholderIconView = null
+            mapPlaceholderLabelView = null
             currentDisplayId = null
             stopTurnSignalBlinking()
             stopClockTicker()
@@ -1407,6 +1526,9 @@ class HudOverlayController(private val context: Context) {
         maneuverContainer = null
         maneuverView = null
         maneuverLabel = null
+        laneGuidanceContainer = null
+        laneGuidanceImageView = null
+        laneGuidancePlaceholderView = null
         arrowContainer = null
         arrowView = null
         arrowLabel = null
@@ -1444,6 +1566,8 @@ class HudOverlayController(private val context: Context) {
         mapContainerView = null
         mapContentView = null
         mapPlaceholderView = null
+        mapPlaceholderIconView = null
+        mapPlaceholderLabelView = null
         currentDisplayId = null
         stopClockTicker()
     }
@@ -1462,6 +1586,7 @@ class HudOverlayController(private val context: Context) {
         }
         clearOnDisablePending = true
         navContainer?.visibility = View.GONE
+        laneGuidanceContainer?.visibility = View.GONE
         arrowContainer?.visibility = View.GONE
         speedLimitView?.visibility = View.GONE
         hudSpeedContainer?.visibility = View.GONE
@@ -1485,6 +1610,7 @@ class HudOverlayController(private val context: Context) {
         stopTurnSignalBlinking()
         val container = overlayView ?: return
         navContainer?.visibility = View.GONE
+        laneGuidanceContainer?.visibility = View.GONE
         arrowContainer?.visibility = View.GONE
         speedLimitView?.visibility = View.GONE
         hudSpeedContainer?.visibility = View.GONE
@@ -1581,12 +1707,19 @@ class HudOverlayController(private val context: Context) {
                 target == OverlayBroadcasts.PREVIEW_TARGET_CLOCK ||
                 previewShowOthers
             )
+        val previewLaneGuidance = showPreview && (
+            target == null ||
+                target == OverlayBroadcasts.PREVIEW_TARGET_LANE_GUIDANCE ||
+                previewShowOthers
+            )
         val previewMap = showPreview && (
             target == null ||
                 target == OverlayBroadcasts.PREVIEW_TARGET_MAP ||
                 previewShowOthers
             )
         val navAllowed = navEnabled || (showPreview && target == OverlayBroadcasts.PREVIEW_TARGET_NAV)
+        val laneGuidanceAllowed =
+            laneGuidanceEnabled || (showPreview && target == OverlayBroadcasts.PREVIEW_TARGET_LANE_GUIDANCE)
         val hasMapRoute = MapRouteTelemetryStore.current().hasRoute
         val mapAllowed = mapEnabled || (showPreview && target == OverlayBroadcasts.PREVIEW_TARGET_MAP)
         val arrowAllowed = arrowEnabled || (showPreview && target == OverlayBroadcasts.PREVIEW_TARGET_ARROW)
@@ -1707,6 +1840,7 @@ class HudOverlayController(private val context: Context) {
         } else {
             state.trafficLights
         }
+        val laneGuidanceManeuver = MapRouteTelemetryStore.current().laneManeuver
 
         setTextOrHide(primary, primaryText)
         setTextOrHide(secondary, secondaryText)
@@ -1746,6 +1880,7 @@ class HudOverlayController(private val context: Context) {
         updateHudSpeedOverspeed(hudSpeedLimitOverspeed)
         updateRoadCamera(state.roadCameraIcon, roadCameraDistanceText, roadCameraAllowed, previewRoadCamera)
         updateTrafficLights(trafficLights, trafficLightAllowed, previewTrafficLight)
+        updateLaneGuidance(laneGuidanceManeuver, previewLaneGuidance)
         updateManeuver(state.maneuverBitmap, previewNav)
         updateArrowManeuver(state.maneuverBitmap, previewArrow)
         if (clock != null) {
@@ -1761,6 +1896,7 @@ class HudOverlayController(private val context: Context) {
         } else {
             navHasContent && !hideNavigationByDistance
         }
+        val laneGuidanceVisible = laneGuidanceAllowed && (previewLaneGuidance || laneGuidanceManeuver != null)
         val arrowEligible = if (arrowOnlyWhenNoIcon) {
             NativeNavigationController.isActive() &&
                 state.nativeTurnId == NavigationReceiver.DEFAULT_NATIVE_TURN_ID
@@ -1792,6 +1928,7 @@ class HudOverlayController(private val context: Context) {
         val roadCameraVisible = roadCameraAllowed && (previewRoadCamera || roadCameraHasData)
         val trafficLightVisible = trafficLightAllowed && (previewTrafficLight || trafficLights.isNotEmpty())
         navContainer?.visibility = if (navAllowed && navVisible) View.VISIBLE else View.GONE
+        laneGuidanceContainer?.visibility = if (laneGuidanceVisible) View.VISIBLE else View.GONE
         mapContainer?.visibility = if (mapVisible) View.VISIBLE else View.GONE
         arrowContainer?.visibility = if (arrowAllowed && arrowVisible) View.VISIBLE else View.GONE
         speedLimitView?.visibility = if (speedAllowed && speedVisible) View.VISIBLE else View.GONE
@@ -1801,6 +1938,7 @@ class HudOverlayController(private val context: Context) {
 
         // Hide main container if nothing is visible
         val anyVisible = (navAllowed && navVisible) ||
+            laneGuidanceVisible ||
             mapVisible ||
             (arrowAllowed && arrowVisible) ||
             (speedAllowed && speedVisible) ||
@@ -1882,6 +2020,190 @@ class HudOverlayController(private val context: Context) {
     private fun cancelHudSpeedHide() {
         hudSpeedHideRunnable?.let { handler.removeCallbacks(it) }
         hudSpeedHideRunnable = null
+    }
+
+    private fun updateLaneGuidance(maneuver: MapLaneManeuver?, preview: Boolean) {
+        val container = laneGuidanceContainer ?: return
+        val image = laneGuidanceImageView ?: return
+        val placeholder = laneGuidancePlaceholderView ?: return
+        val bitmap = maneuver?.bitmap?.takeUnless { it.isRecycled || it.width <= 0 || it.height <= 0 }
+        if (bitmap != null) {
+            image.setImageBitmap(resolveLaneGuidanceHudBitmap(maneuver))
+            image.visibility = View.VISIBLE
+            placeholder.visibility = View.GONE
+            container.background = null
+            return
+        }
+        laneGuidanceHudBitmapSourceToken = Int.MIN_VALUE
+        laneGuidanceHudBitmapSourceGenId = -1
+        laneGuidanceHudBitmapSourceWidth = 0
+        laneGuidanceHudBitmapSourceHeight = 0
+        laneGuidanceHudBitmap = null
+        image.setImageDrawable(null)
+        image.visibility = View.GONE
+        placeholder.visibility = if (preview) View.VISIBLE else View.GONE
+        container.background = null
+    }
+
+    private fun resolveLaneGuidanceHudBitmap(maneuver: MapLaneManeuver): Bitmap {
+        val source = maneuver.bitmap
+        val token = maneuver.token
+        val generationId = source.generationId
+        val width = source.width
+        val height = source.height
+        if (
+            laneGuidanceHudBitmap != null &&
+            laneGuidanceHudBitmapSourceToken == token &&
+            laneGuidanceHudBitmapSourceGenId == generationId &&
+            laneGuidanceHudBitmapSourceWidth == width &&
+            laneGuidanceHudBitmapSourceHeight == height
+        ) {
+            return laneGuidanceHudBitmap ?: source
+        }
+        val prepared = prepareLaneGuidanceHudBitmap(source)
+        laneGuidanceHudBitmapSourceToken = token
+        laneGuidanceHudBitmapSourceGenId = generationId
+        laneGuidanceHudBitmapSourceWidth = width
+        laneGuidanceHudBitmapSourceHeight = height
+        laneGuidanceHudBitmap = prepared
+        return prepared
+    }
+
+    private fun prepareLaneGuidanceHudBitmap(source: Bitmap): Bitmap {
+        val width = source.width
+        val height = source.height
+        if (width < 4 || height < 4) return source
+
+        val pixels = IntArray(width * height)
+        source.getPixels(pixels, 0, width, 0, 0, width, height)
+
+        val background = detectLaneGuidanceHudBackgroundColor(pixels, width, height) ?: return source
+        val bgRed = Color.red(background)
+        val bgGreen = Color.green(background)
+        val bgBlue = Color.blue(background)
+        val bgSpread = maxOf(bgRed, bgGreen, bgBlue) - minOf(bgRed, bgGreen, bgBlue)
+        val bgLuma = computeLuma(bgRed, bgGreen, bgBlue)
+
+        val maskedPixels = pixels.copyOf()
+        var removedPixels = 0
+        var left = width
+        var top = height
+        var right = -1
+        var bottom = -1
+        for (index in maskedPixels.indices) {
+            val color = maskedPixels[index]
+            val alpha = Color.alpha(color)
+            if (alpha <= 10) {
+                maskedPixels[index] = Color.TRANSPARENT
+                continue
+            }
+            if (shouldRemoveLaneGuidanceHudBackground(color, bgRed, bgGreen, bgBlue, bgSpread, bgLuma)) {
+                maskedPixels[index] = Color.TRANSPARENT
+                removedPixels += 1
+                continue
+            }
+            val x = index % width
+            val y = index / width
+            if (x < left) left = x
+            if (x > right) right = x
+            if (y < top) top = y
+            if (y > bottom) bottom = y
+        }
+        if (removedPixels < 12 || right < left || bottom < top) {
+            return source
+        }
+
+        left = (left - 1).coerceAtLeast(0)
+        top = (top - 1).coerceAtLeast(0)
+        right = (right + 1).coerceAtMost(width - 1)
+        bottom = (bottom + 1).coerceAtMost(height - 1)
+        val croppedWidth = right - left + 1
+        val croppedHeight = bottom - top + 1
+        if (croppedWidth <= 0 || croppedHeight <= 0) return source
+
+        val croppedPixels = IntArray(croppedWidth * croppedHeight)
+        for (row in 0 until croppedHeight) {
+            val srcOffset = (top + row) * width + left
+            val dstOffset = row * croppedWidth
+            System.arraycopy(maskedPixels, srcOffset, croppedPixels, dstOffset, croppedWidth)
+        }
+        return Bitmap.createBitmap(croppedPixels, croppedWidth, croppedHeight, Bitmap.Config.ARGB_8888)
+    }
+
+    private fun detectLaneGuidanceHudBackgroundColor(pixels: IntArray, width: Int, height: Int): Int? {
+        if (pixels.isEmpty() || width <= 0 || height <= 0) return null
+        val band = (minOf(width, height) * 0.06f).roundToInt().coerceIn(1, 8)
+        val counts = HashMap<Int, Int>()
+        val sumR = HashMap<Int, Int>()
+        val sumG = HashMap<Int, Int>()
+        val sumB = HashMap<Int, Int>()
+        var sampleCount = 0
+
+        fun sample(x: Int, y: Int) {
+            val color = pixels[y * width + x]
+            if (Color.alpha(color) < 180) return
+            val red = Color.red(color)
+            val green = Color.green(color)
+            val blue = Color.blue(color)
+            val bucket = ((red shr 4) shl 8) or ((green shr 4) shl 4) or (blue shr 4)
+            counts[bucket] = (counts[bucket] ?: 0) + 1
+            sumR[bucket] = (sumR[bucket] ?: 0) + red
+            sumG[bucket] = (sumG[bucket] ?: 0) + green
+            sumB[bucket] = (sumB[bucket] ?: 0) + blue
+            sampleCount += 1
+        }
+
+        for (y in 0 until band) {
+            for (x in 0 until width) sample(x, y)
+        }
+        for (y in (height - band).coerceAtLeast(0) until height) {
+            for (x in 0 until width) sample(x, y)
+        }
+        for (x in 0 until band) {
+            for (y in band until (height - band).coerceAtLeast(band)) sample(x, y)
+        }
+        for (x in (width - band).coerceAtLeast(0) until width) {
+            for (y in band until (height - band).coerceAtLeast(band)) sample(x, y)
+        }
+
+        val bestBucket = counts.maxByOrNull { it.value }?.key ?: return null
+        val bestCount = counts[bestBucket] ?: return null
+        if (bestCount < 10 || bestCount * 4 < sampleCount) return null
+
+        val red = (sumR[bestBucket] ?: return null) / bestCount
+        val green = (sumG[bestBucket] ?: return null) / bestCount
+        val blue = (sumB[bestBucket] ?: return null) / bestCount
+        val spread = maxOf(red, green, blue) - minOf(red, green, blue)
+        if (spread < 24) return null
+        return Color.argb(255, red, green, blue)
+    }
+
+    private fun shouldRemoveLaneGuidanceHudBackground(
+        color: Int,
+        bgRed: Int,
+        bgGreen: Int,
+        bgBlue: Int,
+        bgSpread: Int,
+        bgLuma: Int,
+    ): Boolean {
+        val red = Color.red(color)
+        val green = Color.green(color)
+        val blue = Color.blue(color)
+        val dr = red - bgRed
+        val dg = green - bgGreen
+        val db = blue - bgBlue
+        val distanceSq = dr * dr + dg * dg + db * db
+        if (distanceSq <= 44 * 44) return true
+
+        val spread = maxOf(red, green, blue) - minOf(red, green, blue)
+        val luma = computeLuma(red, green, blue)
+        return distanceSq <= 68 * 68 &&
+            spread >= (bgSpread - 28).coerceAtLeast(0) &&
+            luma <= bgLuma + 26
+    }
+
+    private fun computeLuma(red: Int, green: Int, blue: Int): Int {
+        return ((red * 2126) + (green * 7152) + (blue * 722)) / 10_000
     }
 
     private fun updateManeuver(bitmap: android.graphics.Bitmap?, preview: Boolean) {
@@ -2611,6 +2933,17 @@ class HudOverlayController(private val context: Context) {
             }
             positionView(it, navPositionDp, navScale, navAlpha, metrics.density, containerWidth, containerHeight)
         }
+        laneGuidanceContainer?.let {
+            positionView(
+                it,
+                laneGuidancePositionDp,
+                laneGuidanceScale,
+                laneGuidanceAlpha,
+                metrics.density,
+                containerWidth,
+                containerHeight
+            )
+        }
         arrowContainer?.let {
             positionView(it, arrowPositionDp, arrowScale, arrowAlpha, metrics.density, containerWidth, containerHeight)
         }
@@ -2766,7 +3099,18 @@ class HudOverlayController(private val context: Context) {
             hudMapController?.setVisible(false)
             mapContent.visibility = View.GONE
             placeholder.background = ContextCompat.getDrawable(displayContext, R.drawable.bg_nav_block_outline)
-            placeholder.text = displayContext.getString(R.string.position_map_block_label)
+            mapPlaceholderLabelView?.text = displayContext.getString(R.string.position_map_block_label)
+            mapPlaceholderIconView?.let { icon ->
+                val iconSizePx = MapRenderSettingsStore.current().roadEventIconSizePx
+                    .coerceIn(ROAD_EVENT_ICON_SIZE_MIN_PX, ROAD_EVENT_ICON_SIZE_MAX_PX)
+                icon.layoutParams = (icon.layoutParams as? LinearLayout.LayoutParams)?.apply {
+                    width = iconSizePx
+                    height = iconSizePx
+                    topMargin = 4
+                } ?: LinearLayout.LayoutParams(iconSizePx, iconSizePx).apply {
+                    topMargin = 4
+                }
+            }
             placeholder.visibility = View.VISIBLE
         } else {
             mapContent.visibility = View.VISIBLE

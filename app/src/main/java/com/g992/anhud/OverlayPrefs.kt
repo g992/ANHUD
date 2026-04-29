@@ -20,6 +20,8 @@ object OverlayPrefs {
     private const val KEY_MAP_HEIGHT_DP = "overlay_map_height_dp"
     private const val KEY_NAV_X_DP = "overlay_nav_x_dp"
     private const val KEY_NAV_Y_DP = "overlay_nav_y_dp"
+    private const val KEY_LANE_GUIDANCE_X_DP = "overlay_lane_guidance_x_dp"
+    private const val KEY_LANE_GUIDANCE_Y_DP = "overlay_lane_guidance_y_dp"
     private const val KEY_ARROW_X_DP = "overlay_arrow_x_dp"
     private const val KEY_ARROW_Y_DP = "overlay_arrow_y_dp"
     private const val KEY_SPEED_X_DP = "overlay_speed_x_dp"
@@ -37,6 +39,7 @@ object OverlayPrefs {
     private const val KEY_CLOCK_X_DP = "overlay_clock_x_dp"
     private const val KEY_CLOCK_Y_DP = "overlay_clock_y_dp"
     private const val KEY_NAV_SCALE = "overlay_nav_scale"
+    private const val KEY_LANE_GUIDANCE_SCALE = "overlay_lane_guidance_scale"
     private const val KEY_NAV_TEXT_SCALE = "overlay_nav_text_scale"
     private const val KEY_SPEED_TEXT_SCALE = "overlay_speed_text_scale"
     private const val KEY_ARROW_SCALE = "overlay_arrow_scale"
@@ -54,6 +57,7 @@ object OverlayPrefs {
     private const val KEY_TURN_SIGNALS_CUSTOM_ICON_BASE_DIRECTION = "overlay_turn_signals_custom_icon_base_direction"
     private const val KEY_CLOCK_SCALE = "overlay_clock_scale"
     private const val KEY_NAV_ALPHA = "overlay_nav_alpha"
+    private const val KEY_LANE_GUIDANCE_ALPHA = "overlay_lane_guidance_alpha"
     private const val KEY_ARROW_ALPHA = "overlay_arrow_alpha"
     private const val KEY_SPEED_ALPHA = "overlay_speed_alpha"
     private const val KEY_HUDSPEED_ALPHA = "overlay_hudspeed_alpha"
@@ -65,6 +69,7 @@ object OverlayPrefs {
     private const val KEY_CONTAINER_ALPHA = "overlay_container_alpha"
     private const val KEY_MAP_ALPHA = "overlay_map_alpha"
     private const val KEY_NAV_ENABLED = "overlay_nav_enabled"
+    private const val KEY_LANE_GUIDANCE_ENABLED = "overlay_lane_guidance_enabled"
     private const val KEY_ARROW_ENABLED = "overlay_arrow_enabled"
     private const val KEY_ARROW_ONLY_WHEN_NO_ICON = "overlay_arrow_only_when_no_icon"
     private const val KEY_SPEED_ENABLED = "overlay_speed_enabled"
@@ -186,6 +191,24 @@ object OverlayPrefs {
         prefs(context).edit()
             .putFloat(KEY_NAV_X_DP, xDp)
             .putFloat(KEY_NAV_Y_DP, yDp)
+            .apply()
+    }
+
+    fun laneGuidancePositionDp(context: Context): PointF {
+        val prefs = prefs(context)
+        val navPos = navPositionDp(context)
+        val x = prefs.getFloat(KEY_LANE_GUIDANCE_X_DP, navPos.x)
+        val y = prefs.getFloat(
+            KEY_LANE_GUIDANCE_Y_DP,
+            (navPos.y + NAV_BLOCK_DEFAULT_HEIGHT_DP + LANE_GUIDANCE_BLOCK_GAP_DP).coerceAtLeast(0f)
+        )
+        return PointF(x, y)
+    }
+
+    fun setLaneGuidancePositionDp(context: Context, xDp: Float, yDp: Float) {
+        prefs(context).edit()
+            .putFloat(KEY_LANE_GUIDANCE_X_DP, xDp)
+            .putFloat(KEY_LANE_GUIDANCE_Y_DP, yDp)
             .apply()
     }
 
@@ -339,6 +362,16 @@ object OverlayPrefs {
     fun setNavScale(context: Context, scale: Float) {
         prefs(context).edit()
             .putFloat(KEY_NAV_SCALE, scale)
+            .apply()
+    }
+
+    fun laneGuidanceScale(context: Context): Float {
+        return prefs(context).getFloat(KEY_LANE_GUIDANCE_SCALE, 1f)
+    }
+
+    fun setLaneGuidanceScale(context: Context, scale: Float) {
+        prefs(context).edit()
+            .putFloat(KEY_LANE_GUIDANCE_SCALE, scale)
             .apply()
     }
 
@@ -557,6 +590,16 @@ object OverlayPrefs {
             .apply()
     }
 
+    fun laneGuidanceAlpha(context: Context): Float {
+        return prefs(context).getFloat(KEY_LANE_GUIDANCE_ALPHA, 1f)
+    }
+
+    fun setLaneGuidanceAlpha(context: Context, alpha: Float) {
+        prefs(context).edit()
+            .putFloat(KEY_LANE_GUIDANCE_ALPHA, alpha)
+            .apply()
+    }
+
     fun arrowAlpha(context: Context): Float {
         return prefs(context).getFloat(KEY_ARROW_ALPHA, 1f)
     }
@@ -694,6 +737,16 @@ object OverlayPrefs {
     fun setNavEnabled(context: Context, enabled: Boolean) {
         prefs(context).edit()
             .putBoolean(KEY_NAV_ENABLED, enabled)
+            .apply()
+    }
+
+    fun laneGuidanceEnabled(context: Context): Boolean {
+        return prefs(context).getBoolean(KEY_LANE_GUIDANCE_ENABLED, true)
+    }
+
+    fun setLaneGuidanceEnabled(context: Context, enabled: Boolean) {
+        prefs(context).edit()
+            .putBoolean(KEY_LANE_GUIDANCE_ENABLED, enabled)
             .apply()
     }
 
@@ -1099,6 +1152,9 @@ object OverlayPrefs {
     }
 
     private const val SPEED_BLOCK_SIZE_DP = 40f
+    private const val NAV_BLOCK_DEFAULT_HEIGHT_DP = 56f
+    private const val LANE_GUIDANCE_BLOCK_GAP_DP = 8f
+    private const val LANE_GUIDANCE_BLOCK_HEIGHT_DP = 48f
     private const val HUD_SPEED_BLOCK_SIZE_DP = 48f
     private const val HUD_SPEED_BLOCK_GAP_DP = 8f
     private const val ROAD_CAMERA_BLOCK_GAP_DP = 8f

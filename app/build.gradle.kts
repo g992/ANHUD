@@ -35,10 +35,8 @@ val signingKeyAlias = System.getenv("SIGNING_KEY_ALIAS")
     ?: localProperties.getProperty("SIGNING_KEY_ALIAS")
 val signingKeyPassword = System.getenv("SIGNING_KEY_PASSWORD")
     ?: localProperties.getProperty("SIGNING_KEY_PASSWORD")
-val mapTilerApiKey = System.getenv("MAPTILER_API_KEY")
-    ?: localProperties.getProperty("MAPTILER_API_KEY")
-val stadiaMapsApiKey = System.getenv("STADIA_MAPS_API_KEY")
-    ?: localProperties.getProperty("STADIA_MAPS_API_KEY")
+val mapkitApiKey = System.getenv("MAPKIT_API_KEY")
+    ?: localProperties.getProperty("MAPKIT_API_KEY")
 val hasSigning = !signingStoreFilePath.isNullOrBlank() &&
     !signingStorePassword.isNullOrBlank() &&
     !signingKeyAlias.isNullOrBlank() &&
@@ -56,8 +54,7 @@ android {
         versionName = versionNameProp
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        buildConfigField("String", "MAPTILER_API_KEY", buildConfigString(mapTilerApiKey))
-        buildConfigField("String", "STADIA_MAPS_API_KEY", buildConfigString(stadiaMapsApiKey))
+        buildConfigField("String", "MAPKIT_API_KEY", buildConfigString(mapkitApiKey))
     }
 
     val releaseSigning = if (hasSigning) {
@@ -104,7 +101,7 @@ dependencies {
     implementation(libs.androidx.constraintlayout)
     implementation(libs.tananaev.adblib)
     implementation(libs.androidsvg)
-    implementation(libs.maplibre.android.sdk)
+    implementation(libs.yandex.mapkit)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)

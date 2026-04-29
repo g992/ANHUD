@@ -12,7 +12,12 @@ import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.SeekBar
+import android.widget.ArrayAdapter
+import android.widget.AdapterView
+import android.widget.Button
+import android.widget.Spinner
 import android.widget.TextView
+import android.graphics.Color
 import androidx.appcompat.app.AlertDialog
 import androidx.core.content.ContextCompat
 import kotlin.math.max
@@ -22,6 +27,7 @@ import kotlin.math.roundToInt
 internal enum class OverlayTarget(val previewKey: String) {
     MAP(OverlayBroadcasts.PREVIEW_TARGET_MAP),
     NAVIGATION(OverlayBroadcasts.PREVIEW_TARGET_NAV),
+    LANE_GUIDANCE(OverlayBroadcasts.PREVIEW_TARGET_LANE_GUIDANCE),
     ARROW(OverlayBroadcasts.PREVIEW_TARGET_ARROW),
     SPEED(OverlayBroadcasts.PREVIEW_TARGET_SPEED),
     HUDSPEED(OverlayBroadcasts.PREVIEW_TARGET_HUDSPEED),
@@ -45,6 +51,7 @@ internal fun MainActivity.openPositionDialog(
     val previewHudContainer = dialogView.findViewById<FrameLayout>(R.id.dialogPreviewHudContainer)
     val previewMapBlock = dialogView.findViewById<View>(R.id.dialogPreviewMapBlock)
     val previewNavBlock = dialogView.findViewById<View>(R.id.dialogPreviewNavBlock)
+    val previewLaneGuidanceBlock = dialogView.findViewById<View>(R.id.dialogPreviewLaneGuidanceBlock)
     val previewNavTextColumn = dialogView.findViewById<LinearLayout>(R.id.dialogPreviewNavTextColumn)
     val previewNavPrimary = dialogView.findViewById<TextView>(R.id.dialogPreviewNavPrimary)
     val previewNavSecondary = dialogView.findViewById<TextView>(R.id.dialogPreviewNavSecondary)
@@ -69,6 +76,14 @@ internal fun MainActivity.openPositionDialog(
     val containerHeightLabel = dialogView.findViewById<TextView>(R.id.dialogContainerHeightLabel)
     val containerHeightRow = dialogView.findViewById<View>(R.id.dialogContainerHeightRow)
     val containerHeightSeek = dialogView.findViewById<SeekBar>(R.id.dialogContainerHeightSeek)
+    val mapStyleLabel = dialogView.findViewById<TextView>(R.id.dialogMapStyleLabel)
+    val mapStyleSpinner = dialogView.findViewById<Spinner>(R.id.dialogMapStyleSpinner)
+    val roadEventsRow = dialogView.findViewById<View>(R.id.dialogRoadEventsRow)
+    val roadEventsCheck = dialogView.findViewById<CheckBox>(R.id.dialogRoadEventsCheck)
+    val roadEventsButton = dialogView.findViewById<Button>(R.id.dialogRoadEventsButton)
+    val laneGuidanceRow = dialogView.findViewById<View>(R.id.dialogLaneGuidanceRow)
+    val laneGuidanceCheck = dialogView.findViewById<CheckBox>(R.id.dialogLaneGuidanceCheck)
+    val laneGuidanceButton = dialogView.findViewById<Button>(R.id.dialogLaneGuidanceButton)
     val scaleLabel = dialogView.findViewById<TextView>(R.id.dialogScaleLabel)
     val scaleSeek = dialogView.findViewById<SeekBar>(R.id.dialogScaleSeek)
     val scaleValue = dialogView.findViewById<TextView>(R.id.dialogScaleValue)
@@ -100,8 +115,10 @@ internal fun MainActivity.openPositionDialog(
     val containerSize = OverlayPrefs.containerSizeDp(this)
     val mapPosition = OverlayPrefs.mapPositionDp(this)
     val mapSize = OverlayPrefs.mapSizeDp(this)
+    val laneGuidancePosition = OverlayPrefs.laneGuidancePositionDp(this)
     val mapPoint = PointF(mapPosition.x, mapPosition.y)
     val navPoint = PointF(navPosition.x, navPosition.y)
+    val laneGuidancePoint = PointF(laneGuidancePosition.x, laneGuidancePosition.y)
     val arrowPoint = PointF(arrowPosition.x, arrowPosition.y)
     val speedPoint = PointF(speedPosition.x, speedPosition.y)
     val hudSpeedPoint = PointF(hudSpeedPosition.x, hudSpeedPosition.y)
@@ -123,6 +140,7 @@ internal fun MainActivity.openPositionDialog(
     val scalePercent = when (target) {
         OverlayTarget.MAP -> 100
         OverlayTarget.NAVIGATION -> (OverlayPrefs.navScale(this) * 100).toInt()
+        OverlayTarget.LANE_GUIDANCE -> (OverlayPrefs.laneGuidanceScale(this) * 100).toInt()
         OverlayTarget.ARROW -> (OverlayPrefs.arrowScale(this) * 100).toInt()
         OverlayTarget.SPEED -> (OverlayPrefs.speedScale(this) * 100).toInt()
         OverlayTarget.HUDSPEED -> (OverlayPrefs.hudSpeedScale(this) * 100).toInt()
@@ -136,6 +154,7 @@ internal fun MainActivity.openPositionDialog(
     val brightnessPercent = when (target) {
         OverlayTarget.MAP -> (OverlayPrefs.mapAlpha(this) * 100).toInt()
         OverlayTarget.NAVIGATION -> (OverlayPrefs.navAlpha(this) * 100).toInt()
+        OverlayTarget.LANE_GUIDANCE -> (OverlayPrefs.laneGuidanceAlpha(this) * 100).toInt()
         OverlayTarget.ARROW -> (OverlayPrefs.arrowAlpha(this) * 100).toInt()
         OverlayTarget.SPEED -> (OverlayPrefs.speedAlpha(this) * 100).toInt()
         OverlayTarget.HUDSPEED -> (OverlayPrefs.hudSpeedAlpha(this) * 100).toInt()
@@ -212,6 +231,7 @@ internal fun MainActivity.openPositionDialog(
     val dialogTitle = when (target) {
         OverlayTarget.MAP -> getString(R.string.position_map_block_label)
         OverlayTarget.NAVIGATION -> getString(R.string.position_nav_block_label)
+        OverlayTarget.LANE_GUIDANCE -> getString(R.string.position_lane_guidance_block_label)
         OverlayTarget.ARROW -> getString(R.string.position_arrow_block_label)
         OverlayTarget.SPEED -> getString(R.string.position_speed_block_label)
         OverlayTarget.HUDSPEED -> getString(R.string.position_hudspeed_block_label)
@@ -250,6 +270,76 @@ internal fun MainActivity.openPositionDialog(
         containerWidthRow.visibility = View.GONE
         containerHeightLabel.visibility = View.GONE
         containerHeightRow.visibility = View.GONE
+    }
+
+    if (target == OverlayTarget.MAP) {
+        mapStyleLabel.visibility = View.VISIBLE
+        mapStyleSpinner.visibility = View.VISIBLE
+        roadEventsRow.visibility = View.VISIBLE
+        laneGuidanceRow.visibility = View.VISIBLE
+        roadEventsCheck.isChecked = MapRenderSettingsStore.current().roadEventsEnabled
+        laneGuidanceCheck.isChecked = MapRenderSettingsStore.current().laneGuidanceEnabled
+        val styleAdapter = object : ArrayAdapter<String>(
+            this,
+            android.R.layout.simple_spinner_item,
+            MapStyleOptions.map { it.title }
+        ) {
+            override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
+                return super.getView(position, convertView, parent).also { view ->
+                    (view as? TextView)?.setTextColor(Color.WHITE)
+                }
+            }
+
+            override fun getDropDownView(position: Int, convertView: View?, parent: ViewGroup): View {
+                return super.getDropDownView(position, convertView, parent).also { view ->
+                    (view as? TextView)?.setTextColor(Color.WHITE)
+                }
+            }
+        }
+        styleAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+        mapStyleSpinner.adapter = styleAdapter
+        val currentStyleIndex = MapStyleOptions.indexOfFirst {
+            it.id == resolveMapStyleOption(MapRenderSettingsStore.current().mapStyleId).id
+        }.coerceAtLeast(0)
+        mapStyleSpinner.setSelection(currentStyleIndex, false)
+        mapStyleSpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                val option = MapStyleOptions.getOrNull(position) ?: return
+                if (option.id == MapRenderSettingsStore.current().mapStyleId) return
+                MapRenderSettingsStore.update { it.copy(mapStyleId = option.id) }
+            }
+
+            override fun onNothingSelected(parent: AdapterView<*>?) = Unit
+        }
+        roadEventsCheck.setOnCheckedChangeListener { _, isChecked ->
+            if (isChecked == MapRenderSettingsStore.current().roadEventsEnabled) return@setOnCheckedChangeListener
+            MapRenderSettingsStore.update { it.copy(roadEventsEnabled = isChecked) }
+            notifyOverlaySettingsChanged(
+                preview = true,
+                previewTarget = target,
+                previewShowOthers = showOthersCheck.isChecked
+            )
+        }
+        roadEventsButton.setOnClickListener {
+            showRoadEventsDialog()
+        }
+        laneGuidanceCheck.setOnCheckedChangeListener { _, isChecked ->
+            if (isChecked == MapRenderSettingsStore.current().laneGuidanceEnabled) return@setOnCheckedChangeListener
+            MapRenderSettingsStore.update { it.copy(laneGuidanceEnabled = isChecked) }
+            notifyOverlaySettingsChanged(
+                preview = true,
+                previewTarget = target,
+                previewShowOthers = showOthersCheck.isChecked
+            )
+        }
+        laneGuidanceButton.setOnClickListener {
+            showLaneGuidanceDialog()
+        }
+    } else {
+        mapStyleLabel.visibility = View.GONE
+        mapStyleSpinner.visibility = View.GONE
+        roadEventsRow.visibility = View.GONE
+        laneGuidanceRow.visibility = View.GONE
     }
 
     if (target != OverlayTarget.NAVIGATION) {
@@ -373,6 +463,7 @@ internal fun MainActivity.openPositionDialog(
             navWidthDp = navWidthDp.coerceIn(OverlayPrefs.NAV_WIDTH_MIN_DP, containerWidthDp)
         }
         val showNav = target == OverlayTarget.NAVIGATION
+        val showLaneGuidance = target == OverlayTarget.LANE_GUIDANCE
         val showMap = target == OverlayTarget.MAP
         val showArrow = target == OverlayTarget.ARROW
         val showSpeed = target == OverlayTarget.SPEED
@@ -384,6 +475,7 @@ internal fun MainActivity.openPositionDialog(
         val showClock = target == OverlayTarget.CLOCK
         previewMapBlock.visibility = if (showMap) View.VISIBLE else View.GONE
         previewNavBlock.visibility = if (showNav) View.VISIBLE else View.GONE
+        previewLaneGuidanceBlock.visibility = if (showLaneGuidance) View.VISIBLE else View.GONE
         previewArrowBlock.visibility = if (showArrow) View.VISIBLE else View.GONE
         previewSpeedLimit.visibility = if (showSpeed) View.VISIBLE else View.GONE
         previewHudSpeedBlock.visibility = if (showHudSpeed) View.VISIBLE else View.GONE
@@ -474,6 +566,25 @@ internal fun MainActivity.openPositionDialog(
                 brightnessSeek.progress.coerceIn(0, 100) / 100f
             } else {
                 OverlayPrefs.navAlpha(activity).coerceIn(0f, 1f)
+            }
+        }
+        if (showLaneGuidance) {
+            previewLaneGuidanceBlock.pivotX = 0f
+            previewLaneGuidanceBlock.pivotY = 0f
+            previewLaneGuidanceBlock.scaleX = currentScale
+            previewLaneGuidanceBlock.scaleY = currentScale
+            positionPreviewView(
+                previewHudContainer,
+                previewLaneGuidanceBlock,
+                laneGuidancePoint.x,
+                laneGuidancePoint.y,
+                containerWidthPx,
+                containerHeightPx
+            )
+            previewLaneGuidanceBlock.alpha = if (target == OverlayTarget.LANE_GUIDANCE) {
+                brightnessSeek.progress.coerceIn(0, 100) / 100f
+            } else {
+                OverlayPrefs.laneGuidanceAlpha(activity).coerceIn(0f, 1f)
             }
         }
         if (target == OverlayTarget.SPEEDOMETER) {
@@ -617,6 +728,7 @@ internal fun MainActivity.openPositionDialog(
         val view = when (target) {
             OverlayTarget.MAP -> previewMapBlock
             OverlayTarget.NAVIGATION -> previewNavBlock
+            OverlayTarget.LANE_GUIDANCE -> previewLaneGuidanceBlock
             OverlayTarget.ARROW -> previewArrowBlock
             OverlayTarget.SPEED -> previewSpeedLimit
             OverlayTarget.HUDSPEED -> previewHudSpeedBlock
@@ -666,6 +778,19 @@ internal fun MainActivity.openPositionDialog(
                 }
                 notifyOverlaySettingsChanged(
                     navPosition = point,
+                    preview = true,
+                    previewTarget = target,
+                    previewShowOthers = showOthersCheck.isChecked
+                )
+            }
+            OverlayTarget.LANE_GUIDANCE -> {
+                if (persist) {
+                    OverlayPrefs.setLaneGuidancePositionDp(this, dpX, dpY)
+                    laneGuidancePoint.x = dpX
+                    laneGuidancePoint.y = dpY
+                }
+                notifyOverlaySettingsChanged(
+                    laneGuidancePosition = point,
                     preview = true,
                     previewTarget = target,
                     previewShowOthers = showOthersCheck.isChecked
@@ -898,6 +1023,7 @@ internal fun MainActivity.openPositionDialog(
         when (target) {
             OverlayTarget.MAP -> previewMapBlock
             OverlayTarget.NAVIGATION -> previewNavBlock
+            OverlayTarget.LANE_GUIDANCE -> previewLaneGuidanceBlock
             OverlayTarget.ARROW -> previewArrowBlock
             OverlayTarget.SPEED -> previewSpeedLimit
             OverlayTarget.HUDSPEED -> previewHudSpeedBlock
@@ -1065,6 +1191,12 @@ internal fun MainActivity.openPositionDialog(
                     previewTarget = target,
                     previewShowOthers = showOthersCheck.isChecked
                 )
+                OverlayTarget.LANE_GUIDANCE -> notifyOverlaySettingsChanged(
+                    laneGuidanceScale = scale,
+                    preview = true,
+                    previewTarget = target,
+                    previewShowOthers = showOthersCheck.isChecked
+                )
                 OverlayTarget.ARROW -> notifyOverlaySettingsChanged(
                     arrowScale = scale,
                     preview = true,
@@ -1138,6 +1270,15 @@ internal fun MainActivity.openPositionDialog(
                     OverlayPrefs.setNavScale(activity, scale)
                     notifyOverlaySettingsChanged(
                         navScale = scale,
+                        preview = true,
+                        previewTarget = target,
+                        previewShowOthers = showOthersCheck.isChecked
+                    )
+                }
+                OverlayTarget.LANE_GUIDANCE -> {
+                    OverlayPrefs.setLaneGuidanceScale(activity, scale)
+                    notifyOverlaySettingsChanged(
+                        laneGuidanceScale = scale,
                         preview = true,
                         previewTarget = target,
                         previewShowOthers = showOthersCheck.isChecked
@@ -1248,6 +1389,15 @@ internal fun MainActivity.openPositionDialog(
                         previewShowOthers = showOthersCheck.isChecked
                     )
                 }
+                OverlayTarget.LANE_GUIDANCE -> {
+                    previewLaneGuidanceBlock.alpha = alpha
+                    notifyOverlaySettingsChanged(
+                        laneGuidanceAlpha = alpha,
+                        preview = true,
+                        previewTarget = target,
+                        previewShowOthers = showOthersCheck.isChecked
+                    )
+                }
                 OverlayTarget.ARROW -> {
                     previewArrowBlock.alpha = alpha
                     notifyOverlaySettingsChanged(
@@ -1351,6 +1501,15 @@ internal fun MainActivity.openPositionDialog(
                     OverlayPrefs.setNavAlpha(activity, alpha)
                     notifyOverlaySettingsChanged(
                         navAlpha = alpha,
+                        preview = true,
+                        previewTarget = target,
+                        previewShowOthers = showOthersCheck.isChecked
+                    )
+                }
+                OverlayTarget.LANE_GUIDANCE -> {
+                    OverlayPrefs.setLaneGuidanceAlpha(activity, alpha)
+                    notifyOverlaySettingsChanged(
+                        laneGuidanceAlpha = alpha,
                         preview = true,
                         previewTarget = target,
                         previewShowOthers = showOthersCheck.isChecked
@@ -1547,6 +1706,226 @@ private fun MainActivity.positionPreviewView(
     val previewY = if (boundsHeightPx > 0f) (posPxY / boundsHeightPx) * maxY else 0f
     view.x = min(max(previewX, 0f), maxX)
     view.y = min(max(previewY, 0f), maxY)
+}
+
+private fun MainActivity.showRoadEventsDialog() {
+    val settings = MapRenderSettingsStore.current()
+    var saved = false
+    val density = resources.displayMetrics.density
+    val maxDialogWidth = (resources.displayMetrics.widthPixels * 0.92f).roundToInt()
+    val maxListHeight = min(
+        (resources.displayMetrics.heightPixels * 0.48f).roundToInt(),
+        (420 * density).roundToInt()
+    )
+    val root = LinearLayout(this).apply {
+        orientation = LinearLayout.VERTICAL
+        setPadding(
+            (16 * density).roundToInt(),
+            (12 * density).roundToInt(),
+            (16 * density).roundToInt(),
+            (8 * density).roundToInt()
+        )
+    }
+    val sizeLabel = TextView(this).apply {
+        setTextColor(Color.WHITE)
+        textSize = 16f
+    }
+    val sizeSeek = SeekBar(this).apply {
+        max = ROAD_EVENT_ICON_SIZE_MAX_PX - ROAD_EVENT_ICON_SIZE_MIN_PX
+        progress = settings.roadEventIconSizePx
+            .coerceIn(ROAD_EVENT_ICON_SIZE_MIN_PX, ROAD_EVENT_ICON_SIZE_MAX_PX) -
+            ROAD_EVENT_ICON_SIZE_MIN_PX
+    }
+    fun updateSizeLabel() {
+        val value = ROAD_EVENT_ICON_SIZE_MIN_PX + sizeSeek.progress
+        sizeLabel.text = "Размер иконок на карте: $value px"
+    }
+    fun updateProjectedPreviewSize() {
+        val value = ROAD_EVENT_ICON_SIZE_MIN_PX + sizeSeek.progress
+        MapRenderSettingsStore.update {
+            it.copy(roadEventIconSizePx = value)
+        }
+        notifyOverlaySettingsChanged(
+            preview = true,
+            previewTarget = OverlayTarget.MAP,
+            previewShowOthers = true
+        )
+    }
+    updateSizeLabel()
+    sizeSeek.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+        override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+            updateSizeLabel()
+            if (fromUser) {
+                updateProjectedPreviewSize()
+            }
+        }
+
+        override fun onStartTrackingTouch(seekBar: SeekBar?) = Unit
+
+        override fun onStopTrackingTouch(seekBar: SeekBar?) {
+            updateProjectedPreviewSize()
+        }
+    })
+    root.addView(sizeLabel)
+    root.addView(sizeSeek)
+
+    val checkBoxes = linkedMapOf<String, CheckBox>()
+    val listContainer = LinearLayout(this).apply {
+        orientation = LinearLayout.VERTICAL
+    }
+    RoadEventOptions.forEach { option ->
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = android.view.Gravity.CENTER_VERTICAL
+            setPadding(0, (8 * density).roundToInt(), 0, (8 * density).roundToInt())
+        }
+        val iconSize = (42 * density).roundToInt()
+        row.addView(ImageView(this).apply {
+            setImageResource(option.iconRes)
+            layoutParams = LinearLayout.LayoutParams(iconSize, iconSize).apply {
+                marginEnd = (12 * density).roundToInt()
+            }
+        })
+        val checkBox = CheckBox(this).apply {
+            text = option.title
+            textSize = 16f
+            setTextColor(Color.WHITE)
+            isChecked = option.typeKey !in settings.hiddenRoadEventTypes
+        }
+        checkBoxes[option.typeKey] = checkBox
+        row.addView(checkBox)
+        listContainer.addView(row)
+    }
+    root.addView(android.widget.ScrollView(this).apply {
+        addView(listContainer)
+        layoutParams = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            maxListHeight
+        )
+    })
+
+    val dialog = AlertDialog.Builder(this, R.style.ThemeOverlay_ANHUD_Dialog)
+        .setTitle("Отображение дорожных событий")
+        .setView(root)
+        .setNegativeButton(android.R.string.cancel, null)
+        .setPositiveButton(android.R.string.ok) { _, _ ->
+            saved = true
+            val hidden = checkBoxes
+                .filterValues { !it.isChecked }
+                .keys
+                .toSet()
+            MapRenderSettingsStore.update {
+                it.copy(
+                    roadEventIconSizePx = ROAD_EVENT_ICON_SIZE_MIN_PX + sizeSeek.progress,
+                    hiddenRoadEventTypes = hidden
+                )
+            }
+        }
+        .setOnDismissListener {
+            if (!saved) {
+                MapRenderSettingsStore.update {
+                    it.copy(
+                        roadEventIconSizePx = settings.roadEventIconSizePx,
+                        hiddenRoadEventTypes = settings.hiddenRoadEventTypes
+                    )
+                }
+                notifyOverlaySettingsChanged(
+                    preview = true,
+                    previewTarget = OverlayTarget.MAP,
+                    previewShowOthers = true
+                )
+            }
+        }
+        .create()
+    dialog.setOnShowListener {
+        dialog.window?.setLayout(maxDialogWidth, WindowManager.LayoutParams.WRAP_CONTENT)
+    }
+    dialog.show()
+}
+
+private fun MainActivity.showLaneGuidanceDialog() {
+    val settings = MapRenderSettingsStore.current()
+    var saved = false
+    val density = resources.displayMetrics.density
+    val maxDialogWidth = (resources.displayMetrics.widthPixels * 0.92f).roundToInt()
+    val root = LinearLayout(this).apply {
+        orientation = LinearLayout.VERTICAL
+        setPadding(
+            (16 * density).roundToInt(),
+            (12 * density).roundToInt(),
+            (16 * density).roundToInt(),
+            (8 * density).roundToInt()
+        )
+    }
+    val sizeLabel = TextView(this).apply {
+        setTextColor(Color.WHITE)
+        textSize = 16f
+    }
+    val sizeSeek = SeekBar(this).apply {
+        max = LANE_GUIDANCE_WIDTH_MAX_PX - LANE_GUIDANCE_WIDTH_MIN_PX
+        progress = settings.laneGuidanceWidthPx
+            .coerceIn(LANE_GUIDANCE_WIDTH_MIN_PX, LANE_GUIDANCE_WIDTH_MAX_PX) -
+            LANE_GUIDANCE_WIDTH_MIN_PX
+    }
+    fun currentValue(): Int = LANE_GUIDANCE_WIDTH_MIN_PX + sizeSeek.progress
+    fun updateSizeLabel() {
+        sizeLabel.text = getString(R.string.map_lane_guidance_width_label, currentValue())
+    }
+    fun updatePreviewSize() {
+        MapRenderSettingsStore.update {
+            it.copy(laneGuidanceWidthPx = currentValue())
+        }
+        notifyOverlaySettingsChanged(
+            preview = true,
+            previewTarget = OverlayTarget.MAP,
+            previewShowOthers = true
+        )
+    }
+    updateSizeLabel()
+    sizeSeek.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+        override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+            updateSizeLabel()
+            if (fromUser) {
+                updatePreviewSize()
+            }
+        }
+
+        override fun onStartTrackingTouch(seekBar: SeekBar?) = Unit
+
+        override fun onStopTrackingTouch(seekBar: SeekBar?) {
+            updatePreviewSize()
+        }
+    })
+    root.addView(sizeLabel)
+    root.addView(sizeSeek)
+
+    val dialog = AlertDialog.Builder(this, R.style.ThemeOverlay_ANHUD_Dialog)
+        .setTitle(R.string.map_lane_guidance_dialog_title)
+        .setView(root)
+        .setNegativeButton(android.R.string.cancel, null)
+        .setPositiveButton(android.R.string.ok) { _, _ ->
+            saved = true
+            MapRenderSettingsStore.update {
+                it.copy(laneGuidanceWidthPx = currentValue())
+            }
+        }
+        .setOnDismissListener {
+            if (!saved) {
+                MapRenderSettingsStore.update {
+                    it.copy(laneGuidanceWidthPx = settings.laneGuidanceWidthPx)
+                }
+                notifyOverlaySettingsChanged(
+                    preview = true,
+                    previewTarget = OverlayTarget.MAP,
+                    previewShowOthers = true
+                )
+            }
+        }
+        .create()
+    dialog.setOnShowListener {
+        dialog.window?.setLayout(maxDialogWidth, WindowManager.LayoutParams.WRAP_CONTENT)
+    }
+    dialog.show()
 }
 
 private fun MainActivity.positionDpFromPreview(

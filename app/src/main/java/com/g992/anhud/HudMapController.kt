@@ -3,8 +3,13 @@ package com.g992.anhud
 import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import android.graphics.Canvas
 import android.graphics.Color
-import android.graphics.RectF
+import android.graphics.Paint
+import android.graphics.Path
+import android.graphics.PointF
+import android.graphics.drawable.Drawable
 import android.location.Location
 import android.location.LocationListener
 import android.location.LocationManager
@@ -17,113 +22,83 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import androidx.core.content.ContextCompat
-import org.maplibre.android.geometry.LatLng
-import org.maplibre.android.location.LocationComponent
-import org.maplibre.android.location.LocationComponentActivationOptions
-import org.maplibre.android.location.LocationComponentOptions
-import org.maplibre.android.location.OnLocationCameraTransitionListener
-import org.maplibre.android.location.modes.CameraMode
-import org.maplibre.android.location.modes.RenderMode
-import org.maplibre.android.maps.MapLibreMap
-import org.maplibre.android.maps.MapLibreMapOptions
-import org.maplibre.android.maps.MapView
-import org.maplibre.android.maps.Style
-import org.maplibre.android.style.layers.LineLayer
-import org.maplibre.android.style.layers.PropertyFactory.lineCap
-import org.maplibre.android.style.layers.PropertyFactory.lineColor
-import org.maplibre.android.style.layers.PropertyFactory.lineJoin
-import org.maplibre.android.style.layers.PropertyFactory.lineOpacity
-import org.maplibre.android.style.layers.PropertyFactory.lineWidth
-import org.maplibre.android.style.sources.GeoJsonSource
-import org.maplibre.geojson.Feature
-import org.maplibre.geojson.FeatureCollection
-import org.maplibre.geojson.LineString
-import org.maplibre.geojson.MultiLineString
-import org.maplibre.geojson.Point
+import com.yandex.mapkit.Animation
+import com.yandex.mapkit.MapKitFactory
+import com.yandex.mapkit.ScreenPoint
+import com.yandex.mapkit.geometry.Point
+import com.yandex.mapkit.geometry.Polyline
+import com.yandex.mapkit.logo.Alignment
+import com.yandex.mapkit.logo.HorizontalAlignment
+import com.yandex.mapkit.logo.Padding
+import com.yandex.mapkit.logo.VerticalAlignment
+import com.yandex.mapkit.map.CameraPosition
+import com.yandex.mapkit.map.IconStyle
+import com.yandex.mapkit.map.MapObjectCollection
+import com.yandex.mapkit.map.MapType
+import com.yandex.mapkit.map.PlacemarkMapObject
+import com.yandex.mapkit.map.RotationType
+import com.yandex.mapkit.mapview.MapView
+import com.yandex.runtime.image.ImageProvider
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
-private const val MAP_ROUTE_SOURCE_ID = "anhud-map-route-source"
-private const val MAP_ROUTE_LAYER_ID = "anhud-map-route-layer"
-private const val MAP_ROUTE_COLOR_PROP = "routeColor"
 private const val MAP_MAX_FPS = 15
 private const val MAP_MAX_LAST_KNOWN_LOCATION_AGE_MS = 10_000L
 private const val MAP_TRACKING_TOP_PADDING_RATIO = 0.97f
-private const val HUD_MAP_TAG = "HudMapController"
 private const val MAP_ROUTE_TRIM_BACKTRACK_METERS = 3.0
-private const val MAP_ROUTE_SNAP_VIEWPORT_MARGIN_PX = 96f
-private const val MAP_ROUTE_SNAP_MIN_DIRECTION_COS = 0.45
-private const val MAP_LOCATION_SNAP_MIN_QUERY_RADIUS_PX = 28f
-private const val MAP_LOCATION_SNAP_MAX_QUERY_RADIUS_PX = 96f
-private const val MAP_LOCATION_SNAP_HYSTERESIS_METERS = 1.5
-private const val MAP_LOCATION_SNAP_MIN_BEARING_SPEED_MPS = 1.0f
-private const val MAP_ROUTE_SNAP_REUSE_WINDOW_MS = 5000L
-
-private val MAP_ROAD_LAYER_IDS = arrayOf(
-    "road_motorway",
-    "road_trunk_primary",
-    "road_secondary_tertiary",
-    "road_minor",
-    "road_motorway_link",
-)
+private const val MAP_ROUTE_ALERT_PASSED_TOLERANCE_METERS = 12.0
+private const val MAP_ROUTE_PROGRESS_RENDER_GRANULARITY_METERS = 25.0
+private const val MAP_ROUTE_OFF_ROUTE_CLEAR_METERS = 35.0
+private const val MAP_CAMERA_ANIMATION_SECONDS = 0.35f
+private const val MAP_LOCATION_ANIMATION_MIN_MS = 250L
+private const val MAP_LOCATION_ANIMATION_MAX_MS = 1_100L
+private const val MAP_LOCATION_ANIMATION_TARGET_MS = 900L
+private const val MAP_LOCATION_TELEPORT_DISTANCE_METERS = 80f
+private const val MAP_LOCATION_TELEPORT_AGE_MS = 4_000L
+private const val MAP_HEADING_FALLBACK_MIN_DISTANCE_METERS = 2.0
+private const val MAP_HEADING_STUCK_EPSILON_DEGREES = 2f
+private const val MAP_HEADING_FALLBACK_DIVERGENCE_DEGREES = 5f
+private const val MAP_HEADING_FALLBACK_SMOOTHING = 0.35
+private const val HUD_MAP_TAG = "HudMapController"
 
 class HudMapController(
     private val context: Context,
 ) {
-    private val mapView = MapView(
-        context,
-        MapLibreMapOptions()
-            .textureMode(true)
-            .translucentTextureSurface(true)
-            .rotateGesturesEnabled(false)
-            .tiltGesturesEnabled(false)
-            .zoomGesturesEnabled(false)
-            .doubleTapGesturesEnabled(false)
-            .quickZoomGesturesEnabled(false)
-            .scrollGesturesEnabled(false)
-            .horizontalScrollGesturesEnabled(false)
-            .compassEnabled(false)
-            .logoEnabled(false)
-            .attributionEnabled(false)
-    )
-
-    private var mapLibreMap: MapLibreMap? = null
-    private var locationComponent: LocationComponent? = null
+    private val mapView = MapView(context)
+    private val renderHandler = Handler(Looper.getMainLooper())
+    private var routeCollection: MapObjectCollection? = null
+    private var routeAlertCollection: MapObjectCollection? = null
+    private var laneManeuverCollection: MapObjectCollection? = null
+    private var laneManeuverPlacemark: PlacemarkMapObject? = null
+    private var locationCollection: MapObjectCollection? = null
+    private var locationPlacemark: PlacemarkMapObject? = null
+    private val locationArrowProvider by lazy { ImageProvider.fromBitmap(createLocationArrowBitmap()) }
     private var deviceLocationListener: LocationListener? = null
     private var released = false
-    private val renderHandler = Handler(Looper.getMainLooper())
+    private var mapKitStarted = false
     private var pendingTelemetryRender: Runnable? = null
     private var lastTelemetryRenderUptimeMs: Long = 0L
     private var currentSettings = MapRenderSettingsStore.current()
     private var currentSnapshot = MapRouteTelemetryStore.current()
-    private var currentLocation: Location? = currentSnapshot.startLocation
-    private var currentDisplayLocation: Location? = currentLocation
+    private var currentLocation: Location? = null
+    private var currentDisplayLocation: Location? = null
+    private var locationAnimation: LocationAnimation? = null
+    private var lastRawDeviceLocation: Location? = null
+    private var lastResolvedDeviceBearing: Float? = null
     private var currentSpeedBucketKmh: Int = initialSpeedBucket(NavigationHudStore.snapshot().speedKmh)
     private var lastRouteRenderDebugKey: String? = null
     private var lastRouteSnapshotDebugKey: String? = null
-    private var routeSnapCache: RouteSnapCache? = null
-    private var routeRoadQueryCache: RoadQueryCache? = null
-    private var routeFeatureCache: RouteFeatureCache? = null
-    private var locationSnapCache: LocationSnapCache? = null
-    private var lastRouteSnapDebugKey: String? = null
-    private var lastLocationRoadSegment: RoadLineSegment? = null
+    private var lastRouteAlertRenderKey: String? = null
+    private var lastLaneManeuverRenderKey: String? = null
+    private var lastCameraKey: String? = null
+    private var appliedMapStyleId: String? = null
 
     private val settingsListener: (MapRenderSettings) -> Unit = { settings ->
-        val snapSettingsChanged = currentSettings.snapRouteToRoadsEnabled != settings.snapRouteToRoadsEnabled ||
-            currentSettings.snapLocationToRoadsEnabled != settings.snapLocationToRoadsEnabled ||
-            currentSettings.routeSnapDistanceMeters != settings.routeSnapDistanceMeters
         currentSettings = settings
-        applyLocationStyle()
+        applyMapStyle(force = true)
+        updateLocationStyle()
         applyTrackingConfig()
-        if (snapSettingsChanged) {
-            invalidateRouteSnapCache()
-            routeFeatureCache = null
-            locationSnapCache = null
-            if (!settings.snapLocationToRoadsEnabled) {
-                lastLocationRoadSegment = null
-            }
-            applyTelemetrySnapshot()
-        }
+        requestTelemetryRender()
     }
 
     private val routeListener: (MapRouteTelemetrySnapshot) -> Unit = { snapshot ->
@@ -141,6 +116,115 @@ class HudMapController(
                 applyTrackingConfig()
             }
         }
+    }
+
+    init {
+        MapRenderSettingsStore.addListener(settingsListener)
+        MapRouteTelemetryStore.addListener(routeListener)
+        NavigationHudStore.registerListener(navStateListener)
+        mapView.setBackgroundColor(Color.BLACK)
+        mapView.setNoninteractive(true)
+        mapView.setOnTouchListener { _, _: MotionEvent -> true }
+        configureMap()
+        startMapKit()
+        mapView.onStart()
+        startDeviceLocationTracking()
+        requestTelemetryRender()
+    }
+
+    fun attachTo(container: FrameLayout) {
+        if (released) return
+        val currentParent = mapView.parent as? ViewGroup
+        if (currentParent !== container) {
+            currentParent?.removeView(mapView)
+            container.addView(
+                mapView,
+                0,
+                FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT
+                )
+            )
+        }
+        mapView.visibility = View.VISIBLE
+        applyTrackingConfig()
+        requestTelemetryRender()
+    }
+
+    fun setVisible(visible: Boolean) {
+        if (released) return
+        mapView.visibility = if (visible) View.VISIBLE else View.INVISIBLE
+    }
+
+    fun release() {
+        if (released) return
+        released = true
+        pendingTelemetryRender?.let(renderHandler::removeCallbacks)
+        pendingTelemetryRender = null
+        locationAnimation = null
+        MapRenderSettingsStore.removeListener(settingsListener)
+        MapRouteTelemetryStore.removeListener(routeListener)
+        NavigationHudStore.unregisterListener(navStateListener)
+        stopDeviceLocationTracking()
+        mapView.onStop()
+        stopMapKit()
+        (mapView.parent as? ViewGroup)?.removeView(mapView)
+    }
+
+    private fun configureMap() {
+        val map = mapView.mapWindow.map
+        map.setMapType(MapType.VECTOR_MAP)
+        map.isNightModeEnabled = true
+        map.isZoomGesturesEnabled = false
+        map.isScrollGesturesEnabled = false
+        map.isTiltGesturesEnabled = false
+        map.isRotateGesturesEnabled = false
+        map.isFastTapEnabled = false
+        map.set2DMode(false)
+        map.logo.setAlignment(Alignment(HorizontalAlignment.LEFT, VerticalAlignment.TOP))
+        map.logo.setPadding(Padding(dp(8), dp(8)))
+        mapView.mapWindow.setMaxFps(MAP_MAX_FPS)
+        routeCollection = map.mapObjects.addCollection()
+        routeAlertCollection = map.mapObjects.addCollection()
+        laneManeuverCollection = map.mapObjects.addCollection()
+        locationCollection = map.mapObjects.addCollection()
+        applyMapStyle(force = true)
+    }
+
+    private fun applyMapStyle(force: Boolean = false) {
+        val style = resolveMapStyleOption(currentSettings.mapStyleId)
+        if (!force && appliedMapStyleId == style.id) return
+        val styleJson = runCatching {
+            context.assets.open(style.assetPath).bufferedReader().use { it.readText() }
+        }.onFailure {
+            Log.w(HUD_MAP_TAG, "map style load failed: ${style.assetPath}: ${it.message}")
+        }.getOrNull()
+        if (styleJson.isNullOrBlank()) return
+        runCatching {
+            mapView.mapWindow.map.setMapStyle(styleJson)
+        }.onSuccess { applied ->
+            if (applied) {
+                appliedMapStyleId = style.id
+            } else {
+                Log.w(HUD_MAP_TAG, "map style rejected: ${style.id}")
+            }
+        }.onFailure {
+            Log.w(HUD_MAP_TAG, "map style apply failed: ${style.id}: ${it.message}")
+        }
+    }
+
+    private fun startMapKit() {
+        if (mapKitStarted) return
+        mapKitStarted = true
+        runCatching { MapKitFactory.getInstance().onStart() }
+            .onFailure { Log.w(HUD_MAP_TAG, "MapKit onStart failed: ${it.message}") }
+    }
+
+    private fun stopMapKit() {
+        if (!mapKitStarted) return
+        mapKitStarted = false
+        runCatching { MapKitFactory.getInstance().onStop() }
+            .onFailure { Log.w(HUD_MAP_TAG, "MapKit onStop failed: ${it.message}") }
     }
 
     private fun logRouteSnapshot(snapshot: MapRouteTelemetrySnapshot) {
@@ -178,208 +262,325 @@ class HudMapController(
         renderHandler.postDelayed(runnable, minIntervalMs - elapsed)
     }
 
-    init {
-        MapRenderSettingsStore.addListener(settingsListener)
-        MapRouteTelemetryStore.addListener(routeListener)
-        NavigationHudStore.registerListener(navStateListener)
-        mapView.setBackgroundColor(Color.BLACK)
-        mapView.setMaximumFps(MAP_MAX_FPS)
-        mapView.setOnTouchListener { _, _: MotionEvent -> true }
-        mapView.onCreate(null)
-        mapView.getMapAsync(::onMapReady)
-        mapView.onStart()
-        mapView.onResume()
-    }
-
-    fun attachTo(container: FrameLayout) {
-        if (released) return
-        val currentParent = mapView.parent as? ViewGroup
-        if (currentParent !== container) {
-            currentParent?.removeView(mapView)
-            container.addView(
-                mapView,
-                0,
-                FrameLayout.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                    ViewGroup.LayoutParams.MATCH_PARENT
-                )
-            )
-        }
-        mapView.visibility = View.VISIBLE
-        applyTrackingConfig()
-    }
-
-    fun setVisible(visible: Boolean) {
-        if (released) return
-        mapView.visibility = if (visible) View.VISIBLE else View.INVISIBLE
-    }
-
-    fun release() {
-        if (released) return
-        released = true
-        pendingTelemetryRender?.let(renderHandler::removeCallbacks)
-        pendingTelemetryRender = null
-        MapRenderSettingsStore.removeListener(settingsListener)
-        MapRouteTelemetryStore.removeListener(routeListener)
-        NavigationHudStore.unregisterListener(navStateListener)
-        stopDeviceLocationTracking()
-        mapView.onPause()
-        mapView.onStop()
-        mapView.onDestroy()
-        (mapView.parent as? ViewGroup)?.removeView(mapView)
-    }
-
-    private fun onMapReady(map: MapLibreMap) {
-        mapLibreMap = map
-        map.uiSettings.setAllGesturesEnabled(false)
-        map.uiSettings.setRotateGesturesEnabled(false)
-        map.uiSettings.setTiltGesturesEnabled(false)
-        map.uiSettings.setZoomGesturesEnabled(false)
-        map.uiSettings.setDoubleTapGesturesEnabled(false)
-        map.uiSettings.setQuickZoomGesturesEnabled(false)
-        map.uiSettings.setScrollGesturesEnabled(false)
-        map.uiSettings.setHorizontalScrollGesturesEnabled(false)
-        map.uiSettings.setCompassEnabled(false)
-        map.uiSettings.setLogoEnabled(false)
-        map.uiSettings.setAttributionEnabled(false)
-        map.setStyle(buildHudMapStyle(context)) { style ->
-            Log.d(HUD_MAP_TAG, "map style loaded")
-            ensureRouteLayer(style)
-            enableLocationComponent(map, style)
-            startDeviceLocationTracking()
-            applyTelemetrySnapshot()
-            applyTrackingConfig()
-        }
-    }
-
-    private fun enableLocationComponent(map: MapLibreMap, style: Style) {
-        val component = map.locationComponent
-        component.activateLocationComponent(
-            LocationComponentActivationOptions.builder(context, style)
-                .locationComponentOptions(buildLocationOptions(context, currentSettings))
-                .useDefaultLocationEngine(false)
-                .build()
-        )
-        component.isLocationComponentEnabled = true
-        component.renderMode = RenderMode.GPS
-        component.setCameraMode(
-            CameraMode.TRACKING_GPS,
-            object : OnLocationCameraTransitionListener {
-                override fun onLocationCameraTransitionFinished(cameraMode: Int) {
-                    component.paddingWhileTracking(trackingPaddingValues())
-                    component.zoomWhileTracking(resolveTargetZoom(currentSettings, currentSpeedBucketKmh))
-                    component.tiltWhileTracking(currentSettings.tilt)
-                }
-
-                override fun onLocationCameraTransitionCanceled(cameraMode: Int) = Unit
-            }
-        )
-        locationComponent = component
-        applyLocationStyle()
-        updateDisplayLocation()
-    }
-
-    private fun ensureRouteLayer(style: Style) {
-        if (style.getSource(MAP_ROUTE_SOURCE_ID) == null) {
-            style.addSource(GeoJsonSource(MAP_ROUTE_SOURCE_ID, FeatureCollection.fromFeatures(emptyArray())))
-        }
-        if (style.getLayer(MAP_ROUTE_LAYER_ID) == null) {
-            style.addLayer(
-                LineLayer(MAP_ROUTE_LAYER_ID, MAP_ROUTE_SOURCE_ID).withProperties(
-                    lineColor(org.maplibre.android.style.expressions.Expression.get(MAP_ROUTE_COLOR_PROP)),
-                    lineWidth(6.5f),
-                    lineOpacity(0.98f),
-                    lineCap("round"),
-                    lineJoin("round")
-                )
-            )
-        }
-    }
-
     private fun applyTelemetrySnapshot() {
         lastTelemetryRenderUptimeMs = SystemClock.uptimeMillis()
-        val map = mapLibreMap ?: run {
-            Log.d(HUD_MAP_TAG, "route render skipped: map is not ready, points=${currentSnapshot.routePoints.size}")
-            return
-        }
-        val style = map.style ?: run {
-            Log.d(HUD_MAP_TAG, "route render skipped: style is not ready, points=${currentSnapshot.routePoints.size}")
-            return
-        }
-        ensureRouteLayer(style)
-        val source = style.getSourceAs<GeoJsonSource>(MAP_ROUTE_SOURCE_ID) ?: run {
-            Log.w(HUD_MAP_TAG, "route render skipped: source is missing")
-            return
-        }
-        val rawPoints = currentSnapshot.routePoints
-        val displayLocation = resolveDisplayLocation()?.let(::resolveLocationForRender)
+        val displayLocation = resolveDisplayLocation(lastTelemetryRenderUptimeMs)
         currentDisplayLocation = displayLocation
-        val renderedRoute = resolveRoutePointsForRender(map, rawPoints, currentSnapshot.routeToken)
-        val points = renderedRoute.points
-        val renderCacheKey = routeRenderCacheKey(
-            renderedRouteToken = renderedRoute.token,
-            jamsToken = currentSnapshot.routeJamsToken,
-            state = currentSnapshot.state,
-            pointCount = rawPoints.size,
-            displayLocation = displayLocation
-        )
-        val cachedFeatures = routeFeatureCache?.takeIf { it.key == renderCacheKey }
-        displayLocation?.let { locationComponent?.forceLocationUpdate(it) }
-        if (cachedFeatures != null) {
-            logRouteRender(rawPoints.size, cachedFeatures.visibleSegmentCount)
-        } else if (points.size >= 2) {
-            val featureCollection = buildRouteFeatureCollection(points, currentSnapshot.routeJams, displayLocation)
-            routeFeatureCache = RouteFeatureCache(
-                key = renderCacheKey,
-                featureCollection = featureCollection.collection,
-                visibleSegmentCount = featureCollection.visibleSegmentCount
-            )
-            logRouteRender(rawPoints.size, featureCollection.visibleSegmentCount)
-            source.setGeoJson(featureCollection.collection)
-        } else {
-            routeFeatureCache = RouteFeatureCache(
-                key = renderCacheKey,
-                featureCollection = FeatureCollection.fromFeatures(emptyArray()),
-                visibleSegmentCount = 0
-            )
-            logRouteRender(rawPoints.size, 0)
-            source.setGeoJson(routeFeatureCache?.featureCollection ?: FeatureCollection.fromFeatures(emptyArray()))
+        renderLocation(resolveLocationMarkerLocation(displayLocation))
+        renderRoute(displayLocation)
+        renderRouteAlerts(displayLocation)
+        renderLaneManeuver()
+        moveCamera(displayLocation)
+        if (locationAnimation != null) {
+            requestTelemetryRender()
         }
     }
 
-    private fun buildRouteFeatureCollection(
-        points: List<LatLng>,
-        jams: List<String>,
-        displayLocation: Location?,
-    ): RouteFeatureCollection {
-        val visibleSegments = trimRouteSegments(points, jams, displayLocation)
-        val segmentFeatures = visibleSegments.map { segment ->
-            Feature.fromGeometry(
-                LineString.fromLngLats(
-                    listOf(
-                        Point.fromLngLat(segment.start.longitude, segment.start.latitude),
-                        Point.fromLngLat(segment.end.longitude, segment.end.latitude)
-                    )
+    private fun renderRoute(displayLocation: Location?) {
+        val collection = routeCollection ?: return
+        val points = currentSnapshot.routePoints
+        if (points.size < 2) {
+            if (currentSnapshot.state == MAP_ROUTE_STATE_ARRIVED ||
+                currentSnapshot.state == MAP_ROUTE_STATE_CANCELLED
+            ) {
+                collection.clear()
+                lastRouteRenderDebugKey = null
+            }
+            return
+        }
+        val renderCacheKey = routeRenderCacheKey(
+            routeToken = currentSnapshot.routeToken,
+            jamsToken = currentSnapshot.routeJamsToken,
+            state = currentSnapshot.state,
+            pointCount = points.size,
+            displayLocation = displayLocation
+        )
+        if (renderCacheKey == lastRouteRenderDebugKey) return
+        val trimmedRoute = trimRouteSegments(points, currentSnapshot.routeJams, displayLocation)
+        if (trimmedRoute.shouldHideRoute) {
+            if (lastRouteRenderDebugKey != null) {
+                collection.clear()
+                lastRouteRenderDebugKey = null
+            }
+            Log.w(
+                HUD_MAP_TAG,
+                "route hidden: stale geometry likely, distanceToRouteMeters=" +
+                    "${"%.1f".format(trimmedRoute.distanceToRouteMeters ?: 0.0)} points=${points.size}"
+            )
+            return
+        }
+        val visibleSegments = trimmedRoute.segments
+        if (visibleSegments.isEmpty()) {
+            Log.w(
+                HUD_MAP_TAG,
+                "route render skipped: no visible segments, clearing current route; points=${points.size}"
+            )
+            if (lastRouteRenderDebugKey != null) {
+                collection.clear()
+                lastRouteRenderDebugKey = null
+            }
+            return
+        }
+        collection.clear()
+        val routeRuns = buildRouteRuns(visibleSegments)
+        routeRuns.forEach { run ->
+            collection.addPolyline(
+                Polyline(
+                    run.points.map { point -> Point(point.latitude, point.longitude) }
                 )
             ).apply {
-                addStringProperty(MAP_ROUTE_COLOR_PROP, routeJamColor(segment.jam))
+                setStrokeWidth(6.5f)
+                setOutlineWidth(1.5f)
+                setOutlineColor(Color.argb(160, 0, 0, 0))
+                setStrokeColor(routeJamColor(run.jam))
+                zIndex = 10f
             }
         }
-        return RouteFeatureCollection(
-            collection = FeatureCollection.fromFeatures(segmentFeatures),
-            visibleSegmentCount = segmentFeatures.size
+        lastRouteRenderDebugKey = renderCacheKey
+        Log.d(
+            HUD_MAP_TAG,
+            "route rendered: state=${currentSnapshot.state} points=${points.size} " +
+                "visibleSegments=${visibleSegments.size} runs=${routeRuns.size} " +
+                "hasDisplayLocation=${displayLocation != null}"
         )
+    }
+
+    private fun renderLocation(location: Location?) {
+        if (location == null) return
+        val point = Point(location.latitude, location.longitude)
+        val placemark = locationPlacemark ?: locationCollection?.addEmptyPlacemark(point)?.also {
+            locationPlacemark = it
+            it.setIcon(locationArrowProvider, buildLocationIconStyle())
+            it.zIndex = 20f
+        } ?: return
+        placemark.geometry = point
+        placemark.direction = resolveBearing(location)
+        updateLocationStyle()
+    }
+
+    private fun renderRouteAlerts(displayLocation: Location?) {
+        val collection = routeAlertCollection ?: return
+        val alerts = filterUpcomingRouteAlerts(
+            alerts = currentSnapshot.routeAlerts,
+            routePoints = currentSnapshot.routePoints,
+            location = displayLocation
+        )
+        val hiddenTypes = currentSettings.hiddenRoadEventTypes
+        val iconSizePx = currentSettings.roadEventIconSizePx
+            .coerceIn(ROAD_EVENT_ICON_SIZE_MIN_PX, ROAD_EVENT_ICON_SIZE_MAX_PX)
+        if (!currentSettings.roadEventsEnabled || alerts.isEmpty()) {
+            if (lastRouteAlertRenderKey != null) {
+                collection.clear()
+                lastRouteAlertRenderKey = null
+            }
+            return
+        }
+        val renderKey = buildString {
+            append(currentSnapshot.routeAlertsToken.orEmpty())
+            append('|')
+            append(iconSizePx)
+            append('|')
+            alerts.forEach { alert ->
+                append(resolveRoadEventToggleKey(alert.type))
+                append('@')
+                append((alert.point.latitude * 100_000.0).roundToInt())
+                append(',')
+                append((alert.point.longitude * 100_000.0).roundToInt())
+                append(';')
+            }
+            append('|')
+            hiddenTypes.toList().sorted().forEach { type ->
+                append(type)
+                append(',')
+            }
+        }
+        if (renderKey == lastRouteAlertRenderKey) return
+        collection.clear()
+        alerts.forEach { alert ->
+            val typeKey = resolveRoadEventToggleKey(alert.type)
+            if (typeKey in hiddenTypes) return@forEach
+            val bitmap = renderResourceToBitmap(resolveRoadEventIconRes(alert.type)) ?: return@forEach
+            collection.addPlacemark(Point(alert.point.latitude, alert.point.longitude)).apply {
+                setIcon(
+                    ImageProvider.fromBitmap(bitmap),
+                    IconStyle()
+                        .setAnchor(PointF(0.5f, 1f))
+                        .setFlat(false)
+                        .setScale(iconSizePx / ROAD_EVENT_ICON_SIZE_MAX_PX.toFloat())
+                        .setZIndex(18f)
+                )
+                zIndex = 18f
+            }
+        }
+        lastRouteAlertRenderKey = renderKey
+    }
+
+    private fun renderLaneManeuver() {
+        val maneuver = currentSnapshot.laneManeuver
+        val collection = laneManeuverCollection ?: return
+        if (!currentSettings.laneGuidanceEnabled ||
+            maneuver == null ||
+            maneuver.bitmap.isRecycled ||
+            maneuver.bitmap.width <= 0 ||
+            maneuver.bitmap.height <= 0
+        ) {
+            if (lastLaneManeuverRenderKey != null || laneManeuverPlacemark != null) {
+                laneManeuverPlacemark?.let { runCatching { collection.remove(it) } }
+                laneManeuverPlacemark = null
+                lastLaneManeuverRenderKey = null
+            }
+            return
+        }
+        val renderKey = buildString {
+            append(maneuver.token)
+            append('|')
+            append(maneuver.point.latitude)
+            append('|')
+            append(maneuver.point.longitude)
+            append('|')
+            append(maneuver.iconAnchor.x)
+            append('|')
+            append(maneuver.iconAnchor.y)
+            append('|')
+            append(maneuver.bitmap.width)
+            append('x')
+            append(maneuver.bitmap.height)
+            append('|')
+            append(currentSettings.laneGuidanceWidthPx)
+        }
+        if (renderKey == lastLaneManeuverRenderKey && laneManeuverPlacemark != null) return
+        val point = Point(maneuver.point.latitude, maneuver.point.longitude)
+        val placemark = laneManeuverPlacemark ?: collection.addPlacemark(point).also {
+            laneManeuverPlacemark = it
+        }
+        val maxWidthPx = currentSettings.laneGuidanceWidthPx
+            .coerceIn(LANE_GUIDANCE_WIDTH_MIN_PX, LANE_GUIDANCE_WIDTH_MAX_PX)
+        val scale = maxWidthPx.toFloat() / maneuver.bitmap.width.coerceAtLeast(1).toFloat()
+        placemark.geometry = point
+        placemark.setIcon(
+            ImageProvider.fromBitmap(maneuver.bitmap),
+            IconStyle()
+                .setAnchor(maneuver.iconAnchor)
+                .setFlat(false)
+                .setScale(scale.coerceAtMost(1f))
+                .setZIndex(19f)
+        )
+        placemark.zIndex = 19f
+        lastLaneManeuverRenderKey = renderKey
+    }
+
+    private fun renderResourceToBitmap(resourceId: Int): Bitmap? {
+        val drawable: Drawable = ContextCompat.getDrawable(context, resourceId) ?: return null
+        val width = drawable.intrinsicWidth.coerceAtLeast(1)
+        val height = drawable.intrinsicHeight.coerceAtLeast(1)
+        val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
+        drawable.setBounds(0, 0, width, height)
+        drawable.draw(canvas)
+        return bitmap
+    }
+
+    private fun updateLocationStyle() {
+        val placemark = locationPlacemark ?: return
+        placemark.setIconStyle(buildLocationIconStyle())
+    }
+
+    private fun buildLocationIconStyle(): IconStyle {
+        val scale = (currentSettings.arrowScalePercent.toFloat() / MAP_ARROW_SCALE_MAX_PERCENT.toFloat())
+            .coerceIn(
+                MAP_ARROW_SCALE_MIN_PERCENT.toFloat() / MAP_ARROW_SCALE_MAX_PERCENT.toFloat(),
+                1.2f
+            )
+        return IconStyle()
+            .setAnchor(android.graphics.PointF(0.5f, 0.5f))
+            .setRotationType(RotationType.ROTATE)
+            .setFlat(true)
+            .setScale(scale)
+            .setZIndex(20f)
+    }
+
+    private fun applyTrackingConfig() {
+        updateFocusPoint()
+        moveCamera(currentDisplayLocation ?: resolveDisplayLocation(SystemClock.uptimeMillis()), force = true)
+    }
+
+    private fun updateFocusPoint() {
+        val height = mapView.height.coerceAtLeast(1)
+        val width = mapView.width.coerceAtLeast(1)
+        mapView.mapWindow.focusPoint = ScreenPoint(
+            width / 2f,
+            height * MAP_TRACKING_TOP_PADDING_RATIO
+        )
+    }
+
+    private fun moveCamera(location: Location?, force: Boolean = false) {
+        location ?: return
+        updateFocusPoint()
+        val zoom = resolveTargetZoom(currentSettings, currentSpeedBucketKmh).toFloat()
+        val tilt = currentSettings.tilt.toFloat()
+        val azimuth = resolveBearing(location)
+        val key = "${location.renderKey()}|${(zoom * 10f).roundToInt()}|" +
+            "${tilt.roundToInt()}|${azimuth.roundToInt()}"
+        if (!force && key == lastCameraKey) return
+        lastCameraKey = key
+        val cameraPosition = CameraPosition(
+            Point(location.latitude, location.longitude),
+            zoom,
+            azimuth,
+            tilt
+        )
+        if (force) {
+            mapView.mapWindow.map.move(cameraPosition)
+        } else {
+            mapView.mapWindow.map.move(
+                cameraPosition,
+                Animation(Animation.Type.SMOOTH, MAP_CAMERA_ANIMATION_SECONDS)
+            )
+        }
+    }
+
+    private fun resolveDisplayLocation(nowUptimeMs: Long): Location? {
+        return resolveAnimatedLocation(nowUptimeMs) ?: currentLocation ?: currentDisplayLocation ?: currentSnapshot.startLocation
+    }
+
+    private fun resolveLocationMarkerLocation(displayLocation: Location?): Location? {
+        return displayLocation?.takeUnless {
+            it.provider == ROUTE_TELEMETRY_LOCATION_PROVIDER
+        }
+    }
+
+    private fun resolveAnimatedLocation(nowUptimeMs: Long): Location? {
+        val animation = locationAnimation ?: return currentDisplayLocation
+        val elapsed = nowUptimeMs - animation.startedAtUptimeMs
+        if (elapsed >= animation.durationMs) {
+            locationAnimation = null
+            currentDisplayLocation = animation.to
+            return animation.to
+        }
+        val fraction = (elapsed.toDouble() / animation.durationMs.toDouble()).coerceIn(0.0, 1.0)
+        val easedFraction = smoothStep(fraction)
+        return interpolateLocation(animation.from, animation.to, easedFraction).also {
+            currentDisplayLocation = it
+        }
+    }
+
+    private fun resolveBearing(location: Location): Float {
+        return if (location.hasBearing()) {
+            location.bearing
+        } else {
+            mapView.mapWindow.map.cameraPosition.azimuth
+        }
     }
 
     private fun routeRenderCacheKey(
-        renderedRouteToken: String,
+        routeToken: String?,
         jamsToken: String?,
         state: String?,
         pointCount: Int,
         displayLocation: Location?,
     ): String {
         return buildString {
-            append(renderedRouteToken)
+            append(routeToken.orEmpty())
             append('|')
             append(jamsToken.orEmpty())
             append('|')
@@ -387,215 +588,63 @@ class HudMapController(
             append('|')
             append(pointCount)
             append('|')
-            append(displayLocation.renderKey())
+            append(displayLocation.routeProgressRenderKey())
         }
-    }
-
-    private fun logRouteRender(pointCount: Int, visibleSegmentCount: Int) {
-        val debugKey = "${currentSnapshot.routeToken.orEmpty()}|${currentSnapshot.state}|$pointCount|$visibleSegmentCount"
-        if (debugKey == lastRouteRenderDebugKey) return
-        lastRouteRenderDebugKey = debugKey
-        Log.d(
-            HUD_MAP_TAG,
-            "route rendered: state=${currentSnapshot.state} points=$pointCount visibleSegments=$visibleSegmentCount " +
-                "hasLocation=${currentLocation != null} hasDisplayLocation=${currentDisplayLocation != null}"
-        )
-    }
-
-    private fun resolveRoutePointsForRender(
-        map: MapLibreMap,
-        points: List<LatLng>,
-        routeToken: String?,
-    ): RenderRoutePoints {
-        val geometryToken = routeSnapGeometryKey(points)
-        if (!currentSettings.snapRouteToRoadsEnabled || points.size < 2) {
-            return RenderRoutePoints(points, "raw:${routeToken ?: geometryToken}")
-        }
-        val cacheKey = buildRouteSnapCacheKey(map, geometryToken) ?: return RenderRoutePoints(points, "raw:$geometryToken")
-        routeSnapCache?.takeIf { it.key == cacheKey }?.let { return RenderRoutePoints(it.points, "snap:$cacheKey") }
-        val now = SystemClock.uptimeMillis()
-        routeSnapCache?.takeIf {
-            now - it.computedAtMs <= MAP_ROUTE_SNAP_REUSE_WINDOW_MS && it.points.size == points.size
-        }?.let {
-            return RenderRoutePoints(it.points, "snap:${it.key}")
-        }
-        val roadQueryStartNs = SystemClock.elapsedRealtimeNanos()
-        val roadSegments = queryRenderedRoadSegments(
-            map = map,
-            points = points,
-            viewportWidth = mapView.width,
-            viewportHeight = mapView.height,
-            maxDistanceMeters = currentSettings.routeSnapDistanceMeters.toDouble()
-        )
-        val roadQueryDurationMs = elapsedSinceMs(roadQueryStartNs)
-        if (roadSegments.isEmpty()) {
-            logRouteSnap(
-                pointCount = points.size,
-                roadSegmentCount = 0,
-                snappedCount = 0,
-                consideredPointCount = 0,
-                checkedSegmentCount = 0,
-                maxCandidateCount = 0,
-                roadQueryDurationMs = roadQueryDurationMs,
-                snapDurationMs = 0.0
-            )
-            return RenderRoutePoints(points, "raw:$geometryToken")
-        }
-        val snapStartNs = SystemClock.elapsedRealtimeNanos()
-        val snapResult = snapRoutePointsToRoads(
-            map = map,
-            points = points,
-            roadSegments = roadSegments,
-            maxDistanceMeters = currentSettings.routeSnapDistanceMeters.toDouble(),
-            viewportWidth = mapView.width,
-            viewportHeight = mapView.height
-        )
-        val snapDurationMs = elapsedSinceMs(snapStartNs)
-        routeSnapCache = RouteSnapCache(cacheKey, snapResult.points, now)
-        logRouteSnap(
-            pointCount = points.size,
-            roadSegmentCount = roadSegments.size,
-            snappedCount = snapResult.snappedCount,
-            consideredPointCount = snapResult.consideredPointCount,
-            checkedSegmentCount = snapResult.checkedSegmentCount,
-            maxCandidateCount = snapResult.maxCandidateCount,
-            roadQueryDurationMs = roadQueryDurationMs,
-            snapDurationMs = snapDurationMs
-        )
-        return RenderRoutePoints(snapResult.points, "snap:$cacheKey")
-    }
-
-    private fun buildRouteSnapCacheKey(map: MapLibreMap, routeToken: String): String? {
-        if (mapView.width <= 0 || mapView.height <= 0) return null
-        return buildString {
-            append(routeToken)
-            append('|')
-            append(currentSettings.routeSnapDistanceMeters)
-            append('|')
-            append(mapView.width)
-            append('x')
-            append(mapView.height)
-            append('|')
-            append((map.cameraPosition.zoom * 100.0).roundToInt())
-            append('|')
-            append((map.cameraPosition.bearing * 10.0).roundToInt())
-            append('|')
-            append((map.cameraPosition.tilt * 10.0).roundToInt())
-        }
-    }
-
-    private fun queryRenderedRoadSegments(
-        map: MapLibreMap,
-        points: List<LatLng>,
-        viewportWidth: Int,
-        viewportHeight: Int,
-        maxDistanceMeters: Double,
-    ): List<RoadLineSegment> {
-        if (viewportWidth <= 0 || viewportHeight <= 0) return emptyList()
-        val queryRect = buildRouteRoadQueryRect(
-            map = map,
-            points = points,
-            viewportWidth = viewportWidth,
-            viewportHeight = viewportHeight,
-            maxDistanceMeters = maxDistanceMeters
-        ) ?: return emptyList()
-        val cacheKey = buildRoadQueryCacheKey(
-            map = map,
-            queryRect = queryRect,
-            viewportWidth = viewportWidth,
-            viewportHeight = viewportHeight,
-            maxDistanceMeters = maxDistanceMeters
-        )
-        routeRoadQueryCache?.takeIf { it.key == cacheKey }?.let { return it.segments }
-        val features = runCatching {
-            map.queryRenderedFeatures(queryRect, *MAP_ROAD_LAYER_IDS)
-        }.onFailure {
-            Log.w(HUD_MAP_TAG, "route snap skipped: road query failed: ${it.message}")
-        }.getOrDefault(emptyList())
-        return deduplicateRoadSegments(features.flatMap(::roadSegmentsFromFeature)).also { segments ->
-            routeRoadQueryCache = RoadQueryCache(cacheKey, segments)
-        }
-    }
-
-    private fun logRouteSnap(
-        pointCount: Int,
-        roadSegmentCount: Int,
-        snappedCount: Int,
-        consideredPointCount: Int,
-        checkedSegmentCount: Int,
-        maxCandidateCount: Int,
-        roadQueryDurationMs: Double,
-        snapDurationMs: Double,
-    ) {
-        val debugKey = "${currentSnapshot.routeToken.orEmpty()}|${currentSettings.routeSnapDistanceMeters}|" +
-            "$pointCount|$roadSegmentCount|$snappedCount|$consideredPointCount|$checkedSegmentCount|$maxCandidateCount"
-        if (debugKey == lastRouteSnapDebugKey) return
-        lastRouteSnapDebugKey = debugKey
-        Log.d(
-            HUD_MAP_TAG,
-            "route snap: points=$pointCount roadSegments=$roadSegmentCount snapped=$snappedCount " +
-                "considered=$consideredPointCount checked=$checkedSegmentCount maxCandidates=$maxCandidateCount " +
-                "roadQueryMs=${"%.1f".format(roadQueryDurationMs)} snapMs=${"%.1f".format(snapDurationMs)} " +
-                "maxDistance=${currentSettings.routeSnapDistanceMeters}m"
-        )
-    }
-
-    private fun invalidateRouteSnapCache() {
-        routeSnapCache = null
-        routeRoadQueryCache = null
-        routeFeatureCache = null
-    }
-
-    private fun applyLocationStyle() {
-        val component = locationComponent ?: return
-        component.applyStyle(buildLocationOptions(context, currentSettings))
-    }
-
-    private fun applyTrackingConfig() {
-        val component = locationComponent ?: return
-        component.paddingWhileTracking(trackingPaddingValues())
-        component.zoomWhileTracking(resolveTargetZoom(currentSettings, currentSpeedBucketKmh))
-        component.tiltWhileTracking(currentSettings.tilt)
-        trackingPadding().also { padding ->
-            mapLibreMap?.setPadding(padding[0], padding[1], padding[2], padding[3])
-        }
-    }
-
-    private fun trackingPadding(): IntArray {
-        val side = dp(18)
-        val top = (mapView.height.coerceAtLeast(1) * MAP_TRACKING_TOP_PADDING_RATIO).roundToInt()
-        return intArrayOf(side, top, side, 0)
-    }
-
-    private fun trackingPaddingValues(): DoubleArray {
-        val padding = trackingPadding()
-        return doubleArrayOf(
-            padding[0].toDouble(),
-            padding[1].toDouble(),
-            padding[2].toDouble(),
-            padding[3].toDouble()
-        )
     }
 
     private fun startDeviceLocationTracking() {
         if (deviceLocationListener != null || !hasLocationPermission()) return
         val manager = context.getSystemService(LocationManager::class.java) ?: return
         val listener = LocationListener { location ->
-            currentLocation = location
+            updateLocationTarget(prepareDeviceLocation(location))
             requestTelemetryRender()
         }
         deviceLocationListener = listener
         preferredLocationProviders(manager).forEach { provider ->
             latestKnownLocation(manager, provider)?.let {
-                currentLocation = it
+                setLocationImmediately(prepareDeviceLocation(it))
             }
             runCatching {
-                manager.requestLocationUpdates(provider, 1000L, 3f, listener, android.os.Looper.getMainLooper())
+                manager.requestLocationUpdates(provider, 1000L, 3f, listener, Looper.getMainLooper())
             }.onFailure {
                 Log.w(HUD_MAP_TAG, "requestLocationUpdates failed for $provider: ${it.message}")
             }
         }
-        applyTelemetrySnapshot()
+        requestTelemetryRender()
+    }
+
+    private fun updateLocationTarget(location: Location) {
+        val now = SystemClock.uptimeMillis()
+        val previousDisplay = resolveAnimatedLocation(now)
+        val previousTarget = currentLocation
+        currentLocation = Location(location)
+        if (previousDisplay == null || previousTarget == null) {
+            setLocationImmediately(location)
+            return
+        }
+        val distanceMeters = previousDisplay.distanceTo(location)
+        val ageMs = if (previousTarget.time > 0L && location.time > previousTarget.time) {
+            location.time - previousTarget.time
+        } else {
+            MAP_LOCATION_ANIMATION_TARGET_MS
+        }
+        if (distanceMeters >= MAP_LOCATION_TELEPORT_DISTANCE_METERS || ageMs >= MAP_LOCATION_TELEPORT_AGE_MS) {
+            setLocationImmediately(location)
+            return
+        }
+        locationAnimation = LocationAnimation(
+            from = previousDisplay,
+            to = Location(location),
+            startedAtUptimeMs = now,
+            durationMs = ageMs.coerceIn(MAP_LOCATION_ANIMATION_MIN_MS, MAP_LOCATION_ANIMATION_MAX_MS)
+        )
+    }
+
+    private fun setLocationImmediately(location: Location) {
+        val copy = Location(location)
+        currentLocation = copy
+        currentDisplayLocation = copy
+        locationAnimation = null
     }
 
     private fun stopDeviceLocationTracking() {
@@ -603,6 +652,8 @@ class HudMapController(
         val manager = context.getSystemService(LocationManager::class.java) ?: return
         runCatching { manager.removeUpdates(listener) }
         deviceLocationListener = null
+        lastRawDeviceLocation = null
+        lastResolvedDeviceBearing = null
     }
 
     private fun hasLocationPermission(): Boolean {
@@ -615,127 +666,28 @@ class HudMapController(
         ) == PackageManager.PERMISSION_GRANTED
     }
 
+    private fun prepareDeviceLocation(location: Location): Location {
+        val rawLocation = Location(location)
+        val previousRawLocation = lastRawDeviceLocation
+        val derivedBearing = previousRawLocation?.let { previous ->
+            derivedBearingBetween(previous, rawLocation)
+        }
+        val resolvedBearing = resolveHeadingBearing(
+            previousResolvedBearing = lastResolvedDeviceBearing,
+            previousReportedBearing = previousRawLocation?.takeIf { it.hasBearing() }?.bearing,
+            reportedBearing = rawLocation.takeIf { it.hasBearing() }?.bearing,
+            derivedBearing = derivedBearing
+        )
+        if (resolvedBearing != null) {
+            rawLocation.bearing = resolvedBearing
+        }
+        lastRawDeviceLocation = Location(location)
+        lastResolvedDeviceBearing = resolvedBearing
+        return rawLocation
+    }
+
     private fun dp(value: Int): Int =
         (value * context.resources.displayMetrics.density).roundToInt()
-
-    private fun resolveDisplayLocation(): Location? {
-        return currentLocation ?: currentSnapshot.startLocation
-    }
-
-    private fun updateDisplayLocation() {
-        val rawLocation = resolveDisplayLocation() ?: return
-        val displayLocation = resolveLocationForRender(rawLocation)
-        currentDisplayLocation = displayLocation
-        locationComponent?.forceLocationUpdate(displayLocation)
-    }
-
-    private fun resolveLocationForRender(rawLocation: Location): Location {
-        if (!currentSettings.snapLocationToRoadsEnabled) {
-            lastLocationRoadSegment = null
-            locationSnapCache = null
-            return rawLocation
-        }
-        val map = mapLibreMap ?: return rawLocation
-        val cacheKey = buildLocationSnapCacheKey(map, rawLocation)
-        locationSnapCache?.takeIf { it.key == cacheKey }?.let { return Location(it.location) }
-        val point = LatLng(rawLocation.latitude, rawLocation.longitude)
-        val roadSegments = queryRenderedRoadSegmentsNearLocation(map, point)
-        if (roadSegments.isEmpty()) {
-            lastLocationRoadSegment = null
-            return rememberLocationSnap(cacheKey, rawLocation)
-        }
-        val snapped = findNearestRoadProjection(
-            point = point,
-            routeVector = locationDirectionMeters(rawLocation),
-            roadSegments = roadSegments,
-            maxDistanceMeters = currentSettings.routeSnapDistanceMeters.toDouble(),
-            preferredSegment = lastLocationRoadSegment,
-            preferredToleranceMeters = MAP_LOCATION_SNAP_HYSTERESIS_METERS
-        ) ?: run {
-            lastLocationRoadSegment = null
-            return rememberLocationSnap(cacheKey, rawLocation)
-        }
-        lastLocationRoadSegment = snapped.roadSegment
-        val displayLocation = Location(rawLocation).apply {
-            latitude = snapped.projectedPoint.latitude
-            longitude = snapped.projectedPoint.longitude
-        }
-        return rememberLocationSnap(cacheKey, displayLocation)
-    }
-
-    private fun rememberLocationSnap(key: String, location: Location): Location {
-        val cached = Location(location)
-        locationSnapCache = LocationSnapCache(key, cached)
-        return Location(cached)
-    }
-
-    private fun buildLocationSnapCacheKey(map: MapLibreMap, location: Location): String {
-        return buildString {
-            append((location.latitude * 1_000_000.0).roundToInt())
-            append('|')
-            append((location.longitude * 1_000_000.0).roundToInt())
-            append('|')
-            append(if (location.hasBearing()) location.bearing.roundToInt() else -1)
-            append('|')
-            append(if (location.hasSpeed()) (location.speed * 10f).roundToInt() else -1)
-            append('|')
-            append(currentSettings.routeSnapDistanceMeters)
-            append('|')
-            append(mapView.width)
-            append('x')
-            append(mapView.height)
-            append('|')
-            append((map.cameraPosition.zoom * 100.0).roundToInt())
-            append('|')
-            append((map.cameraPosition.bearing * 10.0).roundToInt())
-            append('|')
-            append((map.cameraPosition.tilt * 10.0).roundToInt())
-        }
-    }
-
-    private fun queryRenderedRoadSegmentsNearLocation(map: MapLibreMap, point: LatLng): List<RoadLineSegment> {
-        if (mapView.width <= 0 || mapView.height <= 0) return emptyList()
-        val screenPoint = runCatching { map.projection.toScreenLocation(point) }.getOrNull() ?: return emptyList()
-        if (screenPoint.x.isNaN() || screenPoint.y.isNaN()) return emptyList()
-        val metersPerPixel = runCatching {
-            map.projection.getMetersPerPixelAtLatitude(point.latitude)
-        }.getOrDefault(1.0).coerceAtLeast(0.05)
-        val queryRadiusPx = ((currentSettings.routeSnapDistanceMeters / metersPerPixel).toFloat() + 16f)
-            .coerceIn(MAP_LOCATION_SNAP_MIN_QUERY_RADIUS_PX, MAP_LOCATION_SNAP_MAX_QUERY_RADIUS_PX)
-        val queryRect = RectF(
-            screenPoint.x - queryRadiusPx,
-            screenPoint.y - queryRadiusPx,
-            screenPoint.x + queryRadiusPx,
-            screenPoint.y + queryRadiusPx
-        )
-        val features = runCatching {
-            map.queryRenderedFeatures(queryRect, *MAP_ROAD_LAYER_IDS)
-        }.onFailure {
-            Log.w(HUD_MAP_TAG, "location snap skipped: road query failed: ${it.message}")
-        }.getOrDefault(emptyList())
-        return deduplicateRoadSegments(features.flatMap(::roadSegmentsFromFeature))
-    }
-}
-
-private fun buildLocationOptions(
-    context: Context,
-    settings: MapRenderSettings,
-): LocationComponentOptions {
-    val arrowScale = (settings.arrowScalePercent / 100f)
-        .coerceIn(
-            MAP_ARROW_SCALE_MIN_PERCENT / 100f,
-            MAP_ARROW_SCALE_MAX_PERCENT / 100f
-        )
-    return LocationComponentOptions.builder(context)
-        .gpsDrawable(R.drawable.ic_nav_arrow)
-        .foregroundDrawable(R.drawable.ic_nav_arrow)
-        .foregroundDrawableStale(R.drawable.ic_nav_arrow)
-        .backgroundDrawable(R.drawable.ic_transparent_puck)
-        .backgroundDrawableStale(R.drawable.ic_transparent_puck)
-        .bearingDrawable(R.drawable.ic_transparent_puck)
-        .maxZoomIconScale(arrowScale)
-        .minZoomIconScale(arrowScale)
-        .build()
 }
 
 private fun resolveTargetZoom(settings: MapRenderSettings, speedBucketKmh: Int): Double {
@@ -769,7 +721,7 @@ private fun interpolateLinear(
     y1: Double,
     x: Double,
 ): Double {
-    if (kotlin.math.abs(x1 - x0) < 0.0001) return y0
+    if (abs(x1 - x0) < 0.0001) return y0
     val t = (x - x0) / (x1 - x0)
     return y0 + ((y1 - y0) * t)
 }
@@ -791,19 +743,75 @@ private fun applySpeedBucketHysteresis(currentBucketKmh: Int, speedKmh: Int?): I
     return bucket
 }
 
-private fun routeJamColor(jam: String?): String {
+private fun routeJamColor(jam: String?): Int {
     return when (jam?.lowercase()) {
-        "low" -> "#2BC96F"
-        "moderate" -> "#FFC845"
-        "heavy" -> "#FF5B4D"
-        "severe" -> "#FF5B4D"
-        else -> "#2BC96F"
+        "low" -> Color.argb(235, 118, 189, 51)
+        "moderate" -> Color.argb(235, 145, 210, 85)
+        "heavy" -> Color.argb(235, 234, 117, 0)
+        "severe" -> Color.argb(255, 159, 0, 0)
+        "blocked" -> Color.argb(235, 193, 0, 32)
+        else -> Color.argb(230, 120, 200, 255)
     }
+}
+
+private fun createLocationArrowBitmap(): Bitmap {
+    val size = 180
+    val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+    val canvas = Canvas(bitmap)
+    val shadowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.argb(230, 0, 0, 0)
+        style = Paint.Style.FILL
+    }
+    val arrowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.parseColor("#FFC845")
+        style = Paint.Style.FILL
+    }
+    val highlightPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.argb(180, 255, 255, 255)
+        style = Paint.Style.FILL
+    }
+    val shadow = Path().apply {
+        moveTo(90f, 12f)
+        lineTo(155f, 150f)
+        lineTo(90f, 121f)
+        lineTo(25f, 150f)
+        close()
+    }
+    val arrow = Path().apply {
+        moveTo(90f, 30f)
+        lineTo(136f, 126f)
+        lineTo(90f, 104f)
+        lineTo(44f, 126f)
+        close()
+    }
+    val highlight = Path().apply {
+        moveTo(90f, 42f)
+        lineTo(104f, 92f)
+        lineTo(90f, 86f)
+        lineTo(76f, 92f)
+        close()
+    }
+    canvas.drawPath(shadow, shadowPaint)
+    canvas.drawPath(arrow, arrowPaint)
+    canvas.drawPath(highlight, highlightPaint)
+    return bitmap
 }
 
 private fun Location?.renderKey(): String {
     if (this == null) return "no-location"
     return "${(latitude * 100_000.0).roundToInt()}|${(longitude * 100_000.0).roundToInt()}"
+}
+
+private fun Location?.routeProgressRenderKey(): String {
+    if (this == null) return "no-location"
+    val latBucket = (latitude * 111_320.0 / MAP_ROUTE_PROGRESS_RENDER_GRANULARITY_METERS).roundToInt()
+    val lonScale = 111_320.0 * kotlin.math.cos(Math.toRadians(latitude))
+    val lonBucket = if (abs(lonScale) <= 0.0001) {
+        0
+    } else {
+        (longitude * lonScale / MAP_ROUTE_PROGRESS_RENDER_GRANULARITY_METERS).roundToInt()
+    }
+    return "$latBucket|$lonBucket"
 }
 
 private data class VisibleRouteSegment(
@@ -812,427 +820,151 @@ private data class VisibleRouteSegment(
     val jam: String?,
 )
 
-private data class RouteSnapCache(
-    val key: String,
+private data class TrimmedRouteSegmentsResult(
+    val segments: List<VisibleRouteSegment>,
+    val distanceToRouteMeters: Double? = null,
+    val shouldHideRoute: Boolean = false,
+)
+
+private data class RouteRun(
+    val jam: String?,
     val points: List<LatLng>,
-    val computedAtMs: Long,
 )
 
-private data class RoadQueryCache(
-    val key: String,
-    val segments: List<RoadLineSegment>,
+private data class LocationAnimation(
+    val from: Location,
+    val to: Location,
+    val startedAtUptimeMs: Long,
+    val durationMs: Long,
 )
 
-private data class RouteFeatureCache(
-    val key: String,
-    val featureCollection: FeatureCollection,
-    val visibleSegmentCount: Int,
-)
-
-private data class RouteFeatureCollection(
-    val collection: FeatureCollection,
-    val visibleSegmentCount: Int,
-)
-
-private data class RenderRoutePoints(
-    val points: List<LatLng>,
-    val token: String,
-)
-
-private data class LocationSnapCache(
-    val key: String,
-    val location: Location,
-)
-
-private data class RouteSnapResult(
-    val points: List<LatLng>,
-    val snappedCount: Int,
-    val consideredPointCount: Int,
-    val checkedSegmentCount: Int,
-    val maxCandidateCount: Int,
-)
-
-private data class RoadLineSegment(
-    val start: LatLng,
-    val end: LatLng,
-)
-
-private data class RoadSegmentSpatialIndex(
-    val segments: List<RoadLineSegment>,
-    val cellLatSize: Double,
-    val cellLonSize: Double,
-    val cells: Map<Long, IntArray>,
-)
-
-private data class RoadSnapProjection(
-    val projectedPoint: LatLng,
-    val distanceMeters: Double,
-    val roadSegment: RoadLineSegment,
-)
-
-private data class MeterVector(
-    val x: Double,
-    val y: Double,
-    val length: Double,
-)
-
-private fun roadSegmentsFromFeature(feature: Feature): List<RoadLineSegment> {
-    val geometry = feature.geometry() ?: return emptyList()
-    return when (geometry) {
-        is LineString -> roadSegmentsFromPoints(geometry.coordinates())
-        is MultiLineString -> geometry.coordinates().flatMap(::roadSegmentsFromPoints)
-        else -> emptyList()
+private fun interpolateLocation(from: Location, to: Location, fraction: Double): Location {
+    val result = Location(to)
+    result.latitude = from.latitude + ((to.latitude - from.latitude) * fraction)
+    result.longitude = from.longitude + ((to.longitude - from.longitude) * fraction)
+    if (from.hasAltitude() && to.hasAltitude()) {
+        result.altitude = from.altitude + ((to.altitude - from.altitude) * fraction)
     }
-}
-
-private fun roadSegmentsFromPoints(points: List<Point>): List<RoadLineSegment> {
-    if (points.size < 2) return emptyList()
-    return points.zipWithNext().mapNotNull { (start, end) ->
-        val segment = RoadLineSegment(
-            start = LatLng(start.latitude(), start.longitude()),
-            end = LatLng(end.latitude(), end.longitude())
-        )
-        segment.takeIf { distanceMeters(it.start, it.end) >= 0.5 }
+    if (from.hasBearing() && to.hasBearing()) {
+        result.bearing = interpolateBearing(from.bearing, to.bearing, fraction)
     }
-}
-
-private fun deduplicateRoadSegments(segments: List<RoadLineSegment>): List<RoadLineSegment> {
-    if (segments.size < 2) return segments
-    val result = ArrayList<RoadLineSegment>(segments.size)
-    val seen = HashSet<String>(segments.size * 2)
-    segments.forEach { segment ->
-        if (seen.add(segment.dedupKey())) {
-            result += segment
-        }
+    if (from.hasSpeed() && to.hasSpeed()) {
+        result.speed = (from.speed + ((to.speed - from.speed) * fraction)).toFloat()
+    }
+    if (from.hasAccuracy() && to.hasAccuracy()) {
+        result.accuracy = (from.accuracy + ((to.accuracy - from.accuracy) * fraction)).toFloat()
     }
     return result
 }
 
-private fun buildRouteRoadQueryRect(
-    map: MapLibreMap,
-    points: List<LatLng>,
-    viewportWidth: Int,
-    viewportHeight: Int,
-    maxDistanceMeters: Double,
-): RectF? {
-    if (points.size < 2) return null
-    var minX = Float.POSITIVE_INFINITY
-    var minY = Float.POSITIVE_INFINITY
-    var maxX = Float.NEGATIVE_INFINITY
-    var maxY = Float.NEGATIVE_INFINITY
-    var visibleCount = 0
-    var visibleLatSum = 0.0
-    points.forEach { point ->
-        if (!isPointInsideSnapViewport(map, point, viewportWidth = viewportWidth, viewportHeight = viewportHeight)) return@forEach
-        val screenPoint = runCatching { map.projection.toScreenLocation(point) }.getOrNull() ?: return@forEach
-        if (screenPoint.x.isNaN() || screenPoint.y.isNaN()) return@forEach
-        minX = minOf(minX, screenPoint.x)
-        minY = minOf(minY, screenPoint.y)
-        maxX = maxOf(maxX, screenPoint.x)
-        maxY = maxOf(maxY, screenPoint.y)
-        visibleCount += 1
-        visibleLatSum += point.latitude
-    }
-    if (visibleCount == 0) return null
-    val averageLat = visibleLatSum / visibleCount.toDouble()
-    val metersPerPixel = runCatching {
-        map.projection.getMetersPerPixelAtLatitude(averageLat)
-    }.getOrDefault(1.0).coerceAtLeast(0.05)
-    val paddingPx = ((maxDistanceMeters / metersPerPixel).toFloat() + 24f).coerceIn(24f, 160f)
-    return RectF(
-        (minX - paddingPx).coerceAtLeast(0f),
-        (minY - paddingPx).coerceAtLeast(0f),
-        (maxX + paddingPx).coerceAtMost(viewportWidth.toFloat()),
-        (maxY + paddingPx).coerceAtMost(viewportHeight.toFloat())
-    )
+private fun interpolateBearing(from: Float, to: Float, fraction: Double): Float {
+    val delta = ((((to - from + 540f) % 360f) - 180f) * fraction).toFloat()
+    return (from + delta + 360f) % 360f
 }
 
-private fun snapRoutePointsToRoads(
-    map: MapLibreMap,
-    points: List<LatLng>,
-    roadSegments: List<RoadLineSegment>,
-    maxDistanceMeters: Double,
-    viewportWidth: Int,
-    viewportHeight: Int,
-): RouteSnapResult {
-    if (points.size < 2 || roadSegments.isEmpty() || viewportWidth <= 0 || viewportHeight <= 0) {
-        return RouteSnapResult(points, 0, 0, 0, 0)
-    }
-    val roadIndex = buildRoadSegmentSpatialIndex(roadSegments, maxDistanceMeters)
-    var snappedCount = 0
-    var consideredPointCount = 0
-    var checkedSegmentCount = 0
-    var maxCandidateCount = 0
-    val snappedPoints = points.mapIndexed { index, point ->
-        if (!isPointInsideSnapViewport(map, point, viewportWidth, viewportHeight)) {
-            point
-        } else {
-            consideredPointCount += 1
-            val routeVector = routeDirectionMeters(points, index)
-            val candidateSegments = roadIndex.candidatesNear(point, maxDistanceMeters)
-            checkedSegmentCount += candidateSegments.size
-            if (candidateSegments.size > maxCandidateCount) {
-                maxCandidateCount = candidateSegments.size
-            }
-            val snapped = findNearestRoadProjection(point, routeVector, candidateSegments, maxDistanceMeters)
-            if (snapped != null) {
-                if (snapped.distanceMeters > 0.05) snappedCount += 1
-                snapped.projectedPoint
-            } else {
-                point
-            }
-        }
-    }
-    return RouteSnapResult(
-        points = snappedPoints,
-        snappedCount = snappedCount,
-        consideredPointCount = consideredPointCount,
-        checkedSegmentCount = checkedSegmentCount,
-        maxCandidateCount = maxCandidateCount
-    )
-}
-
-private fun isPointInsideSnapViewport(
-    map: MapLibreMap,
-    point: LatLng,
-    viewportWidth: Int,
-    viewportHeight: Int,
-): Boolean {
-    val screenPoint = runCatching { map.projection.toScreenLocation(point) }.getOrNull() ?: return false
-    if (screenPoint.x.isNaN() || screenPoint.y.isNaN()) return false
-    return screenPoint.x >= -MAP_ROUTE_SNAP_VIEWPORT_MARGIN_PX &&
-        screenPoint.y >= -MAP_ROUTE_SNAP_VIEWPORT_MARGIN_PX &&
-        screenPoint.x <= viewportWidth.toFloat() + MAP_ROUTE_SNAP_VIEWPORT_MARGIN_PX &&
-        screenPoint.y <= viewportHeight.toFloat() + MAP_ROUTE_SNAP_VIEWPORT_MARGIN_PX
-}
-
-private fun findNearestRoadProjection(
-    point: LatLng,
-    routeVector: MeterVector?,
-    roadSegments: List<RoadLineSegment>,
-    maxDistanceMeters: Double,
-    preferredSegment: RoadLineSegment? = null,
-    preferredToleranceMeters: Double = 0.0,
-): RoadSnapProjection? {
-    var bestDirectional: RoadSnapProjection? = null
-    var bestAny: RoadSnapProjection? = null
-    val preferredProjection = preferredSegment
-        ?.takeIf { isDirectionCompatible(routeVector, vectorMeters(it.start, it.end)) }
-        ?.let { segment ->
-            val projection = projectPointOntoSegment(point.latitude, point.longitude, segment.start, segment.end)
-            if (projection.distanceMeters <= maxDistanceMeters) {
-                RoadSnapProjection(projection.projectedPoint, projection.distanceMeters, segment)
-            } else {
-                null
-            }
-        }
-    roadSegments.forEach { segment ->
-        if (!isRoadSegmentNearPoint(segment, point, maxDistanceMeters)) return@forEach
-        val projection = projectPointOntoSegment(point.latitude, point.longitude, segment.start, segment.end)
-        if (projection.distanceMeters > maxDistanceMeters) return@forEach
-        val candidate = RoadSnapProjection(projection.projectedPoint, projection.distanceMeters, segment)
-        val currentBestAny = bestAny
-        if (currentBestAny == null || candidate.distanceMeters < currentBestAny.distanceMeters) {
-            bestAny = candidate
-        }
-        val roadVector = vectorMeters(segment.start, segment.end)
-        val currentBestDirectional = bestDirectional
-        if (isDirectionCompatible(routeVector, roadVector) &&
-            (currentBestDirectional == null || candidate.distanceMeters < currentBestDirectional.distanceMeters)
-        ) {
-            bestDirectional = candidate
-        }
-    }
-    val best = bestDirectional ?: bestAny
-    if (preferredProjection != null && best != null) {
-        if (best.distanceMeters >= preferredProjection.distanceMeters - preferredToleranceMeters) {
-            return preferredProjection
-        }
-    }
-    return preferredProjection ?: best
-}
-
-private fun buildRoadSegmentSpatialIndex(
-    segments: List<RoadLineSegment>,
-    maxDistanceMeters: Double,
-): RoadSegmentSpatialIndex {
-    if (segments.isEmpty()) {
-        return RoadSegmentSpatialIndex(emptyList(), 1.0, 1.0, emptyMap())
-    }
-    val averageLatitude = segments.asSequence()
-        .map { (it.start.latitude + it.end.latitude) / 2.0 }
-        .average()
-        .takeUnless { it.isNaN() }
-        ?: 0.0
-    val cellSizeMeters = (maxDistanceMeters.coerceAtLeast(6.0) * 2.0).coerceAtLeast(12.0)
-    val cellLatSize = (cellSizeMeters / 111_320.0).coerceAtLeast(0.00001)
-    val longitudeMetersScale = (111_320.0 * kotlin.math.cos(Math.toRadians(averageLatitude))).let(::abs).coerceAtLeast(1.0)
-    val cellLonSize = (cellSizeMeters / longitudeMetersScale).coerceAtLeast(0.00001)
-    val expandedLat = ((maxDistanceMeters + 1.0) / 111_320.0).coerceAtLeast(cellLatSize * 0.5)
-    val expandedLon = (((maxDistanceMeters + 1.0) / longitudeMetersScale)).coerceAtLeast(cellLonSize * 0.5)
-    val cells = HashMap<Long, MutableList<Int>>(segments.size * 2)
-    segments.forEachIndexed { index, segment ->
-        val minLat = minOf(segment.start.latitude, segment.end.latitude) - expandedLat
-        val maxLat = maxOf(segment.start.latitude, segment.end.latitude) + expandedLat
-        val minLon = minOf(segment.start.longitude, segment.end.longitude) - expandedLon
-        val maxLon = maxOf(segment.start.longitude, segment.end.longitude) + expandedLon
-        val rowStart = kotlin.math.floor(minLat / cellLatSize).toInt()
-        val rowEnd = kotlin.math.floor(maxLat / cellLatSize).toInt()
-        val colStart = kotlin.math.floor(minLon / cellLonSize).toInt()
-        val colEnd = kotlin.math.floor(maxLon / cellLonSize).toInt()
-        for (row in rowStart..rowEnd) {
-            for (col in colStart..colEnd) {
-                cells.getOrPut(cellKey(row, col)) { mutableListOf() }.add(index)
-            }
-        }
-    }
-    return RoadSegmentSpatialIndex(
-        segments = segments,
-        cellLatSize = cellLatSize,
-        cellLonSize = cellLonSize,
-        cells = cells.mapValues { (_, value) -> value.toIntArray() }
-    )
-}
-
-private fun RoadSegmentSpatialIndex.candidatesNear(point: LatLng, maxDistanceMeters: Double): List<RoadLineSegment> {
-    if (segments.isEmpty()) return emptyList()
-    val queryLatRadius = ((maxDistanceMeters + 1.0) / 111_320.0).coerceAtLeast(cellLatSize)
-    val longitudeMetersScale = (111_320.0 * kotlin.math.cos(Math.toRadians(point.latitude))).let(::abs).coerceAtLeast(1.0)
-    val queryLonRadius = (((maxDistanceMeters + 1.0) / longitudeMetersScale)).coerceAtLeast(cellLonSize)
-    val rowStart = kotlin.math.floor((point.latitude - queryLatRadius) / cellLatSize).toInt()
-    val rowEnd = kotlin.math.floor((point.latitude + queryLatRadius) / cellLatSize).toInt()
-    val colStart = kotlin.math.floor((point.longitude - queryLonRadius) / cellLonSize).toInt()
-    val colEnd = kotlin.math.floor((point.longitude + queryLonRadius) / cellLonSize).toInt()
-    val seen = HashSet<Int>()
-    val result = ArrayList<RoadLineSegment>()
-    for (row in rowStart..rowEnd) {
-        for (col in colStart..colEnd) {
-            cells[cellKey(row, col)]?.forEach { segmentIndex ->
-                if (seen.add(segmentIndex)) {
-                    result += segments[segmentIndex]
-                }
-            }
-        }
-    }
-    return result
-}
-
-private fun cellKey(row: Int, col: Int): Long {
-    return (row.toLong() shl 32) xor (col.toLong() and 0xffffffffL)
-}
-
-private fun isRoadSegmentNearPoint(
-    segment: RoadLineSegment,
-    point: LatLng,
-    maxDistanceMeters: Double,
-): Boolean {
-    val expandedMeters = maxDistanceMeters + 1.0
-    val latDelta = expandedMeters / 111_320.0
-    val lonScale = 111_320.0 * kotlin.math.cos(Math.toRadians(point.latitude))
-    val lonDelta = if (abs(lonScale) <= 0.0001) 180.0 else expandedMeters / abs(lonScale)
-    val minLat = minOf(segment.start.latitude, segment.end.latitude) - latDelta
-    val maxLat = maxOf(segment.start.latitude, segment.end.latitude) + latDelta
-    val minLon = minOf(segment.start.longitude, segment.end.longitude) - lonDelta
-    val maxLon = maxOf(segment.start.longitude, segment.end.longitude) + lonDelta
-    return point.latitude in minLat..maxLat && point.longitude in minLon..maxLon
-}
-
-private fun RoadLineSegment.dedupKey(): String {
-    val startLat = (start.latitude * 1_000_000.0).roundToInt()
-    val startLon = (start.longitude * 1_000_000.0).roundToInt()
-    val endLat = (end.latitude * 1_000_000.0).roundToInt()
-    val endLon = (end.longitude * 1_000_000.0).roundToInt()
-    val forward = "$startLat,$startLon:$endLat,$endLon"
-    val reverse = "$endLat,$endLon:$startLat,$startLon"
-    return if (forward <= reverse) forward else reverse
-}
-
-private fun routeDirectionMeters(points: List<LatLng>, index: Int): MeterVector? {
-    val current = points.getOrNull(index) ?: return null
-    val start = points.getOrNull(index - 1) ?: current
-    val end = points.getOrNull(index + 1) ?: current
-    return vectorMeters(start, end).takeIf { it.length >= 1.0 }
-}
-
-private fun locationDirectionMeters(location: Location): MeterVector? {
-    if (!location.hasBearing()) return null
-    if (location.hasSpeed() && location.speed < MAP_LOCATION_SNAP_MIN_BEARING_SPEED_MPS) return null
-    val bearingRadians = Math.toRadians(location.bearing.toDouble())
-    val x = kotlin.math.sin(bearingRadians)
-    val y = kotlin.math.cos(bearingRadians)
-    return MeterVector(x, y, 1.0)
-}
-
-private fun vectorMeters(start: LatLng, end: LatLng): MeterVector {
-    val latitudeScale = 111_320.0
-    val longitudeScale = 111_320.0 * kotlin.math.cos(Math.toRadians((start.latitude + end.latitude) / 2.0))
-    val x = (end.longitude - start.longitude) * longitudeScale
-    val y = (end.latitude - start.latitude) * latitudeScale
-    val length = kotlin.math.hypot(x, y)
-    return MeterVector(x, y, length)
-}
-
-private fun isDirectionCompatible(routeVector: MeterVector?, roadVector: MeterVector): Boolean {
-    if (routeVector == null || roadVector.length < 1.0) return true
-    val dot = ((routeVector.x * roadVector.x) + (routeVector.y * roadVector.y)) /
-        (routeVector.length * roadVector.length)
-    return abs(dot) >= MAP_ROUTE_SNAP_MIN_DIRECTION_COS
-}
-
-private fun routePointsKey(points: List<LatLng>): String {
-    var hash = 1125899906842597L
-    points.forEach { point ->
-        hash = (hash * 31L) + (point.latitude * 1_000_000.0).roundToInt()
-        hash = (hash * 31L) + (point.longitude * 1_000_000.0).roundToInt()
-    }
-    return "${points.size}|$hash"
-}
-
-private fun routeSnapGeometryKey(points: List<LatLng>): String {
-    if (points.isEmpty()) return "0|0"
-    var hash = 1125899906842597L
-    val skipHeadPoints = (points.size / 10).coerceAtLeast(8).coerceAtMost((points.lastIndex).coerceAtLeast(0))
-    val stableRange = if (skipHeadPoints < points.lastIndex) {
-        points.subList(skipHeadPoints, points.size)
+internal fun resolveHeadingBearing(
+    previousResolvedBearing: Float?,
+    previousReportedBearing: Float?,
+    reportedBearing: Float?,
+    derivedBearing: Float?,
+): Float? {
+    val targetBearing = when {
+        derivedBearing == null -> reportedBearing ?: previousResolvedBearing
+        reportedBearing == null -> derivedBearing
+        shouldPreferDerivedBearing(previousReportedBearing, reportedBearing, derivedBearing) -> derivedBearing
+        else -> reportedBearing
+    } ?: return null
+    return if (previousResolvedBearing == null) {
+        normalizeBearing(targetBearing)
     } else {
-        points
+        interpolateBearing(previousResolvedBearing, targetBearing, MAP_HEADING_FALLBACK_SMOOTHING)
     }
-    val sampleStep = (stableRange.size / 12).coerceAtLeast(1)
-    stableRange.forEachIndexed { index, point ->
-        if (index != 0 && index != stableRange.lastIndex && index % sampleStep != 0) return@forEachIndexed
-        hash = (hash * 31L) + (point.latitude * 10_000.0).roundToInt()
-        hash = (hash * 31L) + (point.longitude * 10_000.0).roundToInt()
-    }
-    return "${points.size}|$skipHeadPoints|$hash"
 }
 
-private fun buildRoadQueryCacheKey(
-    map: MapLibreMap,
-    queryRect: RectF,
-    viewportWidth: Int,
-    viewportHeight: Int,
-    maxDistanceMeters: Double,
-): String {
-    return buildString {
-        append(viewportWidth)
-        append('x')
-        append(viewportHeight)
-        append('|')
-        append(queryRect.left.roundToInt())
-        append(',')
-        append(queryRect.top.roundToInt())
-        append(',')
-        append(queryRect.right.roundToInt())
-        append(',')
-        append(queryRect.bottom.roundToInt())
-        append('|')
-        append((maxDistanceMeters * 10.0).roundToInt())
-        append('|')
-        append((map.cameraPosition.zoom * 20.0).roundToInt())
-        append('|')
-        append((map.cameraPosition.bearing * 5.0).roundToInt())
-        append('|')
-        append((map.cameraPosition.tilt * 5.0).roundToInt())
+internal fun shouldPreferDerivedBearing(
+    previousReportedBearing: Float?,
+    reportedBearing: Float,
+    derivedBearing: Float,
+): Boolean {
+    if (previousReportedBearing == null) return false
+    if (angularDistanceDegrees(previousReportedBearing, reportedBearing) > MAP_HEADING_STUCK_EPSILON_DEGREES) {
+        return false
+    }
+    return angularDistanceDegrees(reportedBearing, derivedBearing) >= MAP_HEADING_FALLBACK_DIVERGENCE_DEGREES
+}
+
+private fun derivedBearingBetween(from: Location, to: Location): Float? {
+    if (from.time > 0L && to.time > from.time && (to.time - from.time) >= MAP_LOCATION_TELEPORT_AGE_MS) {
+        return null
+    }
+    val start = LatLng(from.latitude, from.longitude)
+    val end = LatLng(to.latitude, to.longitude)
+    val distance = distanceMeters(start, end)
+    if (distance < MAP_HEADING_FALLBACK_MIN_DISTANCE_METERS ||
+        distance >= MAP_LOCATION_TELEPORT_DISTANCE_METERS.toDouble()
+    ) {
+        return null
+    }
+    return bearingBetweenPoints(start, end)
+}
+
+internal fun bearingBetweenPoints(start: LatLng, end: LatLng): Float {
+    val startLat = Math.toRadians(start.latitude)
+    val endLat = Math.toRadians(end.latitude)
+    val deltaLon = Math.toRadians(end.longitude - start.longitude)
+    val y = kotlin.math.sin(deltaLon) * kotlin.math.cos(endLat)
+    val x = kotlin.math.cos(startLat) * kotlin.math.sin(endLat) -
+        kotlin.math.sin(startLat) * kotlin.math.cos(endLat) * kotlin.math.cos(deltaLon)
+    return normalizeBearing(Math.toDegrees(kotlin.math.atan2(y, x)).toFloat())
+}
+
+internal fun angularDistanceDegrees(from: Float, to: Float): Float {
+    return kotlin.math.abs((((to - from + 540f) % 360f) - 180f))
+}
+
+private fun normalizeBearing(value: Float): Float = ((value % 360f) + 360f) % 360f
+
+private fun smoothStep(fraction: Double): Double {
+    val t = fraction.coerceIn(0.0, 1.0)
+    return t * t * (3.0 - (2.0 * t))
+}
+
+private fun buildRouteRuns(segments: List<VisibleRouteSegment>): List<RouteRun> {
+    if (segments.isEmpty()) return emptyList()
+    val runs = mutableListOf<RouteRun>()
+    var currentJam = segments.first().jam
+    val currentPoints = mutableListOf(segments.first().start, segments.first().end)
+    segments.drop(1).forEach { segment ->
+        if (segment.jam == currentJam) {
+            currentPoints += segment.end
+        } else {
+            runs += RouteRun(currentJam, currentPoints.toList())
+            currentJam = segment.jam
+            currentPoints.clear()
+            currentPoints += segment.start
+            currentPoints += segment.end
+        }
+    }
+    runs += RouteRun(currentJam, currentPoints.toList())
+    return runs
+}
+
+private fun filterUpcomingRouteAlerts(
+    alerts: List<MapRouteAlert>,
+    routePoints: List<LatLng>,
+    location: Location?,
+): List<MapRouteAlert> {
+    if (alerts.isEmpty() || routePoints.size < 2 || location == null) return alerts
+    val currentProjection = findClosestRouteProjection(routePoints, location) ?: return alerts
+    val currentProgressMeters = routeProgressMeters(routePoints, currentProjection)
+    return alerts.filter { alert ->
+        val alertProjection = findClosestRouteProjection(
+            points = routePoints,
+            targetLat = alert.point.latitude,
+            targetLon = alert.point.longitude
+        ) ?: return@filter true
+        val alertProgressMeters = routeProgressMeters(routePoints, alertProjection)
+        alertProgressMeters + MAP_ROUTE_ALERT_PASSED_TOLERANCE_METERS >= currentProgressMeters
     }
 }
 
@@ -1240,15 +972,26 @@ private fun trimRouteSegments(
     points: List<LatLng>,
     jams: List<String>,
     location: Location?,
-): List<VisibleRouteSegment> {
-    if (points.size < 2) return emptyList()
+): TrimmedRouteSegmentsResult {
+    if (points.size < 2) return TrimmedRouteSegmentsResult(emptyList())
     if (location == null) {
-        return points.zipWithNext().mapIndexed { index, (start, end) ->
+        return TrimmedRouteSegmentsResult(
+            segments = points.zipWithNext().mapIndexed { index, (start, end) ->
+                VisibleRouteSegment(start, end, jams.getOrNull(index))
+            }
+        )
+    }
+    val closest = findClosestRouteProjection(points, location) ?: return TrimmedRouteSegmentsResult(
+        segments = points.zipWithNext().mapIndexed { index, (start, end) ->
             VisibleRouteSegment(start, end, jams.getOrNull(index))
         }
-    }
-    val closest = findClosestRouteProjection(points, location) ?: return points.zipWithNext().mapIndexed { index, (start, end) ->
-        VisibleRouteSegment(start, end, jams.getOrNull(index))
+    )
+    if (closest.distanceMeters > MAP_ROUTE_OFF_ROUTE_CLEAR_METERS) {
+        return TrimmedRouteSegmentsResult(
+            segments = emptyList(),
+            distanceToRouteMeters = closest.distanceMeters,
+            shouldHideRoute = true,
+        )
     }
     val trimStart = backtrackRouteProjection(points, closest, MAP_ROUTE_TRIM_BACKTRACK_METERS)
     val result = mutableListOf<VisibleRouteSegment>()
@@ -1260,7 +1003,10 @@ private fun trimRouteSegments(
     for (index in (trimStart.segmentIndex + 1) until points.lastIndex) {
         result += VisibleRouteSegment(points[index], points[index + 1], jams.getOrNull(index))
     }
-    return result
+    return TrimmedRouteSegmentsResult(
+        segments = result,
+        distanceToRouteMeters = closest.distanceMeters,
+    )
 }
 
 private data class RouteProjection(
@@ -1270,10 +1016,16 @@ private data class RouteProjection(
 )
 
 private fun findClosestRouteProjection(points: List<LatLng>, location: Location): RouteProjection? {
+    return findClosestRouteProjection(points, location.latitude, location.longitude)
+}
+
+private fun findClosestRouteProjection(
+    points: List<LatLng>,
+    targetLat: Double,
+    targetLon: Double,
+): RouteProjection? {
     if (points.size < 2) return null
     var best: RouteProjection? = null
-    val targetLat = location.latitude
-    val targetLon = location.longitude
     for (index in 0 until points.lastIndex) {
         val projection = projectPointOntoSegment(targetLat, targetLon, points[index], points[index + 1])
         if (best == null || projection.distanceMeters < best.distanceMeters) {
@@ -1281,6 +1033,17 @@ private fun findClosestRouteProjection(points: List<LatLng>, location: Location)
         }
     }
     return best
+}
+
+private fun routeProgressMeters(points: List<LatLng>, projection: RouteProjection): Double {
+    if (points.size < 2) return 0.0
+    var distance = 0.0
+    for (index in 0 until projection.segmentIndex.coerceAtMost(points.lastIndex - 1)) {
+        distance += distanceMeters(points[index], points[index + 1])
+    }
+    val segmentStart = points.getOrNull(projection.segmentIndex) ?: return distance
+    distance += distanceMeters(segmentStart, projection.projectedPoint)
+    return distance
 }
 
 private fun backtrackRouteProjection(
@@ -1333,9 +1096,6 @@ private fun interpolateLatLng(start: LatLng, end: LatLng, fraction: Double): Lat
         start.longitude + ((end.longitude - start.longitude) * safeFraction)
     )
 }
-
-private fun elapsedSinceMs(startNs: Long): Double =
-    (SystemClock.elapsedRealtimeNanos() - startNs) / 1_000_000.0
 
 private data class SegmentProjection(
     val projectedPoint: LatLng,

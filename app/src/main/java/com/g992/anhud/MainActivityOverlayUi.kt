@@ -68,6 +68,7 @@ internal fun MainActivity.syncUiFromPrefs() {
         mapToggleSwitch?.isChecked = OverlayPrefs.mapEnabled(this)
         mapProjectionSwitch.isChecked = OverlayPrefs.mapEnabled(this)
         navProjectionSwitch.isChecked = OverlayPrefs.navEnabled(this)
+        laneGuidanceProjectionSwitch.isChecked = OverlayPrefs.laneGuidanceEnabled(this)
         arrowProjectionSwitch.isChecked = OverlayPrefs.arrowEnabled(this)
         speedProjectionSwitch.isChecked = OverlayPrefs.speedEnabled(this)
         hudSpeedProjectionSwitch.isChecked = OverlayPrefs.hudSpeedEnabled(this)
