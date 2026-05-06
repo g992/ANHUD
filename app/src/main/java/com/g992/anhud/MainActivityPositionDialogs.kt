@@ -71,6 +71,7 @@ internal fun MainActivity.openPositionDialog(
     val previewClock = dialogView.findViewById<TextView>(R.id.dialogPreviewClock)
     val showOthersCheck = dialogView.findViewById<CheckBox>(R.id.dialogShowOthers)
     val hudSpeedGpsStatusCheck = dialogView.findViewById<CheckBox>(R.id.dialogHudSpeedShowGpsStatus)
+    val laneGuidanceShowDistanceCheck = dialogView.findViewById<CheckBox>(R.id.dialogLaneGuidanceShowDistance)
     val containerWidthLabel = dialogView.findViewById<TextView>(R.id.dialogContainerWidthLabel)
     val containerWidthRow = dialogView.findViewById<View>(R.id.dialogContainerWidthRow)
     val containerWidthSeek = dialogView.findViewById<SeekBar>(R.id.dialogContainerWidthSeek)
@@ -259,6 +260,9 @@ internal fun MainActivity.openPositionDialog(
     val showHudSpeedGpsStatusSetting = target == OverlayTarget.HUDSPEED
     hudSpeedGpsStatusCheck.visibility = if (showHudSpeedGpsStatusSetting) View.VISIBLE else View.GONE
     hudSpeedGpsStatusCheck.isChecked = OverlayPrefs.hudSpeedGpsStatusEnabled(activity)
+    val showLaneGuidanceDistanceSetting = target == OverlayTarget.LANE_GUIDANCE
+    laneGuidanceShowDistanceCheck.visibility = if (showLaneGuidanceDistanceSetting) View.VISIBLE else View.GONE
+    laneGuidanceShowDistanceCheck.isChecked = OverlayPrefs.laneGuidanceShowDistance(activity)
 
     if (target == OverlayTarget.CONTAINER || target == OverlayTarget.MAP) {
         scaleLabel.visibility = View.GONE
@@ -1645,6 +1649,12 @@ internal fun MainActivity.openPositionDialog(
 
     hudSpeedGpsStatusCheck.setOnCheckedChangeListener { _, isChecked ->
         OverlayPrefs.setHudSpeedGpsStatusEnabled(activity, isChecked)
+        notifyOverlaySettingsChanged(preview = true, previewTarget = target, previewShowOthers = showOthersCheck.isChecked)
+        updateDialogVisibility()
+    }
+
+    laneGuidanceShowDistanceCheck.setOnCheckedChangeListener { _, isChecked ->
+        OverlayPrefs.setLaneGuidanceShowDistance(activity, isChecked)
         notifyOverlaySettingsChanged(preview = true, previewTarget = target, previewShowOthers = showOthersCheck.isChecked)
         updateDialogVisibility()
     }

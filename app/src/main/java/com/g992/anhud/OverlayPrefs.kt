@@ -90,6 +90,7 @@ object OverlayPrefs {
     private const val KEY_TRAFFIC_LIGHT_MAX_ACTIVE = "overlay_traffic_light_max_active"
     private const val KEY_NATIVE_NAV_ENABLED = "native_nav_enabled"
     private const val KEY_MAP_ENABLED = "overlay_map_enabled"
+    private const val KEY_LANE_GUIDANCE_SHOW_DISTANCE = "overlay_lane_guidance_show_distance"
     private const val KEY_CAMERA_TIMEOUT_NEAR = "camera_timeout_near"
     private const val KEY_CAMERA_TIMEOUT_FAR = "camera_timeout_far"
     private const val KEY_TRAFFIC_LIGHT_TIMEOUT = "traffic_light_timeout"
@@ -747,6 +748,16 @@ object OverlayPrefs {
     fun setLaneGuidanceEnabled(context: Context, enabled: Boolean) {
         prefs(context).edit()
             .putBoolean(KEY_LANE_GUIDANCE_ENABLED, enabled)
+            .apply()
+    }
+
+    fun laneGuidanceShowDistance(context: Context): Boolean {
+        return prefs(context).getBoolean(KEY_LANE_GUIDANCE_SHOW_DISTANCE, true)
+    }
+
+    fun setLaneGuidanceShowDistance(context: Context, enabled: Boolean) {
+        prefs(context).edit()
+            .putBoolean(KEY_LANE_GUIDANCE_SHOW_DISTANCE, enabled)
             .apply()
     }
 

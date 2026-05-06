@@ -18,6 +18,7 @@ import androidx.core.content.ContextCompat
 import java.util.concurrent.CopyOnWriteArraySet
 import kotlin.math.atan2
 import kotlin.math.cos
+import kotlin.math.roundToInt
 import kotlin.math.sin
 
 private const val ROUTE_PREFS_NAME = "map_route_telemetry"
@@ -34,9 +35,11 @@ private const val PREF_ROUTE_ALERTS = "route_alerts"
 private const val PREF_ROUTE_ALERTS_ROUTE_ID = "route_alerts_route_id"
 private const val PREF_ROUTE_LANE_POINTS = "route_lane_points"
 private const val EXTERNAL_ROUTE_SPEED_MPS = 10.0
-private const val LANE_GUIDANCE_BIND_MAX_DISTANCE_METERS = 2_000.0
 private const val LANE_GUIDANCE_DISPLAY_MAX_DISTANCE_METERS = 1_000.0
-private const val LANE_GUIDANCE_PASS_SEGMENT_HYSTERESIS = 1
+private const val LANE_GUIDANCE_PASS_NEAR_DISTANCE_METERS = 60.0
+private const val LANE_GUIDANCE_PASS_DISTANCE_INCREASE_METERS = 10.0
+private const val LANE_GUIDANCE_PASS_SAMPLE_INCREASE_METERS = 5.0
+private const val LANE_GUIDANCE_REVERSE_DISTANCE_INCREASE_METERS = 25.0
 private const val LANE_GUIDANCE_CANDIDATE_MAX = 6
 const val ROUTE_TELEMETRY_LOCATION_PROVIDER = "route-telemetry"
 
@@ -69,6 +72,7 @@ data class MapLaneManeuver(
     val point: LatLng,
     val iconAnchor: PointF,
     val token: Int,
+    val distanceMeters: Int,
 )
 
 private data class ResolvedLaneBitmapAnchor(
@@ -92,13 +96,15 @@ private data class LaneGuidanceCandidate(
     val iconAnchor: PointF,
     val token: Int,
     val receivedAtUptimeMs: Long,
+    val firstDistanceMeters: Double? = null,
+    val minDistanceMeters: Double? = null,
+    val lastDistanceMeters: Double? = null,
 )
 
 private data class ResolvedLaneGuidanceCandidate(
     val candidate: LaneGuidanceCandidate,
     val point: LatLng,
-    val progressMeters: Double,
-    val directDistanceMeters: Double?,
+    val directDistanceMeters: Double,
 )
 
 class MapRouteTelemetryReceiver : BroadcastReceiver() {
@@ -213,19 +219,38 @@ object MapRouteTelemetryStore {
     }
 
     private fun handleManeuverBlockIntent(context: Context, intent: Intent) {
-        if (intent.getStringExtra(MAP_EXTRA_MANEUVER_BLOCK_SOURCE_TYPE) != MAP_MANEUVER_SOURCE_LANE_AND_MANEUVER) {
+        val sourceType = intent.getStringExtra(MAP_EXTRA_MANEUVER_BLOCK_SOURCE_TYPE)
+        if (sourceType != MAP_MANEUVER_SOURCE_LANE_AND_MANEUVER) {
             return
         }
         val bitmap = readBitmapExtra(intent, MAP_EXTRA_MANEUVER_BLOCK_BITMAP)
-            ?.takeUnless { it.isRecycled || it.width <= 0 || it.height <= 0 }
-            ?: return
+        if (bitmap == null || bitmap.isRecycled || bitmap.width <= 0 || bitmap.height <= 0) {
+            val cleared = laneGuidanceCandidates.isNotEmpty()
+            laneGuidanceCandidates.clear()
+            Log.d(
+                ROUTE_TELEMETRY_TAG,
+                "lane maneuver clear: invalid bitmap cleared=$cleared " +
+                    "action=${intent.action.orEmpty()} " +
+                    "extras=${intent.extras?.keySet()?.joinToString(prefix = "[", postfix = "]") ?: "-"}"
+            )
+            return
+        }
         val routeId = intent.getStringExtra(MAP_EXTRA_LANE_ROUTE_ID).orEmpty().trim()
         val laneSig = intent.getStringExtra(MAP_EXTRA_LANE_SIG).orEmpty().trim()
         val laneSeg = intent.getIntExtra(MAP_EXTRA_LANE_SEG, Int.MIN_VALUE)
-        if (laneSeg < 0 || laneSig.isBlank()) return
+        val explicitPoint = resolveLanePositionFromIntent(intent)
+        if (explicitPoint == null && (laneSeg < 0 || laneSig.isBlank())) {
+            Log.d(
+                ROUTE_TELEMETRY_TAG,
+                "lane maneuver ignored: no position routeId=${routeId.ifBlank { "-" }} " +
+                    "laneSig=${laneSig.ifBlank { "-" }} laneSeg=$laneSeg"
+            )
+            return
+        }
         laneManeuverToken += 1
         val iconAnchor = resolveLaneBitmapAnchor(intent, bitmap)
-        val explicitPoint = resolveLanePositionFromIntent(intent)
+        val key = buildLaneGuidanceKey(routeId, laneSeg, laneSig, explicitPoint)
+        val previous = laneGuidanceCandidates[key]
         val candidate = LaneGuidanceCandidate(
             routeId = routeId,
             segmentIndex = laneSeg,
@@ -234,9 +259,12 @@ object MapRouteTelemetryStore {
             explicitPoint = explicitPoint,
             iconAnchor = iconAnchor.anchor,
             token = laneManeuverToken,
-            receivedAtUptimeMs = SystemClock.uptimeMillis()
+            receivedAtUptimeMs = SystemClock.uptimeMillis(),
+            firstDistanceMeters = previous?.firstDistanceMeters,
+            minDistanceMeters = previous?.minDistanceMeters,
+            lastDistanceMeters = previous?.lastDistanceMeters
         )
-        laneGuidanceCandidates[buildLaneGuidanceKey(routeId, laneSeg, laneSig)] = candidate
+        laneGuidanceCandidates[key] = candidate
         pruneLaneGuidanceCandidates()
         Log.d(
             ROUTE_TELEMETRY_TAG,
@@ -499,15 +527,13 @@ object MapRouteTelemetryStore {
         ) == PackageManager.PERMISSION_GRANTED
     }
 
-    private fun pruneLaneGuidanceCandidates(currentSegmentIndex: Int = Int.MIN_VALUE) {
+    private fun pruneLaneGuidanceCandidates() {
         val iterator = laneGuidanceCandidates.entries.iterator()
         while (iterator.hasNext()) {
             val entry = iterator.next()
             val candidate = entry.value
             val invalidBitmap = candidate.bitmap.isRecycled || candidate.bitmap.width <= 0 || candidate.bitmap.height <= 0
-            val behindRoute = currentSegmentIndex >= 0 &&
-                candidate.segmentIndex < (currentSegmentIndex - LANE_GUIDANCE_PASS_SEGMENT_HYSTERESIS)
-            if (invalidBitmap || behindRoute) {
+            if (invalidBitmap) {
                 iterator.remove()
             }
         }
@@ -519,19 +545,19 @@ object MapRouteTelemetryStore {
 
     private fun resolveActiveLaneGuidance(
         prefs: android.content.SharedPreferences,
-        routePoints: List<LatLng>,
         routeId: String?,
     ): MapLaneManeuver? {
         if (laneGuidanceCandidates.isEmpty()) return null
         val location = routeLocation
-        val currentProjection = location?.let { findClosestRouteProjectionOnRoute(routePoints, it) }
-        val currentSegmentIndex = currentProjection?.segmentIndex ?: -1
-        val currentProgressMeters = currentProjection?.let { routeProgressMetersAtProjection(routePoints, it) }
-        pruneLaneGuidanceCandidates(currentSegmentIndex)
+        val currentAnchor = location?.let { LatLng(it.latitude, it.longitude) } ?: return null
+        pruneLaneGuidanceCandidates()
         val lanePointsRaw = prefs.getString(PREF_ROUTE_LANE_POINTS, null)
-        val currentAnchor = location?.let { LatLng(it.latitude, it.longitude) }
 
-        val resolvedCandidates = laneGuidanceCandidates.values.mapNotNull { candidate ->
+        val resolvedCandidates = mutableListOf<ResolvedLaneGuidanceCandidate>()
+        val iterator = laneGuidanceCandidates.entries.iterator()
+        while (iterator.hasNext()) {
+            val entry = iterator.next()
+            val candidate = entry.value
             val point = candidate.explicitPoint
                 ?: findLanePoint(
                     raw = lanePointsRaw,
@@ -539,91 +565,101 @@ object MapRouteTelemetryStore {
                     segmentIndex = candidate.segmentIndex,
                     laneSig = candidate.laneSig
                 )
-                ?: fallbackRoutePoint(routePoints, candidate.segmentIndex)
-                ?: return@mapNotNull null
-            if (
-                currentSegmentIndex >= 0 &&
-                candidate.segmentIndex < (currentSegmentIndex - LANE_GUIDANCE_PASS_SEGMENT_HYSTERESIS)
-            ) {
-                return@mapNotNull null
+                ?: continue
+            val directDistance = distanceMetersBetween(currentAnchor, point)
+            val updatedCandidate = updateLaneGuidanceCandidateDistance(entry.key, candidate, directDistance)
+            if (updatedCandidate == null) {
+                iterator.remove()
+                continue
             }
-            val directDistance = currentAnchor?.let { distanceMetersBetween(it, point) }
-            if (directDistance != null && directDistance > LANE_GUIDANCE_BIND_MAX_DISTANCE_METERS) {
-                return@mapNotNull null
+            entry.setValue(updatedCandidate)
+            if (directDistance >= LANE_GUIDANCE_DISPLAY_MAX_DISTANCE_METERS) {
+                continue
             }
-            val progressMeters = if (routePoints.size >= 2) {
-                findClosestRouteProjectionOnRoute(routePoints, point.latitude, point.longitude)
-                    ?.let { routeProgressMetersAtProjection(routePoints, it) }
-                    ?: candidate.segmentIndex.toDouble()
-            } else {
-                candidate.segmentIndex.toDouble()
-            }
-            ResolvedLaneGuidanceCandidate(
-                candidate = candidate,
+            resolvedCandidates += ResolvedLaneGuidanceCandidate(
+                candidate = updatedCandidate,
                 point = point,
-                progressMeters = progressMeters,
                 directDistanceMeters = directDistance
             )
         }
         if (resolvedCandidates.isEmpty()) return null
 
         var selected: ResolvedLaneGuidanceCandidate? = null
-        var bestProgressDelta = Double.MAX_VALUE
         var bestDistance = Double.MAX_VALUE
         var bestSegment = Int.MAX_VALUE
         var bestToken = Int.MIN_VALUE
         for (candidate in resolvedCandidates) {
-            val progressDelta = if (currentProgressMeters != null) {
-                val delta = candidate.progressMeters - currentProgressMeters
-                if (delta >= 0.0) delta else Double.MAX_VALUE / 4
-            } else {
-                candidate.candidate.segmentIndex.toDouble()
-            }
-            val distance = candidate.directDistanceMeters ?: Double.MAX_VALUE
+            val distance = candidate.directDistanceMeters
             val segment = candidate.candidate.segmentIndex
             val token = candidate.candidate.token
-            val better = progressDelta < bestProgressDelta ||
-                (progressDelta == bestProgressDelta && distance < bestDistance) ||
-                (progressDelta == bestProgressDelta && distance == bestDistance && segment < bestSegment) ||
-                (progressDelta == bestProgressDelta &&
-                    distance == bestDistance &&
-                    segment == bestSegment &&
-                    token > bestToken)
+            val better = distance < bestDistance ||
+                (distance == bestDistance && segment < bestSegment) ||
+                (distance == bestDistance && segment == bestSegment && token > bestToken)
             if (better) {
                 selected = candidate
-                bestProgressDelta = progressDelta
                 bestDistance = distance
                 bestSegment = segment
                 bestToken = token
             }
         }
         selected ?: return null
-        val remainingDistanceMeters = when {
-            currentProgressMeters != null -> selected.progressMeters - currentProgressMeters
-            selected.directDistanceMeters != null -> selected.directDistanceMeters
-            else -> null
-        } ?: return null
-        if (
-            remainingDistanceMeters < 0.0 ||
-            remainingDistanceMeters > LANE_GUIDANCE_DISPLAY_MAX_DISTANCE_METERS
-        ) {
-            return null
-        }
 
         return MapLaneManeuver(
             bitmap = selected.candidate.bitmap,
             point = selected.point,
             iconAnchor = selected.candidate.iconAnchor,
-            token = selected.candidate.token
+            token = selected.candidate.token,
+            distanceMeters = selected.directDistanceMeters.toInt().coerceAtLeast(0)
         )
     }
 
-    private fun fallbackRoutePoint(routePoints: List<LatLng>, segmentIndex: Int): LatLng? {
-        if (segmentIndex < 0) return null
-        return routePoints.getOrNull(segmentIndex.coerceAtMost(routePoints.lastIndex))
+    private fun updateLaneGuidanceCandidateDistance(
+        key: String,
+        candidate: LaneGuidanceCandidate,
+        directDistanceMeters: Double,
+    ): LaneGuidanceCandidate? {
+        val firstDistance = candidate.firstDistanceMeters ?: directDistanceMeters
+        val previousMinDistance = candidate.minDistanceMeters
+        val minDistance = previousMinDistance?.let { minOf(it, directDistanceMeters) } ?: directDistanceMeters
+        val movedAwayFromFirst =
+            directDistanceMeters >= firstDistance + LANE_GUIDANCE_REVERSE_DISTANCE_INCREASE_METERS
+        val lastDistance = candidate.lastDistanceMeters
+        val movedAwayFromMinimum =
+            minDistance <= LANE_GUIDANCE_PASS_NEAR_DISTANCE_METERS &&
+                directDistanceMeters >= minDistance + LANE_GUIDANCE_PASS_DISTANCE_INCREASE_METERS
+        val movedAwayFromLastSample =
+            lastDistance != null &&
+                directDistanceMeters >= lastDistance + LANE_GUIDANCE_PASS_SAMPLE_INCREASE_METERS
+        if (movedAwayFromFirst || (movedAwayFromMinimum && movedAwayFromLastSample)) {
+            Log.d(
+                ROUTE_TELEMETRY_TAG,
+                "lane maneuver passed: key=$key first=${firstDistance.roundToInt()}m " +
+                    "min=${minDistance.roundToInt()}m distance=${directDistanceMeters.roundToInt()}m " +
+                    "reason=${if (movedAwayFromFirst) "reverse" else "passed"}"
+            )
+            return null
+        }
+        return candidate.copy(
+            firstDistanceMeters = firstDistance,
+            minDistanceMeters = minDistance,
+            lastDistanceMeters = directDistanceMeters
+        )
     }
 
-    private fun buildLaneGuidanceKey(routeId: String, segmentIndex: Int, laneSig: String): String {
+    private fun buildLaneGuidanceKey(
+        routeId: String,
+        segmentIndex: Int,
+        laneSig: String,
+        explicitPoint: LatLng?,
+    ): String {
+        if (segmentIndex < 0 || laneSig.isBlank()) {
+            return explicitPoint?.let { point ->
+                "point|" +
+                    (point.latitude * 100_000.0).roundToInt() +
+                    "|" +
+                    (point.longitude * 100_000.0).roundToInt()
+            } ?: "unknown"
+        }
         return routeId.trim() + "|" + segmentIndex + "|" + laneSig.trim()
     }
 
@@ -729,7 +765,7 @@ object MapRouteTelemetryStore {
             routeJams = jams,
             routeAlerts = parseRouteAlerts(alertsRaw),
             routeAlertsToken = alertsRaw.routeRawToken(alertsRouteId),
-            laneManeuver = resolveActiveLaneGuidance(prefs, points, routeId),
+            laneManeuver = resolveActiveLaneGuidance(prefs, routeId),
             startLocation = parsedSampled?.startLocation ?: points.startLocation(),
         )
     }
@@ -890,6 +926,7 @@ object MapRouteTelemetryStore {
             routeAlertsToken == other.routeAlertsToken &&
             laneManeuver?.token == other.laneManeuver?.token &&
             laneManeuver?.point == other.laneManeuver?.point &&
+            laneManeuver?.distanceMeters == other.laneManeuver?.distanceMeters &&
             routePoints.size == other.routePoints.size &&
             routeJams == other.routeJams &&
             routeAlerts == other.routeAlerts

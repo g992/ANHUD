@@ -655,12 +655,22 @@
         android:textSize="16sp"
         android:visibility="gone" />
 
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="6dp"
-            android:text="@string/position_dialog_hint"
-            android:textColor="@color/white"
-            android:textSize="14sp" />
+    <CheckBox
+        android:id="@+id/dialogLaneGuidanceShowDistance"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:text="@string/position_lane_guidance_show_distance"
+        android:textColor="@color/white"
+        android:textSize="16sp"
+        android:visibility="gone" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:text="@string/position_dialog_hint"
+        android:textColor="@color/white"
+        android:textSize="14sp" />
     </LinearLayout>
 </ScrollView>
