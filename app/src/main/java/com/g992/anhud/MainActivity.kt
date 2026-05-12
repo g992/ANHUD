@@ -1,5 +1,6 @@
 package com.g992.anhud
 
+import android.Manifest
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -65,6 +66,25 @@ class MainActivity : ScaledActivity() {
     ) {
         updatePermissionStatus()
     }
+    private val locationPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) {
+        updatePermissionStatus()
+        if (hasForegroundLocationPermission()) {
+            if (Build.VERSION.SDK_INT == Build.VERSION_CODES.Q && !hasBackgroundLocationPermission()) {
+                backgroundLocationPermissionLauncher.launch(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
+            }
+            ContextCompat.startForegroundService(this, Intent(this, HudBackgroundService::class.java))
+        }
+    }
+    private val backgroundLocationPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) {
+        updatePermissionStatus()
+        if (hasBackgroundLocationPermission()) {
+            ContextCompat.startForegroundService(this, Intent(this, HudBackgroundService::class.java))
+        }
+    }
     private var turnSignalCustomIconPickerCallback: ((Uri?) -> Unit)? = null
     private val turnSignalCustomIconPickerLauncher = registerForActivityResult(
         ActivityResultContracts.OpenDocument()
@@ -81,6 +101,10 @@ class MainActivity : ScaledActivity() {
     }
     internal lateinit var permissionStatus: TextView
     internal lateinit var requestPermissionButton: Button
+    internal lateinit var locationPermissionStatus: TextView
+    internal lateinit var requestLocationPermissionButton: Button
+    internal lateinit var backgroundLocationPermissionStatus: TextView
+    internal lateinit var requestBackgroundLocationPermissionButton: Button
     internal lateinit var notificationPermissionStatus: TextView
     internal lateinit var requestNotificationPermissionButton: Button
     internal lateinit var storagePermissionStatus: TextView
@@ -181,6 +205,10 @@ class MainActivity : ScaledActivity() {
 
         permissionStatus = findViewById(R.id.permissionStatus)
         requestPermissionButton = findViewById(R.id.requestPermissionButton)
+        locationPermissionStatus = findViewById(R.id.locationPermissionStatus)
+        requestLocationPermissionButton = findViewById(R.id.requestLocationPermissionButton)
+        backgroundLocationPermissionStatus = findViewById(R.id.backgroundLocationPermissionStatus)
+        requestBackgroundLocationPermissionButton = findViewById(R.id.requestBackgroundLocationPermissionButton)
         notificationPermissionStatus = findViewById(R.id.notificationPermissionStatus)
         requestNotificationPermissionButton = findViewById(R.id.requestNotificationPermissionButton)
         storagePermissionStatus = findViewById(R.id.storagePermissionStatus)
@@ -254,6 +282,12 @@ class MainActivity : ScaledActivity() {
         requestPermissionButton.setOnClickListener {
             openOverlaySettings()
         }
+        requestLocationPermissionButton.setOnClickListener {
+            requestForegroundLocationPermission()
+        }
+        requestBackgroundLocationPermissionButton.setOnClickListener {
+            requestBackgroundLocationPermission()
+        }
         requestNotificationPermissionButton.setOnClickListener {
             openNotificationListenerSettings()
         }
@@ -301,6 +335,11 @@ class MainActivity : ScaledActivity() {
                 }
                 OverlayPrefs.setMapEnabled(this@MainActivity, isChecked)
                 notifyOverlaySettingsChanged(mapEnabled = isChecked)
+                if (isChecked && !hasForegroundLocationPermission()) {
+                    requestForegroundLocationPermission()
+                } else {
+                    updatePermissionStatus()
+                }
             }
         }
 
@@ -682,6 +721,38 @@ class MainActivity : ScaledActivity() {
                 storagePermissionLauncher.launch(android.Manifest.permission.READ_EXTERNAL_STORAGE)
             }
         }
+    }
+
+    private fun requestForegroundLocationPermission() {
+        locationPermissionLauncher.launch(
+            arrayOf(
+                Manifest.permission.ACCESS_FINE_LOCATION,
+                Manifest.permission.ACCESS_COARSE_LOCATION
+            )
+        )
+    }
+
+    private fun requestBackgroundLocationPermission() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+            updatePermissionStatus()
+            return
+        }
+        if (!hasForegroundLocationPermission()) {
+            requestForegroundLocationPermission()
+            return
+        }
+        if (Build.VERSION.SDK_INT == Build.VERSION_CODES.Q) {
+            backgroundLocationPermissionLauncher.launch(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
+            return
+        }
+        openAppLocationSettings()
+    }
+
+    private fun openAppLocationSettings() {
+        val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+            data = Uri.parse("package:$packageName")
+        }
+        startActivity(intent)
     }
 
     private fun maybeStartGuideFromIntent() {

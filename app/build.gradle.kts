@@ -35,8 +35,12 @@ val signingKeyAlias = System.getenv("SIGNING_KEY_ALIAS")
     ?: localProperties.getProperty("SIGNING_KEY_ALIAS")
 val signingKeyPassword = System.getenv("SIGNING_KEY_PASSWORD")
     ?: localProperties.getProperty("SIGNING_KEY_PASSWORD")
-val mapkitApiKey = System.getenv("MAPKIT_API_KEY")
-    ?: localProperties.getProperty("MAPKIT_API_KEY")
+val starlineMapStyleId = System.getenv("STARLINE_MAP_STYLE_ID")
+    ?: localProperties.getProperty("STARLINE_MAP_STYLE_ID")
+val starlineMapsAccessToken = System.getenv("STARLINE_MAPS_ACCESS_TOKEN")
+    ?: System.getenv("STARLINE_MAPS_API_KEY")
+    ?: localProperties.getProperty("STARLINE_MAPS_ACCESS_TOKEN")
+    ?: localProperties.getProperty("STARLINE_MAPS_API_KEY")
 val hasSigning = !signingStoreFilePath.isNullOrBlank() &&
     !signingStorePassword.isNullOrBlank() &&
     !signingKeyAlias.isNullOrBlank() &&
@@ -54,7 +58,8 @@ android {
         versionName = versionNameProp
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        buildConfigField("String", "MAPKIT_API_KEY", buildConfigString(mapkitApiKey))
+        buildConfigField("String", "STARLINE_MAP_STYLE_ID", buildConfigString(starlineMapStyleId))
+        buildConfigField("String", "STARLINE_MAPS_ACCESS_TOKEN", buildConfigString(starlineMapsAccessToken))
     }
 
     val releaseSigning = if (hasSigning) {
@@ -101,7 +106,7 @@ dependencies {
     implementation(libs.androidx.constraintlayout)
     implementation(libs.tananaev.adblib)
     implementation(libs.androidsvg)
-    implementation(libs.yandex.mapkit)
+    implementation(libs.maplibre.android.sdk)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)

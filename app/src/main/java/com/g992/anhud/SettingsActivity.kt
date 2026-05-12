@@ -116,6 +116,7 @@ class SettingsActivity : ScaledActivity() {
     private lateinit var mapTiltValue: TextView
     private lateinit var mapArrowValue: TextView
     private lateinit var mapCacheValue: TextView
+    private lateinit var mapCacheClearButton: Button
     private lateinit var mapRouteSnapDistanceValue: TextView
     private lateinit var mapOfflineRegionValue: TextView
     private lateinit var mapAutoZoomSwitch: SwitchCompat
@@ -135,6 +136,7 @@ class SettingsActivity : ScaledActivity() {
 
     private var isSyncingUi = false
     private var areTimeoutSettingsExpanded = false
+    private var pendingSpeedFromGpsAfterBackgroundPermission = false
 
     private val storagePermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -152,13 +154,24 @@ class SettingsActivity : ScaledActivity() {
         val granted = grants[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
             grants[Manifest.permission.ACCESS_COARSE_LOCATION] == true
         if (!granted) {
-            OverlayPrefs.setSpeedFromGps(this, false)
-            syncUiFromPrefs()
-            showToast(R.string.speed_from_gps_permission_denied)
+            disableSpeedFromGpsForPermission(R.string.speed_from_gps_permission_denied)
             return@registerForActivityResult
         }
-        OverlayPrefs.setSpeedFromGps(this, true)
-        startService(Intent(this, SensorDataService::class.java))
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && !hasBackgroundLocationPermission()) {
+            requestBackgroundLocationPermissionForGpsSpeed()
+            return@registerForActivityResult
+        }
+        enableSpeedFromGps()
+    }
+
+    private val backgroundLocationPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) {
+        if (!hasBackgroundLocationPermission()) {
+            disableSpeedFromGpsForPermission(R.string.speed_from_gps_background_permission_denied)
+            return@registerForActivityResult
+        }
+        enableSpeedFromGps()
     }
 
     private val exportSettingsLauncher = registerForActivityResult(
@@ -332,6 +345,13 @@ class SettingsActivity : ScaledActivity() {
         MapCacheController.addListener(mapCacheListener)
         syncMapCacheUi(MapCacheController.current())
         refreshUpdateUi()
+        if (pendingSpeedFromGpsAfterBackgroundPermission) {
+            pendingSpeedFromGpsAfterBackgroundPermission = false
+            if (hasBackgroundLocationPermission()) {
+                enableSpeedFromGps()
+            }
+            syncUiFromPrefs()
+        }
     }
 
     override fun onStop() {
@@ -538,6 +558,11 @@ class SettingsActivity : ScaledActivity() {
                         Manifest.permission.ACCESS_COARSE_LOCATION
                     )
                 )
+                return@setOnCheckedChangeListener
+            }
+            if (isChecked && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && !hasBackgroundLocationPermission()) {
+                requestBackgroundLocationPermissionForGpsSpeed()
+                syncUiFromPrefs()
                 return@setOnCheckedChangeListener
             }
             OverlayPrefs.setSpeedFromGps(this, isChecked)
@@ -749,6 +774,14 @@ class SettingsActivity : ScaledActivity() {
                 }
             }
         }
+        mapCacheClearButton = createSettingsButton(
+            getString(R.string.map_settings_cache_clear),
+            SETTINGS_BUTTON_DANGER
+        ).apply {
+            setOnClickListener {
+                MapCacheController.clearCache()
+            }
+        }
         mapCacheButtons = cacheButtons
         val cacheRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -792,6 +825,8 @@ class SettingsActivity : ScaledActivity() {
                     *autoZoomRows.toTypedArray(),
                     createMapSliderRow(getString(R.string.map_settings_tilt), mapTiltValue, tiltSeek),
                     createMapSliderRow(getString(R.string.map_settings_arrow_scale), mapArrowValue, arrowSeek),
+                    createMapValueRow(getString(R.string.map_settings_cache), mapCacheValue, cacheRow),
+                    createMapButtonRow(listOf(mapCacheClearButton)),
                 )
             )
         )
@@ -927,7 +962,6 @@ class SettingsActivity : ScaledActivity() {
         mapAutoZoomNinetyValue.text = formatMapDecimal(settings.autoZoomAt90Kmh)
         mapTiltValue.text = getString(R.string.map_settings_tilt_value, settings.tilt.roundToInt())
         mapArrowValue.text = settings.arrowScalePercent.toString()
-        mapCacheValue.text = formatMapCacheValue(settings.cacheSizeBytes())
         mapRouteSnapDistanceValue.text = getString(
             R.string.map_settings_route_snap_distance_value,
             settings.routeSnapDistanceMeters
@@ -958,8 +992,14 @@ class SettingsActivity : ScaledActivity() {
         }
     }
 
-    private fun formatMapCacheValue(configuredBytes: Long): String {
-        return formatStorageBytes(configuredBytes)
+    private fun formatMapCacheValue(snapshot: MapCacheSnapshot): String {
+        val base = getString(
+            R.string.map_settings_cache_value,
+            formatStorageBytes(snapshot.usedBytes),
+            formatStorageBytes(snapshot.configuredBytes)
+        )
+        val error = snapshot.cacheLastError?.takeIf { it.isNotBlank() } ?: return base
+        return "$base\n${getString(R.string.map_settings_cache_error, error)}"
     }
 
     private fun formatMapDecimal(value: Double): String {
@@ -1323,11 +1363,33 @@ class SettingsActivity : ScaledActivity() {
     }
 
     private fun syncMapCacheUi(snapshot: MapCacheSnapshot) {
-        if (!::mapOfflineRegionValue.isInitialized) return
-        mapOfflineRegionValue.text = getString(
-            R.string.map_settings_offline_downloaded_count,
-            snapshot.offlineDownloadedRegionIds.size
-        )
+        if (::mapCacheValue.isInitialized) {
+            mapCacheValue.text = formatMapCacheValue(snapshot)
+        }
+        if (::mapCacheClearButton.isInitialized) {
+            mapCacheClearButton.isEnabled = !snapshot.clearingCache
+            mapCacheClearButton.text = getString(
+                if (snapshot.clearingCache) {
+                    R.string.map_settings_cache_clearing
+                } else {
+                    R.string.map_settings_cache_clear
+                }
+            )
+            styleSettingsButton(
+                button = mapCacheClearButton,
+                variant = if (snapshot.clearingCache) {
+                    SETTINGS_BUTTON_SECONDARY
+                } else {
+                    SETTINGS_BUTTON_DANGER
+                }
+            )
+        }
+        if (::mapOfflineRegionValue.isInitialized) {
+            mapOfflineRegionValue.text = getString(
+                R.string.map_settings_offline_downloaded_count,
+                snapshot.offlineDownloadedRegionIds.size
+            )
+        }
     }
 
     private fun currentOfflineMaxZoom(): Double {
@@ -1483,15 +1545,37 @@ class SettingsActivity : ScaledActivity() {
     }
 
     private fun hasLocationPermission(): Boolean {
-        val fineGranted = ContextCompat.checkSelfPermission(
-            this,
-            Manifest.permission.ACCESS_FINE_LOCATION
-        ) == PackageManager.PERMISSION_GRANTED
-        val coarseGranted = ContextCompat.checkSelfPermission(
-            this,
-            Manifest.permission.ACCESS_COARSE_LOCATION
-        ) == PackageManager.PERMISSION_GRANTED
-        return fineGranted || coarseGranted
+        return hasForegroundLocationPermission()
+    }
+
+    private fun enableSpeedFromGps() {
+        pendingSpeedFromGpsAfterBackgroundPermission = false
+        OverlayPrefs.setSpeedFromGps(this, true)
+        startService(Intent(this, SensorDataService::class.java))
+    }
+
+    private fun disableSpeedFromGpsForPermission(messageId: Int) {
+        pendingSpeedFromGpsAfterBackgroundPermission = false
+        OverlayPrefs.setSpeedFromGps(this, false)
+        syncUiFromPrefs()
+        showToast(messageId)
+    }
+
+    private fun requestBackgroundLocationPermissionForGpsSpeed() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+            enableSpeedFromGps()
+            return
+        }
+        pendingSpeedFromGpsAfterBackgroundPermission = true
+        if (Build.VERSION.SDK_INT == Build.VERSION_CODES.Q) {
+            backgroundLocationPermissionLauncher.launch(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
+            return
+        }
+        showToast(R.string.speed_from_gps_background_permission_denied)
+        val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+            data = Uri.parse("package:$packageName")
+        }
+        startActivity(intent)
     }
 
     private fun requestStoragePermission() {

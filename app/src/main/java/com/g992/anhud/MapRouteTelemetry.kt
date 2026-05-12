@@ -107,6 +107,14 @@ private data class ResolvedLaneGuidanceCandidate(
     val directDistanceMeters: Double,
 )
 
+private data class RuntimeRoute(
+    val routeId: String?,
+    val points: List<LatLng>,
+    val routeToken: String,
+    val jamsRaw: String?,
+    val lanePointsRaw: String?,
+)
+
 class MapRouteTelemetryReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         MapRouteTelemetryStore.handleIntent(context.applicationContext, intent)
@@ -126,6 +134,10 @@ object MapRouteTelemetryStore {
     private var appContext: Context? = null
     private var routeLocation: Location? = null
     private var routeLocationListener: LocationListener? = null
+    private var runtimeState: String? = null
+    private var runtimeRoute: RuntimeRoute? = null
+    private var runtimeRouteAlertsRaw: String? = null
+    private var runtimeRouteAlertsRouteId: String? = null
     private val laneGuidanceCandidates = linkedMapOf<String, LaneGuidanceCandidate>()
 
     fun initialize(context: Context) {
@@ -134,7 +146,8 @@ object MapRouteTelemetryStore {
             if (initialized) return
             appContext = context.applicationContext
             ensureRouteLocationTracking(context.applicationContext)
-            currentSnapshot = buildSnapshot(context.applicationContext)
+            clearLegacyPersistedRouteTelemetry(context.applicationContext)
+            currentSnapshot = buildSnapshot()
             initialized = true
         }
     }
@@ -152,70 +165,66 @@ object MapRouteTelemetryStore {
     fun handleIntent(context: Context, intent: Intent) {
         initialize(context)
         ensureRouteLocationTracking(context.applicationContext)
-        val prefs = context.getSharedPreferences(ROUTE_PREFS_NAME, Context.MODE_PRIVATE)
+        clearLegacyPersistedRouteTelemetry(context.applicationContext)
         when (intent.action) {
             MAP_ROUTE_TELEMETRY_ACTION -> {
                 val sampled = intent.getStringExtra(MAP_EXTRA_ROUTE_SAMPLED)
                 val jams = intent.getStringExtra(MAP_EXTRA_ROUTE_JAMS)
-                val changed = prefs.editIfChanged {
-                    putStringIfChanged(PREF_START, intent.getStringExtra(MAP_EXTRA_ROUTE_START))
-                    putStringIfChanged(PREF_END, intent.getStringExtra(MAP_EXTRA_ROUTE_END))
-                    putStringIfChanged(PREF_SAMPLED, sampled)
-                    putStringIfChanged(PREF_PRE_MANEUVER, intent.getStringExtra(MAP_EXTRA_ROUTE_PRE_MANEUVER))
-                    putStringIfChanged(PREF_WAYPOINTS, intent.getStringExtra(MAP_EXTRA_ROUTE_WAYPOINTS))
-                    putStringIfChanged(PREF_JAMS, jams)
-                    putStringIfChanged(PREF_ROUTE_LANE_POINTS, intent.getStringExtra(MAP_EXTRA_ROUTE_LANE_POINTS))
-                }
-                if (!changed) {
-                    return
+                val routeId = intent.getStringExtra(MAP_EXTRA_ROUTE_ID)
+                val lanePointsRaw = intent.getStringExtra(MAP_EXTRA_ROUTE_LANE_POINTS)
+                val parsedSampled = parseSampledRoute(sampled, routeId)
+                val points = parsedSampled?.points?.takeIf { it.size >= 2 } ?: listOfNotNull(
+                    parsePoint(intent.getStringExtra(MAP_EXTRA_ROUTE_START)),
+                    parsePoint(intent.getStringExtra(MAP_EXTRA_ROUTE_END))
+                )
+                if (points.size >= 2) {
+                    val routeToken = parsedSampled?.token ?: points.routePointsToken(routeId)
+                    if (runtimeRoute?.routeToken != routeToken) {
+                        runtimeRouteAlertsRaw = null
+                        runtimeRouteAlertsRouteId = null
+                        laneGuidanceCandidates.clear()
+                    }
+                    runtimeState = MAP_ROUTE_STATE_BUILT
+                    runtimeRoute = RuntimeRoute(
+                        routeId = routeId,
+                        points = points,
+                        routeToken = routeToken,
+                        jamsRaw = jams,
+                        lanePointsRaw = lanePointsRaw
+                    )
+                } else {
+                    runtimeRoute?.let { route ->
+                        runtimeRoute = route.copy(
+                            jamsRaw = jams ?: route.jamsRaw,
+                            lanePointsRaw = lanePointsRaw ?: route.lanePointsRaw
+                        )
+                    }
                 }
             }
 
             MAP_ROUTE_STATE_ACTION -> {
                 val state = intent.getStringExtra(MAP_EXTRA_ROUTE_STATE)
                 Log.d(ROUTE_TELEMETRY_TAG, "route state: $state")
-                val changed = prefs.editIfChanged {
-                    putStringIfChanged(PREF_STATE, state)
-                    if (state == MAP_ROUTE_STATE_ARRIVED || state == MAP_ROUTE_STATE_CANCELLED) {
-                        removeIfPresent(PREF_START)
-                        removeIfPresent(PREF_END)
-                        removeIfPresent(PREF_SAMPLED)
-                        removeIfPresent(PREF_ROUTE_ID)
-                        removeIfPresent(PREF_PRE_MANEUVER)
-                        removeIfPresent(PREF_WAYPOINTS)
-                        removeIfPresent(PREF_JAMS)
-                        removeIfPresent(PREF_ROUTE_ALERTS)
-                        removeIfPresent(PREF_ROUTE_ALERTS_ROUTE_ID)
-                        removeIfPresent(PREF_ROUTE_LANE_POINTS)
-                        laneGuidanceCandidates.clear()
-                    }
-                }
-                if (!changed) {
-                    return
+                runtimeState = state
+                if (state == MAP_ROUTE_STATE_ARRIVED || state == MAP_ROUTE_STATE_CANCELLED) {
+                    clearRuntimeRoute()
                 }
             }
 
             MAP_ROUTE_ALERTS_ACTION,
             MAP_ROUTE_ALERTS_ALT_ACTION -> {
-                val alerts = intent.getStringExtra(MAP_EXTRA_ROUTE_ALERTS)
-                val routeId = intent.getStringExtra(MAP_EXTRA_ROUTE_ID)
-                val changed = prefs.editIfChanged {
-                    putStringIfChanged(PREF_ROUTE_ALERTS, alerts)
-                    putStringIfChanged(PREF_ROUTE_ALERTS_ROUTE_ID, routeId)
-                }
-                if (!changed) {
-                    return
-                }
+                runtimeRouteAlertsRaw = intent.getStringExtra(MAP_EXTRA_ROUTE_ALERTS)
+                runtimeRouteAlertsRouteId = intent.getStringExtra(MAP_EXTRA_ROUTE_ID)
             }
 
             MAP_MANEUVER_BLOCK_ACTION,
             MAP_MANEUVER_BLOCK_ALT_ACTION -> {
                 handleManeuverBlockIntent(context, intent)
-                publishSnapshotIfChanged(context, buildSnapshot(context))
+                publishSnapshotIfChanged(context, buildSnapshot())
                 return
             }
         }
-        publishSnapshotIfChanged(context, buildSnapshot(context))
+        publishSnapshotIfChanged(context, buildSnapshot())
     }
 
     private fun handleManeuverBlockIntent(context: Context, intent: Intent) {
@@ -502,7 +511,7 @@ object MapRouteTelemetryStore {
         val manager = context.getSystemService(LocationManager::class.java) ?: return
         val listener = LocationListener { location ->
             routeLocation = Location(location)
-            publishSnapshotIfChanged(context, buildSnapshot(context))
+            publishSnapshotIfChanged(context, buildSnapshot())
         }
         routeLocationListener = listener
         preferredLocationProviders(manager).forEach { provider ->
@@ -544,14 +553,13 @@ object MapRouteTelemetryStore {
     }
 
     private fun resolveActiveLaneGuidance(
-        prefs: android.content.SharedPreferences,
+        lanePointsRaw: String?,
         routeId: String?,
     ): MapLaneManeuver? {
         if (laneGuidanceCandidates.isEmpty()) return null
         val location = routeLocation
         val currentAnchor = location?.let { LatLng(it.latitude, it.longitude) } ?: return null
         pruneLaneGuidanceCandidates()
-        val lanePointsRaw = prefs.getString(PREF_ROUTE_LANE_POINTS, null)
 
         val resolvedCandidates = mutableListOf<ResolvedLaneGuidanceCandidate>()
         val iterator = laneGuidanceCandidates.entries.iterator()
@@ -697,22 +705,41 @@ object MapRouteTelemetryStore {
         ) {
             return
         }
-        val sampled = serializePoints(points)
-        context.getSharedPreferences(ROUTE_PREFS_NAME, Context.MODE_PRIVATE).editIfChanged {
-            putStringIfChanged(PREF_STATE, MAP_ROUTE_STATE_BUILT)
-            putStringIfChanged(PREF_ROUTE_ID, routeId)
-            putStringIfChanged(PREF_SAMPLED, sampled)
-            removeIfPresent(PREF_JAMS)
-        }
+        clearLegacyPersistedRouteTelemetry(context.applicationContext)
+        runtimeState = MAP_ROUTE_STATE_BUILT
+        runtimeRoute = RuntimeRoute(
+            routeId = routeId,
+            points = points,
+            routeToken = routeToken,
+            jamsRaw = null,
+            lanePointsRaw = null
+        )
+        runtimeRouteAlertsRaw = null
+        runtimeRouteAlertsRouteId = null
         laneGuidanceCandidates.clear()
-        publishSnapshotIfChanged(context, buildSnapshot(context))
-        Log.d(ROUTE_TELEMETRY_TAG, "route polyline stored: id=${routeId.orEmpty()} points=${points.size}")
+        publishSnapshotIfChanged(context, buildSnapshot())
+        Log.d(ROUTE_TELEMETRY_TAG, "route polyline received: id=${routeId.orEmpty()} points=${points.size}")
     }
 
     fun clearRoutePolyline(context: Context) {
         initialize(context)
+        clearLegacyPersistedRouteTelemetry(context.applicationContext)
+        runtimeState = MAP_ROUTE_STATE_CANCELLED
+        clearRuntimeRoute()
+        publishSnapshotIfChanged(context, buildSnapshot())
+        Log.d(ROUTE_TELEMETRY_TAG, "route polyline cleared")
+    }
+
+    private fun clearRuntimeRoute() {
+        runtimeRoute = null
+        runtimeRouteAlertsRaw = null
+        runtimeRouteAlertsRouteId = null
+        laneGuidanceCandidates.clear()
+    }
+
+    private fun clearLegacyPersistedRouteTelemetry(context: Context) {
         val changed = context.getSharedPreferences(ROUTE_PREFS_NAME, Context.MODE_PRIVATE).editIfChanged {
-            putStringIfChanged(PREF_STATE, MAP_ROUTE_STATE_CANCELLED)
+            removeIfPresent(PREF_STATE)
             removeIfPresent(PREF_START)
             removeIfPresent(PREF_END)
             removeIfPresent(PREF_SAMPLED)
@@ -720,13 +747,14 @@ object MapRouteTelemetryStore {
             removeIfPresent(PREF_PRE_MANEUVER)
             removeIfPresent(PREF_WAYPOINTS)
             removeIfPresent(PREF_JAMS)
+            removeIfPresent(PREF_ROUTE_ALERTS)
+            removeIfPresent(PREF_ROUTE_ALERTS_ROUTE_ID)
+            removeIfPresent(PREF_ROUTE_LANE_POINTS)
         }
-        if (!changed) {
-            return
+        if (changed) {
+            parsedSampledRouteCache = null
+            Log.d(ROUTE_TELEMETRY_TAG, "legacy persisted route telemetry cleared")
         }
-        laneGuidanceCandidates.clear()
-        publishSnapshotIfChanged(context, buildSnapshot(context))
-        Log.d(ROUTE_TELEMETRY_TAG, "route polyline cleared")
     }
 
     private fun notifyRouteStatusChanged(context: Context, snapshot: MapRouteTelemetrySnapshot) {
@@ -739,34 +767,27 @@ object MapRouteTelemetryStore {
         )
     }
 
-    private fun buildSnapshot(context: Context): MapRouteTelemetrySnapshot {
-        val prefs = context.getSharedPreferences(ROUTE_PREFS_NAME, Context.MODE_PRIVATE)
-        val sampledRaw = prefs.getString(PREF_SAMPLED, null)
-        val startRaw = prefs.getString(PREF_START, null)
-        val routeId = prefs.getString(PREF_ROUTE_ID, null)
-        val jamsRaw = prefs.getString(PREF_JAMS, null)
-        val alertsRaw = prefs.getString(PREF_ROUTE_ALERTS, null)
-        val alertsRouteId = prefs.getString(PREF_ROUTE_ALERTS_ROUTE_ID, null)
-        val parsedSampled = parseSampledRoute(sampledRaw, routeId)
-        val points = parsedSampled?.points ?: listOfNotNull(
-            parsePoint(startRaw),
-            parsePoint(prefs.getString(PREF_END, null))
-        )
-        val routeToken = parsedSampled?.token ?: listOfNotNull(parsePoint(startRaw), parsePoint(prefs.getString(PREF_END, null)))
-            .takeIf { it.size >= 2 }
-            ?.routePointsToken(routeId)
+    private fun buildSnapshot(): MapRouteTelemetrySnapshot {
+        val route = runtimeRoute
+        val routeId = route?.routeId
+        val points = route?.points.orEmpty()
+        val routeToken = route?.routeToken
+        val jamsRaw = route?.jamsRaw
+        val alertsRaw = runtimeRouteAlertsRaw.takeIf {
+            route != null && routeId.matchesRouteId(runtimeRouteAlertsRouteId)
+        }
         val jams = normalizeJams(jamsRaw, points.size - 1)
         return MapRouteTelemetrySnapshot(
-            state = prefs.getString(PREF_STATE, null),
-            hasExternalTelemetry = sampledRaw != null || prefs.getString(PREF_STATE, null) != null,
+            state = runtimeState,
+            hasExternalTelemetry = route != null || runtimeState != null,
             routeToken = routeToken,
             routeJamsToken = jamsRaw.routeRawToken(),
             routePoints = points,
             routeJams = jams,
             routeAlerts = parseRouteAlerts(alertsRaw),
-            routeAlertsToken = alertsRaw.routeRawToken(alertsRouteId),
-            laneManeuver = resolveActiveLaneGuidance(prefs, routeId),
-            startLocation = parsedSampled?.startLocation ?: points.startLocation(),
+            routeAlertsToken = alertsRaw.routeRawToken(runtimeRouteAlertsRouteId),
+            laneManeuver = resolveActiveLaneGuidance(route?.lanePointsRaw, routeId),
+            startLocation = points.startLocation(),
         )
     }
 
@@ -853,12 +874,6 @@ object MapRouteTelemetryStore {
         return candidates.firstOrNull()?.point
     }
 
-    private fun serializePoints(points: List<LatLng>): String {
-        return points.joinToString(";") { point ->
-            "${point.latitude},${point.longitude}"
-        }
-    }
-
     private fun normalizeJams(raw: String?, size: Int): List<String> {
         if (size <= 0) return emptyList()
         val base = raw.orEmpty()
@@ -943,6 +958,11 @@ object MapRouteTelemetryStore {
                 append(stableHash64(extra).toString(16))
             }
         }
+    }
+
+    private fun String?.matchesRouteId(other: String?): Boolean {
+        if (this.isNullOrBlank() || other.isNullOrBlank()) return true
+        return trim() == other.trim()
     }
 
     private fun List<LatLng>.routePointsToken(routeId: String?): String {

@@ -1,6 +1,7 @@
 package com.g992.anhud
 
 import android.content.Context
+import android.content.ContextWrapper
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -11,20 +12,13 @@ object PrefsJson {
     private const val DEFAULTS_ASSET = "maneuver_match_defaults.properties"
     private const val DEFAULT_MANEUVER_ICON_ID = "101"
     private const val MAX_SUPPORTED_MANEUVER_ICON_ID = 150
+    private const val DEFAULT_PREFS_SUFFIX = "_preset_defaults"
 
-    fun buildPayload(context: Context): JSONObject {
-        val payload = JSONObject()
-        payload.put("version", 1)
-        val prefsObject = JSONObject()
-        prefsObject.put(OVERLAY_PREFS_NAME, serializeOverlayPrefs(context))
-        prefsObject.put(MANEUVER_PREFS_NAME, serializeManeuverPrefs(context))
-        prefsObject.put(MAP_RENDER_PREFS_NAME, serializeMapRenderPrefs(context))
-        payload.put("prefs", prefsObject)
-        return payload
-    }
+    fun buildPayload(context: Context): JSONObject = buildPayloadInternal(context)
 
     fun applyPayload(context: Context, payload: JSONObject): Boolean {
-        val prefsObject = payload.optJSONObject("prefs") ?: return false
+        val sourcePrefs = payload.optJSONObject("prefs") ?: return false
+        val prefsObject = normalizePayload(context, payload, sourcePrefs).optJSONObject("prefs") ?: return false
         val overlayApplied = applyPrefsFromJson(
             context,
             OVERLAY_PREFS_NAME,
@@ -43,9 +37,11 @@ object PrefsJson {
         return overlayApplied || maneuverApplied || mapRenderApplied
     }
 
-    fun payloadEquals(first: JSONObject, second: JSONObject): Boolean {
-        val left = snapshotFromPayload(first)
-        val right = snapshotFromPayload(second)
+    fun payloadEquals(context: Context, first: JSONObject, second: JSONObject): Boolean {
+        val firstPrefs = first.optJSONObject("prefs") ?: return false
+        val secondPrefs = second.optJSONObject("prefs") ?: return false
+        val left = snapshotFromPayload(normalizePayload(context, first, firstPrefs))
+        val right = snapshotFromPayload(normalizePayload(context, second, secondPrefs))
         if (left.keys != right.keys) return false
         for (prefName in left.keys) {
             val leftMap = left[prefName] ?: return false
@@ -67,6 +63,79 @@ object PrefsJson {
         val type: String,
         val value: Any?
     )
+
+    private class DefaultsContext(base: Context) : ContextWrapper(base) {
+        override fun getSharedPreferences(name: String, mode: Int) =
+            super.getSharedPreferences(name + DEFAULT_PREFS_SUFFIX, mode)
+    }
+
+    private fun buildPayloadInternal(context: Context): JSONObject {
+        val payload = JSONObject()
+        payload.put("version", 1)
+        val prefsObject = JSONObject()
+        prefsObject.put(OVERLAY_PREFS_NAME, serializeOverlayPrefs(context))
+        prefsObject.put(MANEUVER_PREFS_NAME, serializeManeuverPrefs(context))
+        prefsObject.put(MAP_RENDER_PREFS_NAME, serializeMapRenderPrefs(context))
+        payload.put("prefs", prefsObject)
+        return payload
+    }
+
+    private fun buildDefaultPayload(context: Context): JSONObject {
+        val defaultsContext = DefaultsContext(context.applicationContext)
+        clearDefaultsPrefs(defaultsContext)
+        return buildPayloadInternal(defaultsContext)
+    }
+
+    private fun clearDefaultsPrefs(context: Context) {
+        listOf(OVERLAY_PREFS_NAME, MANEUVER_PREFS_NAME, MAP_RENDER_PREFS_NAME).forEach { prefName ->
+            context.getSharedPreferences(prefName, Context.MODE_PRIVATE)
+                .edit()
+                .clear()
+                .commit()
+        }
+    }
+
+    private fun normalizePayload(context: Context, payload: JSONObject, sourcePrefs: JSONObject): JSONObject {
+        val normalized = buildDefaultPayload(context)
+        normalized.put("version", payload.optInt("version", 1))
+        val normalizedPrefs = normalized.optJSONObject("prefs") ?: JSONObject().also {
+            normalized.put("prefs", it)
+        }
+        val prefNames = sourcePrefs.keys()
+        while (prefNames.hasNext()) {
+            val prefName = prefNames.next()
+            val mergedEntries = mergePrefEntries(
+                normalizedPrefs.optJSONArray(prefName),
+                sourcePrefs.optJSONArray(prefName)
+            )
+            normalizedPrefs.put(prefName, mergedEntries)
+        }
+        return normalized
+    }
+
+    private fun mergePrefEntries(baseEntries: JSONArray?, overrideEntries: JSONArray?): JSONArray {
+        val merged = linkedMapOf<String, JSONObject>()
+
+        fun consume(entries: JSONArray?) {
+            if (entries == null) return
+            for (index in 0 until entries.length()) {
+                val entry = entries.optJSONObject(index) ?: continue
+                val key = entry.optString("k", "")
+                val type = entry.optString("t", "")
+                if (key.isBlank() || type.isBlank()) continue
+                merged[key] = JSONObject(entry.toString())
+            }
+        }
+
+        consume(baseEntries)
+        consume(overrideEntries)
+
+        val result = JSONArray()
+        merged.keys.sorted().forEach { key ->
+            result.put(merged.getValue(key))
+        }
+        return result
+    }
 
     private fun snapshotFromPayload(payload: JSONObject): Map<String, Map<String, SnapshotEntry>> {
         val prefsObject = payload.optJSONObject("prefs") ?: return emptyMap()
@@ -140,9 +209,17 @@ object PrefsJson {
             items.put(JSONObject().put("k", key).put("t", "i").put("v", value))
         }
 
+        fun putString(key: String, value: String?) {
+            if (value == null) return
+            items.put(JSONObject().put("k", key).put("t", "s").put("v", value))
+        }
+
         val containerPos = OverlayPrefs.containerPositionDp(context)
         val containerSize = OverlayPrefs.containerSizeDp(context)
+        val mapPos = OverlayPrefs.mapPositionDp(context)
+        val mapSize = OverlayPrefs.mapSizeDp(context)
         val navPos = OverlayPrefs.navPositionDp(context)
+        val laneGuidancePos = OverlayPrefs.laneGuidancePositionDp(context)
         val arrowPos = OverlayPrefs.arrowPositionDp(context)
         val speedPos = OverlayPrefs.speedPositionDp(context)
         val hudSpeedPos = OverlayPrefs.hudSpeedPositionDp(context)
@@ -151,8 +228,7 @@ object PrefsJson {
         val speedometerPos = OverlayPrefs.speedometerPositionDp(context)
         val turnSignalsPos = OverlayPrefs.turnSignalsPositionDp(context)
         val clockPos = OverlayPrefs.clockPositionDp(context)
-        val mapPos = OverlayPrefs.mapPositionDp(context)
-        val mapSize = OverlayPrefs.mapSizeDp(context)
+        val customTurnSignalIcon = OverlayPrefs.turnSignalsCustomIcon(context)
 
         putBoolean("overlay_enabled", OverlayPrefs.isEnabled(context))
         putInt("overlay_display_id", OverlayPrefs.displayId(context))
@@ -168,6 +244,8 @@ object PrefsJson {
         putFloat("overlay_map_height_dp", mapSize.y)
         putFloat("overlay_nav_x_dp", navPos.x)
         putFloat("overlay_nav_y_dp", navPos.y)
+        putFloat("overlay_lane_guidance_x_dp", laneGuidancePos.x)
+        putFloat("overlay_lane_guidance_y_dp", laneGuidancePos.y)
         putFloat("overlay_nav_width_dp", OverlayPrefs.navWidthDp(context))
         putFloat("overlay_arrow_x_dp", arrowPos.x)
         putFloat("overlay_arrow_y_dp", arrowPos.y)
@@ -186,6 +264,7 @@ object PrefsJson {
         putFloat("overlay_clock_x_dp", clockPos.x)
         putFloat("overlay_clock_y_dp", clockPos.y)
         putFloat("overlay_nav_scale", OverlayPrefs.navScale(context))
+        putFloat("overlay_lane_guidance_scale", OverlayPrefs.laneGuidanceScale(context))
         putFloat("overlay_nav_text_scale", OverlayPrefs.navTextScale(context))
         putFloat("overlay_speed_text_scale", OverlayPrefs.speedTextScale(context))
         putFloat("overlay_arrow_scale", OverlayPrefs.arrowScale(context))
@@ -197,8 +276,15 @@ object PrefsJson {
         putFloat("overlay_turn_signals_scale", OverlayPrefs.turnSignalsScale(context))
         putFloat("overlay_turn_signals_spacing_dp", OverlayPrefs.turnSignalsSpacingDp(context))
         putInt("overlay_turn_signals_icon_style", OverlayPrefs.turnSignalsIconStyle(context))
+        putString("overlay_turn_signals_custom_icon_uri", customTurnSignalIcon?.uriString)
+        putString("overlay_turn_signals_custom_icon_name", customTurnSignalIcon?.displayName)
+        putString(
+            "overlay_turn_signals_custom_icon_base_direction",
+            customTurnSignalIcon?.baseDirection?.name
+        )
         putFloat("overlay_clock_scale", OverlayPrefs.clockScale(context))
         putFloat("overlay_nav_alpha", OverlayPrefs.navAlpha(context))
+        putFloat("overlay_lane_guidance_alpha", OverlayPrefs.laneGuidanceAlpha(context))
         putFloat("overlay_arrow_alpha", OverlayPrefs.arrowAlpha(context))
         putFloat("overlay_speed_alpha", OverlayPrefs.speedAlpha(context))
         putFloat("overlay_hudspeed_alpha", OverlayPrefs.hudSpeedAlpha(context))
@@ -210,6 +296,7 @@ object PrefsJson {
         putFloat("overlay_container_alpha", OverlayPrefs.containerAlpha(context))
         putFloat("overlay_map_alpha", OverlayPrefs.mapAlpha(context))
         putBoolean("overlay_nav_enabled", OverlayPrefs.navEnabled(context))
+        putBoolean("overlay_lane_guidance_enabled", OverlayPrefs.laneGuidanceEnabled(context))
         putBoolean("overlay_arrow_enabled", OverlayPrefs.arrowEnabled(context))
         putBoolean("overlay_arrow_only_when_no_icon", OverlayPrefs.arrowOnlyWhenNoIcon(context))
         putBoolean("overlay_speed_enabled", OverlayPrefs.speedEnabled(context))
@@ -230,6 +317,7 @@ object PrefsJson {
         putInt("overlay_traffic_light_max_active", OverlayPrefs.trafficLightMaxActive(context))
         putBoolean("native_nav_enabled", OverlayPrefs.nativeNavEnabled(context))
         putBoolean("overlay_map_enabled", OverlayPrefs.mapEnabled(context))
+        putBoolean("overlay_lane_guidance_show_distance", OverlayPrefs.laneGuidanceShowDistance(context))
         putInt("camera_timeout_near", OverlayPrefs.cameraTimeoutNear(context))
         putInt("camera_timeout_far", OverlayPrefs.cameraTimeoutFar(context))
         putInt("traffic_light_timeout", OverlayPrefs.trafficLightTimeout(context))
@@ -240,6 +328,8 @@ object PrefsJson {
         putInt("speedometer_freeze_timeout", OverlayPrefs.speedometerFreezeTimeout(context))
         putBoolean("speed_from_gps", OverlayPrefs.speedFromGps(context))
         putBoolean("info_mirror_starsheep7", OverlayPrefs.infoMirrorStarsheep7Enabled(context))
+        putBoolean("hide_turn_when_far_enabled", OverlayPrefs.hideTurnWhenFarEnabled(context))
+        putInt("hide_turn_when_far_distance_meters", OverlayPrefs.hideTurnWhenFarDistanceMeters(context))
         putBoolean("guide_shown", OverlayPrefs.guideShown(context))
 
         return items
@@ -285,8 +375,17 @@ object PrefsJson {
             items.put(JSONObject().put("k", key).put("t", "s").put("v", value))
         }
 
-        val settings = MapRenderSettingsStore.current()
+        fun putStringSet(key: String, value: Set<String>) {
+            val array = JSONArray()
+            value.sorted().forEach { entry ->
+                array.put(entry)
+            }
+            items.put(JSONObject().put("k", key).put("t", "ss").put("v", array))
+        }
+
+        val settings = MapRenderSettingsStore.snapshot(context)
         putFloat("zoom", settings.zoom)
+        putString("map_style_id", settings.mapStyleId)
         putBoolean("auto_zoom_enabled", settings.autoZoomEnabled)
         putFloat("auto_zoom_at_0", settings.autoZoomAt0Kmh)
         putFloat("auto_zoom_at_60", settings.autoZoomAt60Kmh)
@@ -298,6 +397,12 @@ object PrefsJson {
         putBoolean("snap_route_to_roads_enabled", settings.snapRouteToRoadsEnabled)
         putBoolean("snap_location_to_roads_enabled", settings.snapLocationToRoadsEnabled)
         putInt("route_snap_distance_meters", settings.routeSnapDistanceMeters)
+        putBoolean("road_events_enabled", settings.roadEventsEnabled)
+        putInt("road_event_icon_size_px", settings.roadEventIconSizePx)
+        putStringSet("hidden_road_event_types", settings.hiddenRoadEventTypes)
+        putBoolean("trip_status_enabled", settings.tripStatusEnabled)
+        putBoolean("lane_guidance_enabled", settings.laneGuidanceEnabled)
+        putInt("lane_guidance_width_px", settings.laneGuidanceWidthPx)
         putString("offline_region_id", settings.offlineRegionId)
         putString("offline_manual_label", settings.offlineManualLabel)
         settings.offlineManualLat1?.let { putFloat("offline_manual_lat1", it) }
@@ -338,7 +443,9 @@ object PrefsJson {
             }
             is Set<*> -> {
                 val array = JSONArray()
-                value.filterIsInstance<String>().forEach { array.put(it) }
+                value.filterIsInstance<String>().sorted().forEach { item ->
+                    array.put(item)
+                }
                 entry.put("t", "ss")
                 entry.put("v", array)
             }
@@ -353,6 +460,7 @@ object PrefsJson {
         }
         val prefs = context.getSharedPreferences(prefName, Context.MODE_PRIVATE)
         val editor = prefs.edit()
+        editor.clear()
         for (index in 0 until entries.length()) {
             val entry = entries.optJSONObject(index) ?: continue
             val key = entry.optString("k", "")

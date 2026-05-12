@@ -83,7 +83,7 @@ private fun MainActivity.findMatchingPresetId(): String? {
     val currentPayload = PrefsJson.buildPayload(this)
     return presetOptions.firstOrNull { preset ->
         val payload = PresetManager.readPresetPayload(this, preset) ?: return@firstOrNull false
-        PrefsJson.payloadEquals(payload, currentPayload)
+        PrefsJson.payloadEquals(this, payload, currentPayload)
     }?.id
 }
 
@@ -209,7 +209,7 @@ internal fun MainActivity.updatePresetModifiedState() {
         val currentPayload = PrefsJson.buildPayload(this)
         val fallbackPreset = presetOptions.firstOrNull { candidate ->
             val candidatePayload = PresetManager.readPresetPayload(this, candidate) ?: return@firstOrNull false
-            PrefsJson.payloadEquals(candidatePayload, currentPayload)
+            PrefsJson.payloadEquals(this, candidatePayload, currentPayload)
         } ?: presetOptions.firstOrNull { candidate ->
             PresetManager.readPresetPayload(this, candidate) != null
         }
@@ -232,7 +232,7 @@ internal fun MainActivity.updatePresetModifiedState() {
         return
     }
     val currentPayload = PrefsJson.buildPayload(this)
-    val modified = !PrefsJson.payloadEquals(payload, currentPayload)
+    val modified = !PrefsJson.payloadEquals(this, payload, currentPayload)
     setSavePresetEnabled(modified && preset.source == PresetManager.Source.USER)
     presetAdapter?.setModifiedPresetId(if (modified) preset.id else null)
 }

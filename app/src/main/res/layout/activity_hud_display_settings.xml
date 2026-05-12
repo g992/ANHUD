@@ -124,6 +124,40 @@
             android:text="@string/overlay_permission_button" />
 
         <TextView
+            android:id="@+id/locationPermissionStatus"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:textColor="@color/white"
+            android:textSize="16sp"
+            android:visibility="gone" />
+
+        <Button
+            android:id="@+id/requestLocationPermissionButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="@string/location_permission_button"
+            android:visibility="gone" />
+
+        <TextView
+            android:id="@+id/backgroundLocationPermissionStatus"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:textColor="@color/white"
+            android:textSize="16sp"
+            android:visibility="gone" />
+
+        <Button
+            android:id="@+id/requestBackgroundLocationPermissionButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="@string/background_location_permission_button"
+            android:visibility="gone" />
+
+        <TextView
             android:id="@+id/notificationPermissionStatus"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"

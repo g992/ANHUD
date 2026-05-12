@@ -297,9 +297,9 @@ object MapRenderSettingsStore {
         synchronized(this) {
             if (initialized) return
             prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            currentSettings = readSettings()
+            currentSettings = readSettings(prefs)
             prefsListener = SharedPreferences.OnSharedPreferenceChangeListener { _, _ ->
-                currentSettings = readSettings()
+                currentSettings = readSettings(prefs)
                 notifyListeners(currentSettings)
             }
             prefs.registerOnSharedPreferenceChangeListener(prefsListener)
@@ -308,6 +308,12 @@ object MapRenderSettingsStore {
     }
 
     fun current(): MapRenderSettings = currentSettings
+
+    internal fun snapshot(context: Context): MapRenderSettings {
+        return readSettings(
+            context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        )
+    }
 
     fun update(transform: (MapRenderSettings) -> MapRenderSettings) {
         check(initialized) { "MapRenderSettingsStore is not initialized" }
@@ -355,33 +361,33 @@ object MapRenderSettingsStore {
         listeners.forEach { it(settings) }
     }
 
-    private fun readSettings(): MapRenderSettings {
+    private fun readSettings(source: SharedPreferences): MapRenderSettings {
         return MapRenderSettings(
-            zoom = prefs.getFloat(KEY_ZOOM, 17.8f).toDouble(),
-            mapStyleId = prefs.getString(KEY_MAP_STYLE_ID, MAP_STYLE_ID_MINIMAL) ?: MAP_STYLE_ID_MINIMAL,
-            autoZoomEnabled = prefs.getBoolean(KEY_AUTO_ZOOM_ENABLED, false),
-            autoZoomAt0Kmh = prefs.getFloat(KEY_AUTO_ZOOM_AT_0, 20.0f).toDouble(),
-            autoZoomAt60Kmh = prefs.getFloat(KEY_AUTO_ZOOM_AT_60, 15.0f).toDouble(),
-            autoZoomAt90Kmh = prefs.getFloat(KEY_AUTO_ZOOM_AT_90, 10.0f).toDouble(),
-            tilt = prefs.getFloat(KEY_TILT, 58.0f).toDouble(),
-            arrowScalePercent = prefs.getInt(KEY_ARROW_SCALE, MAP_ARROW_SCALE_MAX_PERCENT),
-            cacheSizeStep = prefs.getInt(KEY_CACHE_SIZE_STEP, 2),
-            downloadRouteEnabled = prefs.getBoolean(KEY_DOWNLOAD_ROUTE, false),
-            snapRouteToRoadsEnabled = prefs.getBoolean(KEY_SNAP_ROUTE_TO_ROADS, false),
-            snapLocationToRoadsEnabled = prefs.getBoolean(KEY_SNAP_LOCATION_TO_ROADS, false),
-            routeSnapDistanceMeters = prefs.getInt(KEY_ROUTE_SNAP_DISTANCE, MAP_ROUTE_SNAP_DEFAULT_METERS),
-            roadEventsEnabled = prefs.getBoolean(KEY_ROAD_EVENTS_ENABLED, true),
-            roadEventIconSizePx = prefs.getInt(KEY_ROAD_EVENT_ICON_SIZE, ROAD_EVENT_ICON_SIZE_DEFAULT_PX),
-            hiddenRoadEventTypes = prefs.getStringSet(KEY_HIDDEN_ROAD_EVENT_TYPES, emptySet()).orEmpty(),
-            tripStatusEnabled = prefs.getBoolean(KEY_TRIP_STATUS_ENABLED, true),
-            laneGuidanceEnabled = prefs.getBoolean(KEY_LANE_GUIDANCE_ENABLED, true),
-            laneGuidanceWidthPx = prefs.getInt(KEY_LANE_GUIDANCE_WIDTH, LANE_GUIDANCE_WIDTH_DEFAULT_PX),
-            offlineRegionId = prefs.getString(KEY_OFFLINE_REGION_ID, null),
-            offlineManualLabel = prefs.getString(KEY_OFFLINE_MANUAL_LABEL, null),
-            offlineManualLat1 = prefs.getOptionalFloat(KEY_OFFLINE_MANUAL_LAT1),
-            offlineManualLon1 = prefs.getOptionalFloat(KEY_OFFLINE_MANUAL_LON1),
-            offlineManualLat2 = prefs.getOptionalFloat(KEY_OFFLINE_MANUAL_LAT2),
-            offlineManualLon2 = prefs.getOptionalFloat(KEY_OFFLINE_MANUAL_LON2),
+            zoom = source.getFloat(KEY_ZOOM, 17.8f).toDouble(),
+            mapStyleId = source.getString(KEY_MAP_STYLE_ID, MAP_STYLE_ID_MINIMAL) ?: MAP_STYLE_ID_MINIMAL,
+            autoZoomEnabled = source.getBoolean(KEY_AUTO_ZOOM_ENABLED, false),
+            autoZoomAt0Kmh = source.getFloat(KEY_AUTO_ZOOM_AT_0, 20.0f).toDouble(),
+            autoZoomAt60Kmh = source.getFloat(KEY_AUTO_ZOOM_AT_60, 15.0f).toDouble(),
+            autoZoomAt90Kmh = source.getFloat(KEY_AUTO_ZOOM_AT_90, 10.0f).toDouble(),
+            tilt = source.getFloat(KEY_TILT, 58.0f).toDouble(),
+            arrowScalePercent = source.getInt(KEY_ARROW_SCALE, MAP_ARROW_SCALE_MAX_PERCENT),
+            cacheSizeStep = source.getInt(KEY_CACHE_SIZE_STEP, 2),
+            downloadRouteEnabled = source.getBoolean(KEY_DOWNLOAD_ROUTE, false),
+            snapRouteToRoadsEnabled = source.getBoolean(KEY_SNAP_ROUTE_TO_ROADS, false),
+            snapLocationToRoadsEnabled = source.getBoolean(KEY_SNAP_LOCATION_TO_ROADS, false),
+            routeSnapDistanceMeters = source.getInt(KEY_ROUTE_SNAP_DISTANCE, MAP_ROUTE_SNAP_DEFAULT_METERS),
+            roadEventsEnabled = source.getBoolean(KEY_ROAD_EVENTS_ENABLED, true),
+            roadEventIconSizePx = source.getInt(KEY_ROAD_EVENT_ICON_SIZE, ROAD_EVENT_ICON_SIZE_DEFAULT_PX),
+            hiddenRoadEventTypes = source.getStringSet(KEY_HIDDEN_ROAD_EVENT_TYPES, emptySet()).orEmpty(),
+            tripStatusEnabled = source.getBoolean(KEY_TRIP_STATUS_ENABLED, true),
+            laneGuidanceEnabled = source.getBoolean(KEY_LANE_GUIDANCE_ENABLED, true),
+            laneGuidanceWidthPx = source.getInt(KEY_LANE_GUIDANCE_WIDTH, LANE_GUIDANCE_WIDTH_DEFAULT_PX),
+            offlineRegionId = source.getString(KEY_OFFLINE_REGION_ID, null),
+            offlineManualLabel = source.getString(KEY_OFFLINE_MANUAL_LABEL, null),
+            offlineManualLat1 = source.getOptionalFloat(KEY_OFFLINE_MANUAL_LAT1),
+            offlineManualLon1 = source.getOptionalFloat(KEY_OFFLINE_MANUAL_LON1),
+            offlineManualLat2 = source.getOptionalFloat(KEY_OFFLINE_MANUAL_LAT2),
+            offlineManualLon2 = source.getOptionalFloat(KEY_OFFLINE_MANUAL_LON2),
         ).normalized()
     }
 }

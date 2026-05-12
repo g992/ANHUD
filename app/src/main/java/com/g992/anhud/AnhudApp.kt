@@ -3,7 +3,8 @@ package com.g992.anhud
 import android.app.Application
 import android.content.IntentFilter
 import android.os.Build
-import com.yandex.mapkit.MapKitFactory
+import org.maplibre.android.MapLibre
+import org.maplibre.android.WellKnownTileServer
 
 class AnhudApp : Application() {
     private val mapRouteTelemetryReceiver = MapRouteTelemetryReceiver()
@@ -11,10 +12,8 @@ class AnhudApp : Application() {
     override fun onCreate() {
         super.onCreate()
         PerformanceDebugMonitor.start(this)
-        if (BuildConfig.MAPKIT_API_KEY.isNotBlank()) {
-            MapKitFactory.setApiKey(BuildConfig.MAPKIT_API_KEY)
-        }
-        MapKitFactory.initialize(applicationContext)
+        MapLibre.getInstance(applicationContext, null, WellKnownTileServer.MapLibre)
+        initializeMapTileProviderFallbacks(applicationContext)
         MapRenderSettingsStore.initialize(applicationContext)
         MapRouteTelemetryStore.initialize(applicationContext)
         MapCacheController.initialize(applicationContext)

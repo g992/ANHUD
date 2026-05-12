@@ -14,13 +14,15 @@ import kotlin.math.roundToInt
 
 private const val TRIP_STATUS_TEXT_SIDE_OFFSET_RATIO = 0.03f
 private const val TRIP_STATUS_PROGRESS_HEIGHT_MULTIPLIER = 2f
+private const val TRIP_STATUS_PROGRESS_SECTION_RATIO = 0.42f
+private const val TRIP_STATUS_SECTION_GAP_RATIO = 0.05f
 
 internal fun resolveMapTripStatusHeightPx(mapHeightPx: Int, hasProgressBitmap: Boolean): Int {
     if (mapHeightPx <= 0) {
-        return if (hasProgressBitmap) 40 else 30
+        return if (hasProgressBitmap) 46 else 30
     }
     return if (hasProgressBitmap) {
-        (mapHeightPx * 0.19f).roundToInt().coerceIn(28, 44)
+        (mapHeightPx * 0.24f).roundToInt().coerceIn(34, 52)
     } else {
         (mapHeightPx * 0.15f).roundToInt().coerceIn(22, 34)
     }
@@ -42,6 +44,10 @@ class MapTripStatusView @JvmOverloads constructor(
         color = Color.WHITE
         style = Paint.Style.STROKE
         strokeWidth = 2f
+    }
+    private val passedTintPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.argb(142, 115, 115, 115)
+        style = Paint.Style.FILL
     }
     private var distanceText: String = ""
     private var arrivalText: String = ""
@@ -76,19 +82,25 @@ class MapTripStatusView @JvmOverloads constructor(
 
         val bitmap = progressBitmap
         val showProgress = bitmap != null
-        if (bitmap != null) {
-            drawProgressBitmap(canvas, widthPx, heightPx, bitmap)
+        val sectionGap = max(1f, heightPx * TRIP_STATUS_SECTION_GAP_RATIO)
+        val textTop = if (bitmap != null) {
+            val progressSectionHeight = max(1f, heightPx * TRIP_STATUS_PROGRESS_SECTION_RATIO)
+            drawProgressBitmap(canvas, widthPx, progressSectionHeight, bitmap)
+            progressSectionHeight + sectionGap
+        } else {
+            0f
         }
 
         val textSize = if (showProgress) {
-            (heightPx * 0.55f).coerceAtLeast(12f)
+            ((heightPx - textTop) * 0.62f).coerceAtLeast(10f)
         } else {
             (heightPx * 0.60f).coerceAtLeast(12f)
         }
         textPaint.textSize = textSize
         val sidePadding = max(8f, widthPx * TRIP_STATUS_TEXT_SIDE_OFFSET_RATIO)
         val baselineY = if (showProgress) {
-            heightPx - max(4f, heightPx * 0.10f)
+            val metrics = textPaint.fontMetrics
+            textTop + ((heightPx - textTop) * 0.5f) - ((metrics.ascent + metrics.descent) * 0.5f)
         } else {
             val metrics = textPaint.fontMetrics
             (heightPx * 0.5f) - ((metrics.ascent + metrics.descent) * 0.5f)
@@ -111,7 +123,7 @@ class MapTripStatusView @JvmOverloads constructor(
     private fun drawProgressBitmap(
         canvas: Canvas,
         widthPx: Int,
-        heightPx: Int,
+        sectionHeightPx: Float,
         bitmap: Bitmap
     ) {
         val sourceWidth = bitmap.width
@@ -123,16 +135,66 @@ class MapTripStatusView @JvmOverloads constructor(
             1,
             (((sourceHeight * drawWidth) / sourceWidth.toFloat()) * TRIP_STATUS_PROGRESS_HEIGHT_MULTIPLIER).roundToInt()
         )
-        val bottomMarginPx = 1f
-        if (drawHeight > heightPx - bottomMarginPx) {
-            drawHeight = max(1, (heightPx - bottomMarginPx).roundToInt())
+        val topMarginPx = 1f
+        if (drawHeight > sectionHeightPx - topMarginPx) {
+            drawHeight = max(1, (sectionHeightPx - topMarginPx).roundToInt())
             drawWidth = max(1, ((sourceWidth * drawHeight) / sourceHeight.toFloat()).roundToInt())
         }
         val left = ((widthPx - drawWidth) * 0.5f).coerceAtLeast(0f)
-        val top = (heightPx - bottomMarginPx - drawHeight).coerceAtLeast(0f)
+        val top = topMarginPx
         val dst = RectF(left, top, left + drawWidth, top + drawHeight)
         canvas.drawBitmap(bitmap, null, dst, null)
+        detectPassedBoundaryRatio(bitmap)?.let { boundaryRatio ->
+            val passedRight = left + (drawWidth * boundaryRatio)
+            if (passedRight > left) {
+                canvas.drawRect(left, top, passedRight, top + drawHeight, passedTintPaint)
+            }
+        }
         canvas.drawRect(dst, progressStrokePaint)
+    }
+
+    private fun detectPassedBoundaryRatio(bitmap: Bitmap): Float? {
+        val width = bitmap.width
+        val height = bitmap.height
+        if (width <= 0 || height <= 0) return null
+        val minYellowPixelsPerColumn = max(3, (height * 0.22f).roundToInt())
+        var bestStart = -1
+        var bestEnd = -1
+        var currentStart = -1
+        for (x in 0 until width) {
+            var yellowCount = 0
+            for (y in 0 until height) {
+                if (isTripStatusMarkerColor(bitmap.getPixel(x, y))) {
+                    yellowCount += 1
+                }
+            }
+            val isMarkerColumn = yellowCount >= minYellowPixelsPerColumn
+            if (isMarkerColumn) {
+                if (currentStart < 0) {
+                    currentStart = x
+                }
+                if (bestStart < 0 || (x - currentStart) > (bestEnd - bestStart)) {
+                    bestStart = currentStart
+                    bestEnd = x
+                }
+            } else {
+                currentStart = -1
+            }
+        }
+        if (bestStart < 0 || bestEnd < bestStart) return null
+        return (bestStart / width.toFloat()).coerceIn(0f, 1f)
+    }
+
+    private fun isTripStatusMarkerColor(pixel: Int): Boolean {
+        if (Color.alpha(pixel) < 140) return false
+        val red = Color.red(pixel)
+        val green = Color.green(pixel)
+        val blue = Color.blue(pixel)
+        return red >= 170 &&
+            green >= 120 &&
+            blue <= 150 &&
+            red >= blue + 35 &&
+            green >= blue + 20
     }
 
     private fun buildSignature(distance: String, arrival: String, time: String, bitmap: Bitmap?): Int {

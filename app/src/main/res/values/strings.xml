@@ -50,6 +50,10 @@
     <string name="overlay_permission_granted">Разрешение на оверлей: есть</string>
     <string name="overlay_permission_missing">Разрешение на оверлей: нет</string>
     <string name="overlay_permission_button">Разрешить оверлей</string>
+    <string name="location_permission_missing">GPS: нет доступа к геопозиции. Карта и GPS-скорость не смогут получать координаты.</string>
+    <string name="location_permission_button">Разрешить геопозицию</string>
+    <string name="background_location_permission_missing">GPS в фоне: сейчас разрешено только при использовании приложения. После старта HUD не получит координаты, пока ANHUD не открыт. Выберите «Разрешать всегда».</string>
+    <string name="background_location_permission_button">Разрешить всегда</string>
     <string name="overlay_enable_label">Показывать HUD</string>
     <string name="native_nav_enable_label">Использовать штатную навигацию</string>
     <string name="mapkit_show_map_label">Отобразить карту</string>
@@ -171,6 +175,10 @@
     <string name="map_settings_tilt_value">%1$d°</string>
     <string name="map_settings_arrow_scale">Размер маркера положения</string>
     <string name="map_settings_cache">Размер кэша карт</string>
+    <string name="map_settings_cache_value">%1$s из %2$s</string>
+    <string name="map_settings_cache_error">ошибка кэша: %1$s</string>
+    <string name="map_settings_cache_clear">Очистить кэш</string>
+    <string name="map_settings_cache_clearing">Очистка...</string>
     <string name="map_settings_route_download">Подгружать маршрут в кэш</string>
     <string name="map_settings_route_download_hint">При включении приложение заранее прогревает кэш вдоль активного маршрута.</string>
     <string name="map_settings_route_snap">Привязывать маршрут к дорогам</string>
@@ -220,6 +228,7 @@
     <string name="speed_from_gps_label">Брать скорость по GPS</string>
     <string name="speed_from_gps_hint">Скорость рассчитывается по дельте координат GPS, корректировка не применяется.</string>
     <string name="speed_from_gps_permission_denied">Для скорости по GPS нужен доступ к геопозиции.</string>
+    <string name="speed_from_gps_background_permission_denied">Для GPS после старта нужен доступ к геопозиции «Разрешать всегда».</string>
     <string name="info_mirror_starsheep7_label">Отражение информации (Starsheep 7)</string>
     <string name="hide_turn_when_far_enabled_label">Скрывать поворот если до манёвра более 1 км</string>
     <string name="hide_turn_when_far_enabled_label_value">Скрывать поворот если до манёвра более %1$s</string>

@@ -37,6 +37,20 @@ internal fun MainActivity.updatePermissionStatus() {
     permissionStatus.visibility = overlayVisibility
     requestPermissionButton.visibility = overlayVisibility
 
+    val foregroundLocationMissing = !hasForegroundLocationPermission()
+    val foregroundLocationVisibility = if (foregroundLocationMissing) View.VISIBLE else View.GONE
+    locationPermissionStatus.text = getString(R.string.location_permission_missing)
+    locationPermissionStatus.visibility = foregroundLocationVisibility
+    requestLocationPermissionButton.visibility = foregroundLocationVisibility
+
+    val backgroundLocationMissing = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q &&
+        hasForegroundLocationPermission() &&
+        !hasBackgroundLocationPermission()
+    val backgroundLocationVisibility = if (backgroundLocationMissing) View.VISIBLE else View.GONE
+    backgroundLocationPermissionStatus.text = getString(R.string.background_location_permission_missing)
+    backgroundLocationPermissionStatus.visibility = backgroundLocationVisibility
+    requestBackgroundLocationPermissionButton.visibility = backgroundLocationVisibility
+
     val notificationMissing = !isNotificationAccessGranted(this)
     val notificationVisibility = if (notificationMissing) View.VISIBLE else View.GONE
     notificationPermissionStatus.text = if (notificationMissing) {
