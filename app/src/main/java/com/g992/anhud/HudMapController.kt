@@ -66,8 +66,12 @@ private const val MAP_LANE_MANEUVER_IMAGE_ID = "anhud-map-lane-maneuver-image"
 private const val MAP_MAX_FPS = 15
 private const val MAP_MAX_LAST_KNOWN_LOCATION_AGE_MS = 10_000L
 private const val MAP_TRACKING_TOP_PADDING_RATIO = 0.97f
+private const val MAP_TRACKING_BOTTOM_PADDING_DP = 18
+private const val MAP_ROUTE_TRIM_BACKTRACK_METERS = 6.0
+private const val MAP_ROUTE_TRIM_MAX_DISTANCE_METERS = 35.0
 private const val MAP_ROUTE_ALERT_PASSED_TOLERANCE_METERS = 12.0
 private const val MAP_ROUTE_PROGRESS_RENDER_GRANULARITY_METERS = 25.0
+private const val MAP_ROUTE_TRIM_RENDER_GRANULARITY_METERS = 5.0
 private const val MAP_LOCATION_TELEPORT_AGE_MS = 4_000L
 private const val MAP_LOCATION_TELEPORT_DISTANCE_METERS = 80f
 private const val MAP_HEADING_FALLBACK_MIN_DISTANCE_METERS = 2.0
@@ -421,7 +425,7 @@ class HudMapController(
             return
         }
         val featureCollection = if (points.size >= 2) {
-            buildRouteFeatureCollection(points, currentSnapshot.routeJams)
+            buildRouteFeatureCollection(points, currentSnapshot.routeJams, currentDisplayLocation)
         } else {
             RouteFeatureCollection(FeatureCollection.fromFeatures(emptyArray()), visibleRunCount = 0)
         }
@@ -437,11 +441,14 @@ class HudMapController(
     private fun buildRouteFeatureCollection(
         points: List<LatLng>,
         jams: List<String>,
+        displayLocation: Location?,
     ): RouteFeatureCollection {
         if (points.size < 2) {
             return RouteFeatureCollection(FeatureCollection.fromFeatures(emptyArray()), visibleRunCount = 0)
         }
-        val features = buildRouteRuns(points, jams).map { run ->
+        val features = buildRouteRuns(
+            trimPassedRouteSegments(points, jams, displayLocation)
+        ).map { run ->
             Feature.fromGeometry(
                 LineString.fromLngLats(
                     run.points.map { point ->
@@ -600,6 +607,8 @@ class HudMapController(
             append(snapshot.state.orEmpty())
             append('|')
             append(snapshot.routePoints.size)
+            append('|')
+            append(currentDisplayLocation.routeProgressRenderKey(MAP_ROUTE_TRIM_RENDER_GRANULARITY_METERS))
         }
     }
 
@@ -669,8 +678,9 @@ class HudMapController(
 
     private fun trackingPadding(): IntArray {
         val side = dp(18)
+        val bottom = if (mapView.height > 0) dp(MAP_TRACKING_BOTTOM_PADDING_DP) else 0
         val top = (mapView.height.coerceAtLeast(1) * MAP_TRACKING_TOP_PADDING_RATIO).roundToInt()
-        return intArrayOf(side, top, side, 0)
+        return intArrayOf(side, top, side, bottom)
     }
 
     private fun trackingPaddingValues(): DoubleArray {
@@ -839,11 +849,12 @@ private fun applySpeedBucketHysteresis(currentBucketKmh: Int, speedKmh: Int?): I
 
 private fun routeJamColor(jam: String?): String {
     return when (jam?.lowercase()) {
-        "low" -> "#76BD33"
-        "moderate" -> "#91D255"
-        "heavy" -> "#EA7500"
-        "severe" -> "#9F0000"
-        "blocked" -> "#C10020"
+        "low" -> "#82EA0E"
+        "moderate" -> "#FFFF41"
+        "heavy" -> "#FF5413"
+        "severe" -> "#932100"
+        "blocked" -> "#1A1A1A"
+        "unknown" -> "#A0A0A0"
         else -> "#78C8FF"
     }
 }
@@ -891,21 +902,58 @@ private data class LaneManeuverImage(
     val offsetY: Float,
 )
 
-private fun buildRouteRuns(points: List<LatLng>, jams: List<String>): List<RouteRun> {
+private data class VisibleRouteSegment(
+    val start: LatLng,
+    val end: LatLng,
+    val jam: String?,
+)
+
+private fun trimPassedRouteSegments(
+    points: List<LatLng>,
+    jams: List<String>,
+    location: Location?,
+): List<VisibleRouteSegment> {
     if (points.size < 2) return emptyList()
+    val trimStart = resolveRouteTrimStart(
+        points = points,
+        location = location,
+        backtrackMeters = MAP_ROUTE_TRIM_BACKTRACK_METERS,
+        maxProjectionDistanceMeters = MAP_ROUTE_TRIM_MAX_DISTANCE_METERS
+    )
+    val visibleSegments = mutableListOf<VisibleRouteSegment>()
+    val firstEnd = points[trimStart.segmentIndex + 1]
+    if (distanceMetersBetween(trimStart.point, firstEnd) > 1.0) {
+        visibleSegments += VisibleRouteSegment(
+            start = trimStart.point,
+            end = firstEnd,
+            jam = jams.getOrNull(trimStart.segmentIndex)
+        )
+    }
+    for (index in (trimStart.segmentIndex + 1) until points.lastIndex) {
+        visibleSegments += VisibleRouteSegment(
+            start = points[index],
+            end = points[index + 1],
+            jam = jams.getOrNull(index)
+        )
+    }
+    return visibleSegments
+}
+
+private fun buildRouteRuns(segments: List<VisibleRouteSegment>): List<RouteRun> {
+    if (segments.isEmpty()) return emptyList()
     val runs = mutableListOf<RouteRun>()
-    var currentJam = jams.getOrNull(0)
-    val currentPoints = mutableListOf(points[0], points[1])
-    for (index in 1 until points.lastIndex) {
-        val jam = jams.getOrNull(index)
-        if (jam == currentJam) {
-            currentPoints += points[index + 1]
+    var currentJam = segments.first().jam
+    val currentPoints = mutableListOf(segments.first().start, segments.first().end)
+    for (index in 1 until segments.size) {
+        val segment = segments[index]
+        if (segment.jam == currentJam) {
+            currentPoints += segment.end
         } else {
             runs += RouteRun(currentJam, currentPoints.toList())
-            currentJam = jam
+            currentJam = segment.jam
             currentPoints.clear()
-            currentPoints += points[index]
-            currentPoints += points[index + 1]
+            currentPoints += segment.start
+            currentPoints += segment.end
         }
     }
     runs += RouteRun(currentJam, currentPoints.toList())
@@ -1017,14 +1065,15 @@ private fun routeAlertsGeometryToken(alerts: List<MapRouteAlert>): String {
     }
 }
 
-private fun Location?.routeProgressRenderKey(): String {
+private fun Location?.routeProgressRenderKey(granularityMeters: Double = MAP_ROUTE_PROGRESS_RENDER_GRANULARITY_METERS): String {
     if (this == null) return "no-location"
-    val latBucket = (latitude * 111_320.0 / MAP_ROUTE_PROGRESS_RENDER_GRANULARITY_METERS).roundToInt()
+    val safeGranularity = granularityMeters.coerceAtLeast(1.0)
+    val latBucket = (latitude * 111_320.0 / safeGranularity).roundToInt()
     val lonScale = 111_320.0 * kotlin.math.cos(Math.toRadians(latitude))
     val lonBucket = if (abs(lonScale) <= 0.0001) {
         0
     } else {
-        (longitude * lonScale / MAP_ROUTE_PROGRESS_RENDER_GRANULARITY_METERS).roundToInt()
+        (longitude * lonScale / safeGranularity).roundToInt()
     }
     return "$latBucket|$lonBucket"
 }

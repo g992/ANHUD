@@ -441,17 +441,23 @@ internal fun MainActivity.openPositionDialog(
         if (target == OverlayTarget.NAVIGATION) {
             navWidthDp = navWidthDp.coerceIn(OverlayPrefs.NAV_WIDTH_MIN_DP, containerWidthDp)
         }
-        val showNav = target == OverlayTarget.NAVIGATION
-        val showLaneGuidance = target == OverlayTarget.LANE_GUIDANCE
-        val showMap = target == OverlayTarget.MAP
-        val showArrow = target == OverlayTarget.ARROW
-        val showSpeed = target == OverlayTarget.SPEED
-        val showHudSpeed = target == OverlayTarget.HUDSPEED
-        val showRoadCamera = target == OverlayTarget.ROAD_CAMERA
-        val showTrafficLight = target == OverlayTarget.TRAFFIC_LIGHT
-        val showSpeedometer = target == OverlayTarget.SPEEDOMETER
-        val showTurnSignals = target == OverlayTarget.TURN_SIGNALS
-        val showClock = target == OverlayTarget.CLOCK
+        val showOthers = showOthersCheck.isChecked
+        val showNav = target == OverlayTarget.NAVIGATION || (showOthers && OverlayPrefs.navEnabled(activity))
+        val showLaneGuidance = target == OverlayTarget.LANE_GUIDANCE ||
+            (showOthers && OverlayPrefs.laneGuidanceEnabled(activity))
+        val showMap = target == OverlayTarget.MAP || (showOthers && OverlayPrefs.mapEnabled(activity))
+        val showArrow = target == OverlayTarget.ARROW || (showOthers && OverlayPrefs.arrowEnabled(activity))
+        val showSpeed = target == OverlayTarget.SPEED || (showOthers && OverlayPrefs.speedEnabled(activity))
+        val showHudSpeed = target == OverlayTarget.HUDSPEED || (showOthers && OverlayPrefs.hudSpeedEnabled(activity))
+        val showRoadCamera = target == OverlayTarget.ROAD_CAMERA ||
+            (showOthers && OverlayPrefs.roadCameraEnabled(activity))
+        val showTrafficLight = target == OverlayTarget.TRAFFIC_LIGHT ||
+            (showOthers && OverlayPrefs.trafficLightEnabled(activity))
+        val showSpeedometer = target == OverlayTarget.SPEEDOMETER ||
+            (showOthers && OverlayPrefs.speedometerEnabled(activity))
+        val showTurnSignals = target == OverlayTarget.TURN_SIGNALS ||
+            (showOthers && OverlayPrefs.turnSignalsEnabled(activity))
+        val showClock = target == OverlayTarget.CLOCK || (showOthers && OverlayPrefs.clockEnabled(activity))
         previewMapBlock.visibility = if (showMap) View.VISIBLE else View.GONE
         previewNavBlock.visibility = if (showNav) View.VISIBLE else View.GONE
         previewLaneGuidanceBlock.visibility = if (showLaneGuidance) View.VISIBLE else View.GONE
@@ -700,7 +706,8 @@ internal fun MainActivity.openPositionDialog(
                 turnSignalsPoint.x,
                 turnSignalsPoint.y,
                 containerWidthPx,
-                containerHeightPx
+                containerHeightPx,
+                anchorXFraction = 0.5f
             )
             previewTurnSignals.alpha = if (target == OverlayTarget.TURN_SIGNALS) {
                 brightnessSeek.progress.coerceIn(0, 100) / 100f
@@ -755,7 +762,16 @@ internal fun MainActivity.openPositionDialog(
         } else {
             previewHudContainer
         }
-        val (dpX, dpY) = positionDpFromPreview(dragContainer, view, previewX, previewY, boundsWidth, boundsHeight)
+        val turnSignalsAnchorX = if (target == OverlayTarget.TURN_SIGNALS) 0.5f else 0f
+        val (dpX, dpY) = positionDpFromPreview(
+            dragContainer,
+            view,
+            previewX,
+            previewY,
+            boundsWidth,
+            boundsHeight,
+            anchorXFraction = turnSignalsAnchorX
+        )
         val point = PointF(dpX, dpY)
         when (target) {
             OverlayTarget.MAP -> {
@@ -1703,16 +1719,28 @@ private fun MainActivity.positionPreviewView(
     dpX: Float,
     dpY: Float,
     boundsWidthPx: Float,
-    boundsHeightPx: Float
+    boundsHeightPx: Float,
+    anchorXFraction: Float = 0f,
+    anchorYFraction: Float = 0f
 ) {
     val posPxX = dpX * displayDensity
     val posPxY = dpY * displayDensity
-    val maxX = maxPreviewX(container, view)
-    val maxY = maxPreviewY(container, view)
-    val previewX = if (boundsWidthPx > 0f) (posPxX / boundsWidthPx) * maxX else 0f
-    val previewY = if (boundsHeightPx > 0f) (posPxY / boundsHeightPx) * maxY else 0f
-    view.x = min(max(previewX, 0f), maxX)
-    view.y = min(max(previewY, 0f), maxY)
+    val previewWidthPx = container.width.toFloat().coerceAtLeast(1f)
+    val previewHeightPx = container.height.toFloat().coerceAtLeast(1f)
+    view.x = OverlayPositionMath.previewStartPx(
+        positionPx = posPxX,
+        boundsPx = boundsWidthPx,
+        previewContainerPx = previewWidthPx,
+        contentPx = previewViewWidth(view),
+        anchorFraction = anchorXFraction
+    )
+    view.y = OverlayPositionMath.previewStartPx(
+        positionPx = posPxY,
+        boundsPx = boundsHeightPx,
+        previewContainerPx = previewHeightPx,
+        contentPx = previewViewHeight(view),
+        anchorFraction = anchorYFraction
+    )
 }
 
 private fun MainActivity.showRoadEventsDialog() {
@@ -1941,16 +1969,24 @@ private fun MainActivity.positionDpFromPreview(
     previewX: Float,
     previewY: Float,
     boundsWidthPx: Float,
-    boundsHeightPx: Float
+    boundsHeightPx: Float,
+    anchorXFraction: Float = 0f,
+    anchorYFraction: Float = 0f
 ): Pair<Float, Float> {
-    val maxX = maxPreviewX(container, view).coerceAtLeast(1f)
-    val maxY = maxPreviewY(container, view).coerceAtLeast(1f)
-    val clampedX = min(max(previewX, 0f), maxX)
-    val clampedY = min(max(previewY, 0f), maxY)
-    val fractionX = clampedX / maxX
-    val fractionY = clampedY / maxY
-    val displayX = fractionX * boundsWidthPx
-    val displayY = fractionY * boundsHeightPx
+    val displayX = OverlayPositionMath.positionPxFromPreviewStart(
+        previewStartPx = previewX,
+        boundsPx = boundsWidthPx,
+        previewContainerPx = container.width.toFloat().coerceAtLeast(1f),
+        contentPx = previewViewWidth(view),
+        anchorFraction = anchorXFraction
+    )
+    val displayY = OverlayPositionMath.positionPxFromPreviewStart(
+        previewStartPx = previewY,
+        boundsPx = boundsHeightPx,
+        previewContainerPx = container.height.toFloat().coerceAtLeast(1f),
+        contentPx = previewViewHeight(view),
+        anchorFraction = anchorYFraction
+    )
     val dpX = (displayX / displayDensity).toFloat()
     val dpY = (displayY / displayDensity).toFloat()
     return dpX to dpY

@@ -1920,9 +1920,17 @@ class HudOverlayController(private val context: Context) {
             state.trafficLights
         }
         val laneGuidanceManeuver = routeSnapshot.laneManeuver
-        val laneGuidanceVisible = laneGuidanceAllowed && (previewLaneGuidance || laneGuidanceManeuver != null)
+        val laneGuidanceVisible = laneGuidanceAllowed && if (showPreview) {
+            previewLaneGuidance
+        } else {
+            laneGuidanceManeuver != null
+        }
         val laneGuidanceTransparentFillVisible = !laneGuidanceVisible && laneGuidanceHadVisibleContent
-        val mapVisible = mapAllowed && (previewMap || hasMapRoute)
+        val mapVisible = mapAllowed && if (showPreview) {
+            previewMap
+        } else {
+            hasMapRoute
+        }
         val mapTransparentFillVisible = !mapVisible && mapHadVisibleContent
         mapTransparentFillPending = mapTransparentFillVisible
 
@@ -2008,11 +2016,23 @@ class HudOverlayController(private val context: Context) {
             hasCameraData || hudSpeedGpsStatusVisible || hudSpeedTransparentFillVisible
         }
         val speedometerVisible = if (showPreview) previewSpeedometer else state.speedKmh != null
-        val turnSignalsVisible = turnSignalsAllowed &&
-            (previewTurnSignals || turnSignalLeft || turnSignalRight || turnSignalsTransparentFillVisible)
+        val turnSignalsVisible = if (showPreview) {
+            turnSignalsAllowed && previewTurnSignals
+        } else {
+            turnSignalsAllowed &&
+                (turnSignalLeft || turnSignalRight || turnSignalsTransparentFillVisible)
+        }
         val clockVisible = if (showPreview) previewClock else true
-        val roadCameraVisible = roadCameraAllowed && (previewRoadCamera || roadCameraHasData)
-        val trafficLightVisible = trafficLightAllowed && (previewTrafficLight || trafficLights.isNotEmpty())
+        val roadCameraVisible = if (showPreview) {
+            roadCameraAllowed && previewRoadCamera
+        } else {
+            roadCameraAllowed && roadCameraHasData
+        }
+        val trafficLightVisible = if (showPreview) {
+            trafficLightAllowed && previewTrafficLight
+        } else {
+            trafficLightAllowed && trafficLights.isNotEmpty()
+        }
         navContainer?.visibility = if (navAllowed && navVisible) View.VISIBLE else View.GONE
         laneGuidanceContainer?.visibility = if (laneGuidanceVisible || laneGuidanceTransparentFillVisible) {
             View.VISIBLE
@@ -2136,6 +2156,20 @@ class HudOverlayController(private val context: Context) {
             distance.visibility = if (hadDistance) View.INVISIBLE else View.GONE
             container.invalidate()
             container.postInvalidateOnAnimation()
+            return
+        }
+        if (preview) {
+            laneGuidanceHudBitmapSourceToken = Int.MIN_VALUE
+            laneGuidanceHudBitmapSourceGenId = -1
+            laneGuidanceHudBitmapSourceWidth = 0
+            laneGuidanceHudBitmapSourceHeight = 0
+            laneGuidanceHudBitmap = null
+            image.setImageDrawable(null)
+            image.visibility = View.GONE
+            placeholder.visibility = View.VISIBLE
+            distance.text = context.getString(R.string.preview_hudspeed_distance)
+            distance.visibility = if (showDistance) View.VISIBLE else View.GONE
+            container.background = null
             return
         }
         val bitmap = maneuver?.bitmap?.takeUnless { it.isRecycled || it.width <= 0 || it.height <= 0 }
@@ -3122,7 +3156,8 @@ class HudOverlayController(private val context: Context) {
                 turnSignalsAlpha,
                 metrics.density,
                 containerWidth,
-                containerHeight
+                containerHeight,
+                anchorXFraction = 0.5f
             )
         }
         clockView?.let {
@@ -3200,9 +3235,14 @@ class HudOverlayController(private val context: Context) {
     }
 
     private fun updateMapView(displayContext: Context, containerWidthPx: Int, containerHeightPx: Int) {
-        val previewMap = previewMode && previewTarget == OverlayBroadcasts.PREVIEW_TARGET_MAP
+        val previewMap = previewMode && (
+            previewTarget == null ||
+                previewTarget == OverlayBroadcasts.PREVIEW_TARGET_MAP ||
+                previewShowOthers
+            )
         val routeSnapshot = MapRouteTelemetryStore.current()
         val hasMapRoute = routeSnapshot.hasRoute
+        val runtimeMapVisible = !previewMode && mapEnabled && hasMapRoute
         logMapState(
             stage = "update",
             previewMap = previewMap,
@@ -3233,7 +3273,7 @@ class HudOverlayController(private val context: Context) {
             containerWidthPx.toFloat(),
             containerHeightPx.toFloat()
         )
-        if ((!mapEnabled || !hasMapRoute) && !previewMap) {
+        if (!previewMap && !runtimeMapVisible) {
             releaseMapController()
             if (mapTransparentFillPending) {
                 clearMapBlock(mapContainer, mapContent, mapTripStatus, placeholder)
@@ -3254,7 +3294,11 @@ class HudOverlayController(private val context: Context) {
         if (previewMap) {
             hudMapController?.setVisible(false)
             mapContent.visibility = View.GONE
-            placeholder.background = ContextCompat.getDrawable(displayContext, R.drawable.bg_nav_block_outline)
+            placeholder.background = if (previewTarget == OverlayBroadcasts.PREVIEW_TARGET_MAP) {
+                ContextCompat.getDrawable(displayContext, R.drawable.bg_nav_block_outline)
+            } else {
+                null
+            }
             mapPlaceholderLabelView?.text = displayContext.getString(R.string.position_map_block_label)
             mapPlaceholderIconView?.let { icon ->
                 val iconSizePx = MapRenderSettingsStore.current().roadEventIconSizePx
@@ -3417,7 +3461,9 @@ class HudOverlayController(private val context: Context) {
         alpha: Float,
         density: Float,
         containerWidthPx: Float,
-        containerHeightPx: Float
+        containerHeightPx: Float,
+        anchorXFraction: Float = 0f,
+        anchorYFraction: Float = 0f
     ) {
         val (rawWidth, rawHeight) = resolveViewSize(view, containerWidthPx, shouldMeasureExactWidth(view))
         if (rawWidth <= 0f || rawHeight <= 0f) {
@@ -3437,10 +3483,18 @@ class HudOverlayController(private val context: Context) {
         view.alpha = alpha
         val xPx = positionDp.x * density
         val yPx = positionDp.y * density
-        val maxX = (containerWidthPx - scaledWidth).coerceAtLeast(0f)
-        val maxY = (containerHeightPx - scaledHeight).coerceAtLeast(0f)
-        view.x = xPx.coerceIn(0f, maxX)
-        view.y = yPx.coerceIn(0f, maxY)
+        view.x = OverlayPositionMath.runtimeStartPx(
+            positionPx = xPx,
+            containerPx = containerWidthPx,
+            contentPx = scaledWidth,
+            anchorFraction = anchorXFraction
+        )
+        view.y = OverlayPositionMath.runtimeStartPx(
+            positionPx = yPx,
+            containerPx = containerHeightPx,
+            contentPx = scaledHeight,
+            anchorFraction = anchorYFraction
+        )
     }
 
     private fun resolveViewSize(view: View, maxWidthPx: Float, exactWidth: Boolean): Pair<Float, Float> {

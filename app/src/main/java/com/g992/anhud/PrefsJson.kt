@@ -261,6 +261,10 @@ object PrefsJson {
         putFloat("overlay_speedometer_y_dp", speedometerPos.y)
         putFloat("overlay_turn_signals_x_dp", turnSignalsPos.x)
         putFloat("overlay_turn_signals_y_dp", turnSignalsPos.y)
+        putBoolean(
+            OverlayPrefs.KEY_TURN_SIGNALS_X_CENTER_MIGRATED,
+            OverlayPrefs.turnSignalsPositionUsesCenterX(context)
+        )
         putFloat("overlay_clock_x_dp", clockPos.x)
         putFloat("overlay_clock_y_dp", clockPos.y)
         putFloat("overlay_nav_scale", OverlayPrefs.navScale(context))

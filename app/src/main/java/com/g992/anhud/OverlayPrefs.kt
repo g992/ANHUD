@@ -36,6 +36,7 @@ object OverlayPrefs {
     private const val KEY_SPEEDOMETER_Y_DP = "overlay_speedometer_y_dp"
     private const val KEY_TURN_SIGNALS_X_DP = "overlay_turn_signals_x_dp"
     private const val KEY_TURN_SIGNALS_Y_DP = "overlay_turn_signals_y_dp"
+    internal const val KEY_TURN_SIGNALS_X_CENTER_MIGRATED = "overlay_turn_signals_x_center_migrated_v1"
     private const val KEY_CLOCK_X_DP = "overlay_clock_x_dp"
     private const val KEY_CLOCK_Y_DP = "overlay_clock_y_dp"
     private const val KEY_NAV_SCALE = "overlay_nav_scale"
@@ -328,7 +329,21 @@ object OverlayPrefs {
         val maxY = (containerHeightDp - TURN_SIGNALS_BLOCK_HEIGHT_DP - DEFAULT_MARGIN_DP).coerceAtLeast(0f)
         val defaultY = (speedometerPos.y + SPEEDOMETER_BLOCK_HEIGHT_DP + TURN_SIGNALS_BLOCK_GAP_DP)
             .coerceIn(0f, maxY)
-        val x = prefs.getFloat(KEY_TURN_SIGNALS_X_DP, speedometerPos.x)
+        val defaultX = speedometerPos.x + turnSignalsHalfWidthDp(context)
+        val x = when {
+            prefs.getBoolean(KEY_TURN_SIGNALS_X_CENTER_MIGRATED, false) -> {
+                prefs.getFloat(KEY_TURN_SIGNALS_X_DP, defaultX)
+            }
+            prefs.contains(KEY_TURN_SIGNALS_X_DP) -> {
+                val migratedX = prefs.getFloat(KEY_TURN_SIGNALS_X_DP, speedometerPos.x) + turnSignalsHalfWidthDp(context)
+                prefs.edit()
+                    .putFloat(KEY_TURN_SIGNALS_X_DP, migratedX)
+                    .putBoolean(KEY_TURN_SIGNALS_X_CENTER_MIGRATED, true)
+                    .apply()
+                migratedX
+            }
+            else -> defaultX
+        }
         val y = prefs.getFloat(KEY_TURN_SIGNALS_Y_DP, defaultY)
         return PointF(x, y)
     }
@@ -337,6 +352,7 @@ object OverlayPrefs {
         prefs(context).edit()
             .putFloat(KEY_TURN_SIGNALS_X_DP, xDp)
             .putFloat(KEY_TURN_SIGNALS_Y_DP, yDp)
+            .putBoolean(KEY_TURN_SIGNALS_X_CENTER_MIGRATED, true)
             .apply()
     }
 
@@ -466,6 +482,10 @@ object OverlayPrefs {
             .apply()
     }
 
+    internal fun turnSignalsPositionUsesCenterX(context: Context): Boolean {
+        return prefs(context).getBoolean(KEY_TURN_SIGNALS_X_CENTER_MIGRATED, false)
+    }
+
     fun turnSignalsMaxSpacingDp(context: Context, scale: Float = turnSignalsScale(context)): Float {
         val containerWidthDp = containerSizeDp(context).x
         val safeScale = scale.coerceAtLeast(0.01f)
@@ -492,6 +512,17 @@ object OverlayPrefs {
                 spacingDp.coerceIn(TURN_SIGNALS_ICON_SIZE_DP, maxSpacingDp)
             )
             .apply()
+    }
+
+    private fun turnSignalsHalfWidthDp(
+        context: Context,
+        scale: Float = turnSignalsScale(context),
+        spacingDp: Float = turnSignalsSpacingDp(context)
+    ): Float {
+        val safeScale = scale.coerceAtLeast(0f)
+        val safeSpacingDp = spacingDp.coerceAtLeast(TURN_SIGNALS_ICON_SIZE_DP)
+        val rawWidthDp = TURN_SIGNALS_ICON_SIZE_DP + safeSpacingDp
+        return (rawWidthDp * safeScale) / 2f
     }
 
     fun turnSignalsIconStyle(context: Context): Int {

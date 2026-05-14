@@ -15,6 +15,11 @@ internal data class SharedSegmentProjection(
     val distanceMeters: Double,
 )
 
+internal data class RouteTrimStart(
+    val segmentIndex: Int,
+    val point: LatLng,
+)
+
 internal fun findClosestRouteProjectionOnRoute(
     points: List<LatLng>,
     location: Location,
@@ -53,6 +58,56 @@ internal fun findNearestRouteSegmentIndexForLocation(points: List<LatLng>, locat
     return findClosestRouteProjectionOnRoute(points, location)?.segmentIndex ?: -1
 }
 
+internal fun resolveRouteTrimStart(
+    points: List<LatLng>,
+    location: Location?,
+    backtrackMeters: Double,
+    maxProjectionDistanceMeters: Double,
+): RouteTrimStart {
+    return if (location == null) {
+        resolveRouteTrimStart(
+            points = points,
+            targetLat = null,
+            targetLon = null,
+            backtrackMeters = backtrackMeters,
+            maxProjectionDistanceMeters = maxProjectionDistanceMeters
+        )
+    } else {
+        resolveRouteTrimStart(
+            points = points,
+            targetLat = location.latitude,
+            targetLon = location.longitude,
+            backtrackMeters = backtrackMeters,
+            maxProjectionDistanceMeters = maxProjectionDistanceMeters
+        )
+    }
+}
+
+internal fun resolveRouteTrimStart(
+    points: List<LatLng>,
+    targetLat: Double?,
+    targetLon: Double?,
+    backtrackMeters: Double,
+    maxProjectionDistanceMeters: Double,
+): RouteTrimStart {
+    if (points.size < 2) {
+        val start = points.firstOrNull() ?: LatLng(0.0, 0.0)
+        return RouteTrimStart(segmentIndex = 0, point = start)
+    }
+    val projection = if (targetLat == null || targetLon == null) {
+        null
+    } else {
+        findClosestRouteProjectionOnRoute(points, targetLat, targetLon)
+            ?.takeIf { it.distanceMeters <= maxProjectionDistanceMeters }
+    }
+    val trimStart = projection?.let { backtrackRouteProjection(points, it, backtrackMeters) }
+    return if (trimStart == null) {
+        RouteTrimStart(segmentIndex = 0, point = points.first())
+    } else {
+        RouteTrimStart(segmentIndex = trimStart.segmentIndex, point = trimStart.projectedPoint)
+    }
+}
+
 internal fun distanceMetersBetween(start: LatLng, end: LatLng): Double {
     val latitudeScale = 111_320.0
     val longitudeScale = 111_320.0 * cos(Math.toRadians((start.latitude + end.latitude) / 2.0))
@@ -67,6 +122,49 @@ internal fun interpolateRouteLatLng(start: LatLng, end: LatLng, fraction: Double
         start.latitude + ((end.latitude - start.latitude) * safeFraction),
         start.longitude + ((end.longitude - start.longitude) * safeFraction)
     )
+}
+
+internal fun backtrackRouteProjection(
+    points: List<LatLng>,
+    projection: SharedRouteProjection,
+    backtrackMeters: Double,
+): SharedRouteProjection {
+    if (backtrackMeters <= 0.0 || projection.segmentIndex !in 0 until points.lastIndex) {
+        return projection
+    }
+    var remaining = backtrackMeters
+    val currentSegmentStart = points[projection.segmentIndex]
+    val distanceFromSegmentStart = distanceMetersBetween(currentSegmentStart, projection.projectedPoint)
+    if (distanceFromSegmentStart >= remaining) {
+        return projection.copy(
+            projectedPoint = interpolateRouteLatLng(
+                start = projection.projectedPoint,
+                end = currentSegmentStart,
+                fraction = remaining / distanceFromSegmentStart
+            )
+        )
+    }
+
+    remaining -= distanceFromSegmentStart
+    var segmentIndex = projection.segmentIndex - 1
+    while (segmentIndex >= 0) {
+        val segmentStart = points[segmentIndex]
+        val segmentEnd = points[segmentIndex + 1]
+        val segmentLength = distanceMetersBetween(segmentStart, segmentEnd)
+        if (segmentLength >= remaining) {
+            return projection.copy(
+                segmentIndex = segmentIndex,
+                projectedPoint = interpolateRouteLatLng(
+                    start = segmentEnd,
+                    end = segmentStart,
+                    fraction = remaining / segmentLength
+                )
+            )
+        }
+        remaining -= segmentLength
+        segmentIndex -= 1
+    }
+    return projection.copy(segmentIndex = 0, projectedPoint = points.first())
 }
 
 private fun projectPointOntoRouteSegment(

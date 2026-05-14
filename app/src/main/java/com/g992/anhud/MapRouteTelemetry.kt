@@ -115,6 +115,15 @@ private data class RuntimeRoute(
     val lanePointsRaw: String?,
 )
 
+private data class NormalizedRouteJams(
+    val values: List<String>,
+    val rawTypes: List<String>,
+    val unsupportedTypes: List<String>,
+) {
+    val containsUnknown: Boolean
+        get() = rawTypes.any { it == "UNKNOWN" }
+}
+
 class MapRouteTelemetryReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         MapRouteTelemetryStore.handleIntent(context.applicationContext, intent)
@@ -130,6 +139,7 @@ object MapRouteTelemetryStore {
     private var currentSnapshot = MapRouteTelemetrySnapshot()
     private var parsedSampledRouteCache: ParsedSampledRoute? = null
     private var lastSnapshotLogKey: String? = null
+    private var lastRouteJamsDebugKey: String? = null
     private var laneManeuverToken: Int = 0
     private var appContext: Context? = null
     private var routeLocation: Location? = null
@@ -193,6 +203,14 @@ object MapRouteTelemetryStore {
                         lanePointsRaw = lanePointsRaw
                     )
                 } else {
+                    if (!jams.isNullOrBlank()) {
+                        Log.d(
+                            ROUTE_TELEMETRY_TAG,
+                            "route telemetry intent: jams-only update routeId=${routeId.orEmpty()} " +
+                                "currentRouteToken=${runtimeRoute?.routeToken.orEmpty()} " +
+                                "jamsToken=${jams.routeRawToken().orEmpty()}"
+                        )
+                    }
                     runtimeRoute?.let { route ->
                         runtimeRoute = route.copy(
                             jamsRaw = jams ?: route.jamsRaw,
@@ -776,14 +794,21 @@ object MapRouteTelemetryStore {
         val alertsRaw = runtimeRouteAlertsRaw.takeIf {
             route != null && routeId.matchesRouteId(runtimeRouteAlertsRouteId)
         }
-        val jams = normalizeJams(jamsRaw, points.size - 1)
+        val normalizedJams = normalizeJams(jamsRaw, points.size - 1)
+        logRouteJams(
+            routeId = routeId,
+            routeToken = routeToken,
+            jamsRaw = jamsRaw,
+            routeSegmentCount = (points.size - 1).coerceAtLeast(0),
+            normalized = normalizedJams
+        )
         return MapRouteTelemetrySnapshot(
             state = runtimeState,
             hasExternalTelemetry = route != null || runtimeState != null,
             routeToken = routeToken,
             routeJamsToken = jamsRaw.routeRawToken(),
             routePoints = points,
-            routeJams = jams,
+            routeJams = normalizedJams.values,
             routeAlerts = parseRouteAlerts(alertsRaw),
             routeAlertsToken = alertsRaw.routeRawToken(runtimeRouteAlertsRouteId),
             laneManeuver = resolveActiveLaneGuidance(route?.lanePointsRaw, routeId),
@@ -874,25 +899,69 @@ object MapRouteTelemetryStore {
         return candidates.firstOrNull()?.point
     }
 
-    private fun normalizeJams(raw: String?, size: Int): List<String> {
-        if (size <= 0) return emptyList()
-        val base = raw.orEmpty()
+    private fun normalizeJams(raw: String?, size: Int): NormalizedRouteJams {
+        if (size <= 0) {
+            return NormalizedRouteJams(
+                values = emptyList(),
+                rawTypes = emptyList(),
+                unsupportedTypes = emptyList()
+            )
+        }
+        val rawTypes = raw.orEmpty()
             .split(Regex("[,;]"))
             .mapNotNull { jam ->
-                when (jam.trim().uppercase()) {
-                    "FREE" -> "low"
-                    "LIGHT" -> "moderate"
-                    "HARD" -> "heavy"
-                    "VERY_HARD", "VERYHARD" -> "severe"
-                    "BLOCKED" -> "blocked"
-                    else -> null
-                }
+                jam.trim()
+                    .uppercase()
+                    .takeIf { it.isNotBlank() }
             }
+        val unsupportedTypes = rawTypes
+            .filterNot(::isSupportedRouteJamType)
+            .distinct()
+        val normalized = rawTypes
+            .mapNotNull(::normalizeRouteJamType)
             .toMutableList()
-        while (base.size < size) {
-            base += base.lastOrNull() ?: "low"
+        while (normalized.size < size) {
+            normalized += normalized.lastOrNull() ?: "low"
         }
-        return base.take(size)
+        return NormalizedRouteJams(
+            values = normalized.take(size),
+            rawTypes = rawTypes,
+            unsupportedTypes = unsupportedTypes
+        )
+    }
+
+    private fun logRouteJams(
+        routeId: String?,
+        routeToken: String?,
+        jamsRaw: String?,
+        routeSegmentCount: Int,
+        normalized: NormalizedRouteJams,
+    ) {
+        val debugKey = buildString {
+            append(routeToken.orEmpty())
+            append('|')
+            append(jamsRaw.routeRawToken().orEmpty())
+            append('|')
+            append(routeSegmentCount)
+        }
+        if (debugKey == lastRouteJamsDebugKey) return
+        lastRouteJamsDebugKey = debugKey
+
+        val rawCount = normalized.rawTypes.size
+        val rawPreview = normalized.rawTypes.take(16).joinToString(separator = ",").ifBlank { "-" }
+        val buckets = normalized.values.distinct().joinToString(separator = ",").ifBlank { "-" }
+        val unsupported = normalized.unsupportedTypes.joinToString(separator = ",").ifBlank { "-" }
+        val hasLengthMismatch = rawCount > 0 && rawCount != routeSegmentCount
+        val message =
+            "route jams telemetry: routeId=${routeId.orEmpty()} routeToken=${routeToken.orEmpty()} " +
+                "segmentCount=$routeSegmentCount rawCount=$rawCount normalizedCount=${normalized.values.size} " +
+                "containsUnknown=${normalized.containsUnknown} unsupported=$unsupported " +
+                "rawPreview=$rawPreview buckets=$buckets"
+        if (normalized.containsUnknown || normalized.unsupportedTypes.isNotEmpty() || hasLengthMismatch) {
+            Log.w(ROUTE_TELEMETRY_TAG, message)
+        } else {
+            Log.d(ROUTE_TELEMETRY_TAG, message)
+        }
     }
 
     private data class ParsedSampledRoute(
@@ -963,6 +1032,22 @@ object MapRouteTelemetryStore {
     private fun String?.matchesRouteId(other: String?): Boolean {
         if (this.isNullOrBlank() || other.isNullOrBlank()) return true
         return trim() == other.trim()
+    }
+
+    private fun isSupportedRouteJamType(value: String): Boolean {
+        return normalizeRouteJamType(value) != null
+    }
+
+    private fun normalizeRouteJamType(value: String): String? {
+        return when (value.trim().uppercase()) {
+            "FREE" -> "low"
+            "LIGHT" -> "moderate"
+            "HARD" -> "heavy"
+            "VERY_HARD", "VERYHARD" -> "severe"
+            "BLOCKED" -> "blocked"
+            "UNKNOWN" -> "unknown"
+            else -> null
+        }
     }
 
     private fun List<LatLng>.routePointsToken(routeId: String?): String {
