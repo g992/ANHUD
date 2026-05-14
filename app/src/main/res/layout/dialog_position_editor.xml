@@ -548,23 +548,6 @@
             android:textSize="14sp" />
     </LinearLayout>
 
-    <TextView
-        android:id="@+id/dialogMapStyleLabel"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="12dp"
-        android:text="@string/position_map_style_label"
-        android:textColor="@color/white"
-        android:textSize="16sp"
-        android:visibility="gone" />
-
-    <Spinner
-        android:id="@+id/dialogMapStyleSpinner"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="6dp"
-        android:visibility="gone" />
-
     <LinearLayout
         android:id="@+id/dialogRoadEventsRow"
         android:layout_width="match_parent"

@@ -115,6 +115,7 @@ class SettingsActivity : ScaledActivity() {
     private lateinit var mapAutoZoomNinetyValue: TextView
     private lateinit var mapTiltValue: TextView
     private lateinit var mapArrowValue: TextView
+    private lateinit var mapTileProviderValue: TextView
     private lateinit var mapCacheValue: TextView
     private lateinit var mapCacheClearButton: Button
     private lateinit var mapRouteSnapDistanceValue: TextView
@@ -125,6 +126,7 @@ class SettingsActivity : ScaledActivity() {
     private lateinit var mapLocationSnapSwitch: SwitchCompat
     private var mapAutoZoomConfigRows: List<View> = emptyList()
     private var mapRouteSnapConfigRows: List<View> = emptyList()
+    private var mapTileProviderButtons: Map<MapTileProvider, Button> = emptyMap()
     private var mapCacheButtons: List<Button> = emptyList()
     private var offlineDownloadsAdapter: OfflineDownloadsAdapter? = null
 
@@ -614,6 +616,7 @@ class SettingsActivity : ScaledActivity() {
         mapAutoZoomNinetyValue = createMapValueView()
         mapTiltValue = createMapValueView()
         mapArrowValue = createMapValueView()
+        mapTileProviderValue = createMapValueView()
         mapCacheValue = createMapValueView()
         mapRouteSnapDistanceValue = createMapValueView()
         mapOfflineRegionValue = createMapValueView()
@@ -782,6 +785,16 @@ class SettingsActivity : ScaledActivity() {
                 MapCacheController.clearCache()
             }
         }
+        mapTileProviderButtons = MapTileProvider.entries.associateWith { provider ->
+            createSettingsButton(provider.displayName, SETTINGS_BUTTON_SECONDARY).apply {
+                setOnClickListener {
+                    if (isSyncingUi || provider.id == MapRenderSettingsStore.current().tileProviderId) {
+                        return@setOnClickListener
+                    }
+                    confirmMapTileProviderChange(provider)
+                }
+            }
+        }
         mapCacheButtons = cacheButtons
         val cacheRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -795,6 +808,9 @@ class SettingsActivity : ScaledActivity() {
                 )
             }
         }
+        val tileProviderRow = createMapButtonRow(
+            MapTileProvider.entries.mapNotNull { provider -> mapTileProviderButtons[provider] }
+        )
 
         val offlineDownloadsButton = createSettingsButton(
             getString(R.string.map_settings_offline_downloads),
@@ -825,6 +841,14 @@ class SettingsActivity : ScaledActivity() {
                     *autoZoomRows.toTypedArray(),
                     createMapSliderRow(getString(R.string.map_settings_tilt), mapTiltValue, tiltSeek),
                     createMapSliderRow(getString(R.string.map_settings_arrow_scale), mapArrowValue, arrowSeek),
+                    createMapValueRow(getString(R.string.map_settings_tile_source), mapTileProviderValue, tileProviderRow),
+                    createMapHintView(
+                        if (MapTileProvider.STARLINE.isConfigured()) {
+                            getString(R.string.map_settings_tile_source_hint)
+                        } else {
+                            getString(R.string.map_settings_tile_source_unavailable)
+                        }
+                    ),
                     createMapValueRow(getString(R.string.map_settings_cache), mapCacheValue, cacheRow),
                     createMapButtonRow(listOf(mapCacheClearButton)),
                 )
@@ -962,6 +986,7 @@ class SettingsActivity : ScaledActivity() {
         mapAutoZoomNinetyValue.text = formatMapDecimal(settings.autoZoomAt90Kmh)
         mapTiltValue.text = getString(R.string.map_settings_tilt_value, settings.tilt.roundToInt())
         mapArrowValue.text = settings.arrowScalePercent.toString()
+        mapTileProviderValue.text = resolveConfiguredMapTileProvider(settings.tileProviderId).displayName
         mapRouteSnapDistanceValue.text = getString(
             R.string.map_settings_route_snap_distance_value,
             settings.routeSnapDistanceMeters
@@ -978,8 +1003,31 @@ class SettingsActivity : ScaledActivity() {
             settings.snapLocationToRoadsEnabled
         ) View.VISIBLE else View.GONE
         mapRouteSnapConfigRows.forEach { it.visibility = routeSnapVisibility }
+        refreshMapTileProviderButtons(settings.tileProviderId)
         refreshMapCacheButtons(settings.cacheSizeStep)
         syncMapCacheUi(MapCacheController.current())
+    }
+
+    private fun refreshMapTileProviderButtons(selectedProviderId: String) {
+        val selectedProvider = resolveConfiguredMapTileProvider(selectedProviderId)
+        val clearingCache = MapCacheController.current().clearingCache
+        mapTileProviderButtons.forEach { (provider, button) ->
+            val configured = provider.isConfigured()
+            styleSettingsButton(
+                button = button,
+                variant = if (provider == selectedProvider) {
+                    SETTINGS_BUTTON_PRIMARY
+                } else {
+                    SETTINGS_BUTTON_SECONDARY
+                }
+            )
+            button.isEnabled = configured && !clearingCache
+            button.alpha = when {
+                !configured -> 0.45f
+                clearingCache -> 0.65f
+                else -> 1f
+            }
+        }
     }
 
     private fun refreshMapCacheButtons(selectedStep: Int) {
@@ -1321,6 +1369,14 @@ class SettingsActivity : ScaledActivity() {
         }
     }
 
+    private fun createMapHintView(text: String): View {
+        return TextView(this).apply {
+            this.text = text
+            setTextColor(Color.parseColor("#808080"))
+            textSize = 12f
+        }
+    }
+
     private fun createSettingsButton(
         label: String,
         variant: Int = SETTINGS_BUTTON_SECONDARY,
@@ -1366,6 +1422,9 @@ class SettingsActivity : ScaledActivity() {
         if (::mapCacheValue.isInitialized) {
             mapCacheValue.text = formatMapCacheValue(snapshot)
         }
+        if (::mapTileProviderValue.isInitialized) {
+            refreshMapTileProviderButtons(MapRenderSettingsStore.current().tileProviderId)
+        }
         if (::mapCacheClearButton.isInitialized) {
             mapCacheClearButton.isEnabled = !snapshot.clearingCache
             mapCacheClearButton.text = getString(
@@ -1390,6 +1449,127 @@ class SettingsActivity : ScaledActivity() {
                 snapshot.offlineDownloadedRegionIds.size
             )
         }
+    }
+
+    private fun confirmMapTileProviderChange(provider: MapTileProvider) {
+        if (!provider.isConfigured()) {
+            showToast(R.string.map_settings_tile_source_unavailable)
+            return
+        }
+        var dialog: AlertDialog? = null
+        val cancelButton = createSettingsButton(
+            getString(android.R.string.cancel),
+            SETTINGS_BUTTON_SECONDARY
+        ).apply {
+            minHeight = dp(36)
+            minimumHeight = dp(36)
+            maxLines = 2
+            isSingleLine = false
+            gravity = Gravity.CENTER
+            textSize = 13f
+            includeFontPadding = true
+            setPadding(dp(16), dp(8), dp(16), dp(8))
+        }
+        val confirmButton = createSettingsButton(
+            getString(R.string.map_settings_tile_source_change_confirm),
+            SETTINGS_BUTTON_PRIMARY
+        ).apply {
+            minHeight = dp(36)
+            minimumHeight = dp(36)
+            maxLines = 2
+            isSingleLine = false
+            gravity = Gravity.CENTER
+            textSize = 13f
+            includeFontPadding = true
+            setPadding(dp(16), dp(8), dp(16), dp(8))
+        }
+        val buttonsColumn = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(
+                confirmButton,
+                LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                )
+            )
+            addView(
+                cancelButton,
+                LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply {
+                    topMargin = dp(14)
+                }
+            )
+        }
+        val content = ScrollView(this).apply {
+            isFillViewport = true
+            overScrollMode = View.OVER_SCROLL_IF_CONTENT_SCROLLS
+            setPadding(dp(12), dp(12), dp(12), dp(12))
+            addView(
+                LinearLayout(context).apply {
+                    orientation = LinearLayout.VERTICAL
+                    background = roundedDrawable(
+                        fill = Color.parseColor("#101010"),
+                        stroke = ContextCompat.getColor(this@SettingsActivity, R.color.hud_blue),
+                        radiusDp = 12
+                    )
+                    setPadding(dp(20), dp(20), dp(20), dp(20))
+                    addView(TextView(context).apply {
+                        text = getString(R.string.map_settings_tile_source_change_title)
+                        setTextColor(ContextCompat.getColor(context, R.color.white))
+                        textSize = 20f
+                        setTypeface(typeface, android.graphics.Typeface.BOLD)
+                    })
+                    addView(TextView(context).apply {
+                        text = getString(
+                            R.string.map_settings_tile_source_change_message,
+                            provider.displayName
+                        )
+                        setTextColor(Color.parseColor("#D0D0D0"))
+                        textSize = 15f
+                        setLineSpacing(0f, 1.15f)
+                    }, LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT,
+                        LinearLayout.LayoutParams.WRAP_CONTENT
+                    ).apply {
+                        topMargin = dp(10)
+                    })
+                    addView(
+                        buttonsColumn,
+                        LinearLayout.LayoutParams(
+                            LinearLayout.LayoutParams.MATCH_PARENT,
+                            LinearLayout.LayoutParams.WRAP_CONTENT
+                        ).apply {
+                            topMargin = dp(18)
+                        }
+                    )
+                },
+                ViewGroup.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT
+                )
+            )
+        }
+        dialog = AlertDialog.Builder(this, R.style.ThemeOverlay_ANHUD_Dialog)
+            .setView(content)
+            .create()
+        cancelButton.setOnClickListener {
+            dialog?.dismiss()
+        }
+        confirmButton.setOnClickListener {
+            dialog?.dismiss()
+            MapRenderSettingsStore.update { it.copy(tileProviderId = provider.id) }
+            syncMapUiFromPrefs()
+            MapCacheController.clearCache()
+            showToast(R.string.map_settings_tile_source_changed)
+        }
+        dialog.show()
+        dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
+        dialog.window?.setLayout(
+            (resources.displayMetrics.widthPixels * 0.92f).roundToInt(),
+            ViewGroup.LayoutParams.WRAP_CONTENT
+        )
     }
 
     private fun currentOfflineMaxZoom(): Double {

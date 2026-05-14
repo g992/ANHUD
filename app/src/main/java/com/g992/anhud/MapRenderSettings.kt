@@ -45,7 +45,7 @@ data class ManualOfflineBounds(
 
 data class MapRenderSettings(
     val zoom: Double = 17.8,
-    val mapStyleId: String = MAP_STYLE_ID_MINIMAL,
+    val tileProviderId: String = defaultMapTileProvider().id,
     val autoZoomEnabled: Boolean = false,
     val autoZoomAt0Kmh: Double = 20.0,
     val autoZoomAt60Kmh: Double = 15.0,
@@ -78,7 +78,6 @@ const val MAP_ROUTE_SNAP_MAX_METERS = 10
 const val MAP_ROUTE_SNAP_DEFAULT_METERS = 5
 const val MAP_ZOOM_MIN = 10.0
 const val MAP_ZOOM_MAX = 21.0
-const val MAP_STYLE_ID_MINIMAL = "minimal"
 const val ROAD_EVENT_ICON_SIZE_MIN_PX = 20
 const val ROAD_EVENT_ICON_SIZE_MAX_PX = 60
 const val ROAD_EVENT_ICON_SIZE_DEFAULT_PX = 35
@@ -141,37 +140,6 @@ fun resolveRoadEventIconRes(typeRaw: String?): Int =
     RoadEventOptions.firstOrNull { it.typeKey == resolveRoadEventToggleKey(typeRaw) }?.iconRes
         ?: R.drawable.pin_alerts_other
 
-data class MapStyleOption(
-    val id: String,
-    val title: String,
-    val assetPath: String,
-)
-
-val MapStyleOptions = listOf(
-    MapStyleOption(
-        id = MAP_STYLE_ID_MINIMAL,
-        title = "Минимальный",
-        assetPath = "styles/map_minimal.json"
-    ),
-    MapStyleOption(
-        id = "buildings",
-        title = "Здания",
-        assetPath = "styles/map_buildings.json"
-    ),
-)
-
-fun resolveMapStyleOption(styleId: String?): MapStyleOption =
-    MapStyleOptions.firstOrNull { it.id == normalizeMapStyleId(styleId) } ?: MapStyleOptions.first()
-
-private fun normalizeMapStyleId(styleId: String?): String {
-    return when (styleId) {
-        "hud_minimal" -> MAP_STYLE_ID_MINIMAL
-        "minimal_trafficlights" -> MAP_STYLE_ID_MINIMAL
-        "buildings_trafficlights" -> "buildings"
-        else -> styleId ?: MAP_STYLE_ID_MINIMAL
-    }
-}
-
 val MapCacheSizeOptionsMb = intArrayOf(256, 512, 1024, 2048, 4096)
 
 fun MapRenderSettings.cacheSizeMb(): Int =
@@ -197,7 +165,7 @@ fun MapRenderSettings.manualOfflineBoundsOrNull(): ManualOfflineBounds? {
 fun MapRenderSettings.normalized(): MapRenderSettings {
     val base = copy(
         zoom = zoom.coerceIn(MAP_ZOOM_MIN, MAP_ZOOM_MAX),
-        mapStyleId = resolveMapStyleOption(mapStyleId).id,
+        tileProviderId = resolveConfiguredMapTileProvider(tileProviderId).id,
         autoZoomAt0Kmh = autoZoomAt0Kmh.coerceIn(MAP_ZOOM_MIN, MAP_ZOOM_MAX),
         autoZoomAt60Kmh = autoZoomAt60Kmh.coerceIn(MAP_ZOOM_MIN, MAP_ZOOM_MAX),
         autoZoomAt90Kmh = autoZoomAt90Kmh.coerceIn(MAP_ZOOM_MIN, MAP_ZOOM_MAX),
@@ -258,7 +226,7 @@ fun MapRenderSettings.normalized(): MapRenderSettings {
 object MapRenderSettingsStore {
     private const val PREFS_NAME = "map_render_settings"
     private const val KEY_ZOOM = "zoom"
-    private const val KEY_MAP_STYLE_ID = "map_style_id"
+    private const val KEY_TILE_PROVIDER_ID = "tile_provider_id"
     private const val KEY_AUTO_ZOOM_ENABLED = "auto_zoom_enabled"
     private const val KEY_AUTO_ZOOM_AT_0 = "auto_zoom_at_0"
     private const val KEY_AUTO_ZOOM_AT_60 = "auto_zoom_at_60"
@@ -320,7 +288,7 @@ object MapRenderSettingsStore {
         val updated = transform(currentSettings).normalized()
         prefs.edit()
             .putFloat(KEY_ZOOM, updated.zoom.toFloat())
-            .putString(KEY_MAP_STYLE_ID, updated.mapStyleId)
+            .putString(KEY_TILE_PROVIDER_ID, updated.tileProviderId)
             .putBoolean(KEY_AUTO_ZOOM_ENABLED, updated.autoZoomEnabled)
             .putFloat(KEY_AUTO_ZOOM_AT_0, updated.autoZoomAt0Kmh.toFloat())
             .putFloat(KEY_AUTO_ZOOM_AT_60, updated.autoZoomAt60Kmh.toFloat())
@@ -364,7 +332,8 @@ object MapRenderSettingsStore {
     private fun readSettings(source: SharedPreferences): MapRenderSettings {
         return MapRenderSettings(
             zoom = source.getFloat(KEY_ZOOM, 17.8f).toDouble(),
-            mapStyleId = source.getString(KEY_MAP_STYLE_ID, MAP_STYLE_ID_MINIMAL) ?: MAP_STYLE_ID_MINIMAL,
+            tileProviderId = source.getString(KEY_TILE_PROVIDER_ID, defaultMapTileProvider().id)
+                ?: defaultMapTileProvider().id,
             autoZoomEnabled = source.getBoolean(KEY_AUTO_ZOOM_ENABLED, false),
             autoZoomAt0Kmh = source.getFloat(KEY_AUTO_ZOOM_AT_0, 20.0f).toDouble(),
             autoZoomAt60Kmh = source.getFloat(KEY_AUTO_ZOOM_AT_60, 15.0f).toDouble(),

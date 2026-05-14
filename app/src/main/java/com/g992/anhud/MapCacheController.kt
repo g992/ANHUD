@@ -72,6 +72,7 @@ object MapCacheController {
 
     fun clearCache() {
         val context = appContext ?: return
+        if (snapshot.clearingCache) return
         updateSnapshot {
             it.copy(
                 clearingCache = true,

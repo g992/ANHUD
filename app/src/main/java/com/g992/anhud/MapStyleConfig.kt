@@ -4,9 +4,6 @@ import android.content.Context
 import android.net.Uri
 import org.maplibre.android.maps.Style
 
-const val MAP_STYLE_ASSET_PATH = "styles/hud_minimal.json"
-const val MAP_STYLE_ASSET_URI = "asset://$MAP_STYLE_ASSET_PATH"
-
 enum class MapTileProvider(
     val id: String,
     val displayName: String,
@@ -23,30 +20,36 @@ enum class MapTileProvider(
     }
 }
 
-fun initializeMapTileProviderFallbacks(context: Context) = Unit
+fun initializeMapTileProviderFallbacks(context: Context) {
+    MapStyleTemplateStore.initialize(context)
+}
+
+fun defaultMapTileProvider(): MapTileProvider {
+    return MapTileProvider.OPEN_FREE_MAP
+}
+
+fun resolveMapTileProvider(providerId: String?): MapTileProvider {
+    return MapTileProvider.entries.firstOrNull { it.id == providerId } ?: defaultMapTileProvider()
+}
+
+fun resolveConfiguredMapTileProvider(providerId: String?): MapTileProvider {
+    val preferred = resolveMapTileProvider(providerId)
+    return if (preferred.isConfigured()) preferred else defaultMapTileProvider()
+}
 
 fun currentMapTileProvider(context: Context): MapTileProvider {
-    return if (MapTileProvider.STARLINE.isConfigured()) {
-        MapTileProvider.STARLINE
-    } else {
-        MapTileProvider.OPEN_FREE_MAP
-    }
+    return resolveConfiguredMapTileProvider(MapRenderSettingsStore.current().tileProviderId)
 }
 
 fun advanceMapTileProvider(context: Context, failedProviderId: String): MapTileProvider? = null
 
 fun buildHudMapStyle(context: Context): Style.Builder {
-    return Style.Builder().fromUri(resolveHudMapStyleUri(context))
+    val templateJson = MapStyleTemplateStore.loadTemplateJson(context)
+    val styleJson = prepareHudMapStyleJson(templateJson, currentMapTileProvider(context))
+    return Style.Builder().fromJson(styleJson)
 }
 
-private fun resolveHudMapStyleUri(context: Context): String {
-    return when (currentMapTileProvider(context)) {
-        MapTileProvider.STARLINE -> buildStarLineStyleUrl()
-        MapTileProvider.OPEN_FREE_MAP -> MAP_STYLE_ASSET_URI
-    }
-}
-
-private fun buildStarLineStyleUrl(): String {
+internal fun buildStarLineStyleFetchUrl(): String {
     return Uri.Builder()
         .scheme("https")
         .authority("maps.starline.ru")

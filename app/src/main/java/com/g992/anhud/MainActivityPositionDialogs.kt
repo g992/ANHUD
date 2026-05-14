@@ -12,10 +12,7 @@ import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.SeekBar
-import android.widget.ArrayAdapter
-import android.widget.AdapterView
 import android.widget.Button
-import android.widget.Spinner
 import android.widget.TextView
 import android.graphics.Color
 import androidx.appcompat.app.AlertDialog
@@ -78,8 +75,6 @@ internal fun MainActivity.openPositionDialog(
     val containerHeightLabel = dialogView.findViewById<TextView>(R.id.dialogContainerHeightLabel)
     val containerHeightRow = dialogView.findViewById<View>(R.id.dialogContainerHeightRow)
     val containerHeightSeek = dialogView.findViewById<SeekBar>(R.id.dialogContainerHeightSeek)
-    val mapStyleLabel = dialogView.findViewById<TextView>(R.id.dialogMapStyleLabel)
-    val mapStyleSpinner = dialogView.findViewById<Spinner>(R.id.dialogMapStyleSpinner)
     val roadEventsRow = dialogView.findViewById<View>(R.id.dialogRoadEventsRow)
     val roadEventsCheck = dialogView.findViewById<CheckBox>(R.id.dialogRoadEventsCheck)
     val roadEventsButton = dialogView.findViewById<Button>(R.id.dialogRoadEventsButton)
@@ -280,46 +275,12 @@ internal fun MainActivity.openPositionDialog(
     }
 
     if (target == OverlayTarget.MAP) {
-        mapStyleLabel.visibility = View.VISIBLE
-        mapStyleSpinner.visibility = View.VISIBLE
         roadEventsRow.visibility = View.VISIBLE
         tripStatusRow.visibility = View.VISIBLE
         laneGuidanceRow.visibility = View.VISIBLE
         roadEventsCheck.isChecked = MapRenderSettingsStore.current().roadEventsEnabled
         tripStatusCheck.isChecked = MapRenderSettingsStore.current().tripStatusEnabled
         laneGuidanceCheck.isChecked = MapRenderSettingsStore.current().laneGuidanceEnabled
-        val styleAdapter = object : ArrayAdapter<String>(
-            this,
-            android.R.layout.simple_spinner_item,
-            MapStyleOptions.map { it.title }
-        ) {
-            override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
-                return super.getView(position, convertView, parent).also { view ->
-                    (view as? TextView)?.setTextColor(Color.WHITE)
-                }
-            }
-
-            override fun getDropDownView(position: Int, convertView: View?, parent: ViewGroup): View {
-                return super.getDropDownView(position, convertView, parent).also { view ->
-                    (view as? TextView)?.setTextColor(Color.WHITE)
-                }
-            }
-        }
-        styleAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
-        mapStyleSpinner.adapter = styleAdapter
-        val currentStyleIndex = MapStyleOptions.indexOfFirst {
-            it.id == resolveMapStyleOption(MapRenderSettingsStore.current().mapStyleId).id
-        }.coerceAtLeast(0)
-        mapStyleSpinner.setSelection(currentStyleIndex, false)
-        mapStyleSpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
-            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
-                val option = MapStyleOptions.getOrNull(position) ?: return
-                if (option.id == MapRenderSettingsStore.current().mapStyleId) return
-                MapRenderSettingsStore.update { it.copy(mapStyleId = option.id) }
-            }
-
-            override fun onNothingSelected(parent: AdapterView<*>?) = Unit
-        }
         roadEventsCheck.setOnCheckedChangeListener { _, isChecked ->
             if (isChecked == MapRenderSettingsStore.current().roadEventsEnabled) return@setOnCheckedChangeListener
             MapRenderSettingsStore.update { it.copy(roadEventsEnabled = isChecked) }
@@ -355,8 +316,6 @@ internal fun MainActivity.openPositionDialog(
             showLaneGuidanceDialog()
         }
     } else {
-        mapStyleLabel.visibility = View.GONE
-        mapStyleSpinner.visibility = View.GONE
         roadEventsRow.visibility = View.GONE
         tripStatusRow.visibility = View.GONE
         laneGuidanceRow.visibility = View.GONE

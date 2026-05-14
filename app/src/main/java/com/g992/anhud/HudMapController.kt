@@ -120,6 +120,7 @@ class HudMapController(
     private var lastResolvedDeviceBearing: Float? = null
 
     private val settingsListener: (MapRenderSettings) -> Unit = { settings ->
+        val tileProviderChanged = currentSettings.tileProviderId != settings.tileProviderId
         val locationStyleChanged = currentSettings.arrowScalePercent != settings.arrowScalePercent
         val roadEventSettingsChanged = currentSettings.roadEventsEnabled != settings.roadEventsEnabled ||
             currentSettings.roadEventIconSizePx != settings.roadEventIconSizePx ||
@@ -129,6 +130,9 @@ class HudMapController(
         currentSettings = settings
         if (locationStyleChanged) {
             applyLocationStyle()
+        }
+        if (tileProviderChanged) {
+            mapLibreMap?.let(::loadMapStyle)
         }
         if (roadEventSettingsChanged) {
             routeAlertFeatureCache = null
@@ -165,11 +169,18 @@ class HudMapController(
             }
         }
     }
+    private val styleTemplateListener: () -> Unit = {
+        renderHandler.post {
+            if (released) return@post
+            mapLibreMap?.let(::loadMapStyle)
+        }
+    }
 
     init {
         MapRenderSettingsStore.addListener(settingsListener)
         MapRouteTelemetryStore.addListener(routeListener)
         NavigationHudStore.registerListener(navStateListener)
+        MapStyleTemplateStore.addListener(styleTemplateListener)
         mapView.setBackgroundColor(Color.BLACK)
         mapView.setMaximumFps(MAP_MAX_FPS)
         mapView.setOnTouchListener { _, _: MotionEvent -> true }
@@ -211,6 +222,7 @@ class HudMapController(
         MapRenderSettingsStore.removeListener(settingsListener)
         MapRouteTelemetryStore.removeListener(routeListener)
         NavigationHudStore.unregisterListener(navStateListener)
+        MapStyleTemplateStore.removeListener(styleTemplateListener)
         stopDeviceLocationTracking()
         mapView.onPause()
         mapView.onStop()
@@ -231,6 +243,11 @@ class HudMapController(
         map.uiSettings.setCompassEnabled(false)
         map.uiSettings.setLogoEnabled(false)
         map.uiSettings.setAttributionEnabled(false)
+        loadMapStyle(map)
+    }
+
+    private fun loadMapStyle(map: MapLibreMap) {
+        resetStyleCaches()
         map.setStyle(buildHudMapStyle(context)) { style ->
             Log.d(HUD_MAP_TAG, "map style loaded provider=${currentMapTileProvider(context).id}")
             ensureRouteLayer(style)
@@ -243,6 +260,14 @@ class HudMapController(
             requestTelemetryRender()
             applyTrackingConfig()
         }
+    }
+
+    private fun resetStyleCaches() {
+        routeFeatureCache = null
+        routeAlertFeatureCache = null
+        laneManeuverFeatureCache = null
+        appliedRoadEventIconSizePx = null
+        appliedLaneManeuverImageKey = null
     }
 
     private fun enableLocationComponent(map: MapLibreMap, style: Style) {

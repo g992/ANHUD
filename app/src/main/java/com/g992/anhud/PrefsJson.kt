@@ -385,7 +385,7 @@ object PrefsJson {
 
         val settings = MapRenderSettingsStore.snapshot(context)
         putFloat("zoom", settings.zoom)
-        putString("map_style_id", settings.mapStyleId)
+        putString("tile_provider_id", settings.tileProviderId)
         putBoolean("auto_zoom_enabled", settings.autoZoomEnabled)
         putFloat("auto_zoom_at_0", settings.autoZoomAt0Kmh)
         putFloat("auto_zoom_at_60", settings.autoZoomAt60Kmh)

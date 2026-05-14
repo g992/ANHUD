@@ -92,7 +92,8 @@ jobs:
 
       - name: Build release artifacts
         env:
-          MAPKIT_API_KEY: ${{ secrets.MAPKIT_API_KEY }}
+          STARLINE_MAP_STYLE_ID: ${{ secrets.STARLINE_MAP_STYLE_ID }}
+          STARLINE_MAPS_ACCESS_TOKEN: ${{ secrets.STARLINE_MAPS_ACCESS_TOKEN }}
           SIGNING_STORE_PASSWORD: ${{ secrets.SIGNING_STORE_PASSWORD }}
           SIGNING_KEY_ALIAS: ${{ secrets.SIGNING_KEY_ALIAS }}
           SIGNING_KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}

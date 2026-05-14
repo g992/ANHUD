@@ -223,6 +223,9 @@ class HudOverlayController(private val context: Context) {
     private var turnSignalLeftActive: Boolean = false
     private var turnSignalRightActive: Boolean = false
     private var turnSignalsPreviewMode: Boolean = false
+    private var laneGuidanceHadVisibleContent: Boolean = false
+    private var mapHadVisibleContent: Boolean = false
+    private var mapTransparentFillPending: Boolean = false
     private val clockTicker = object : Runnable {
         override fun run() {
             updateClockText()
@@ -1580,6 +1583,9 @@ class HudOverlayController(private val context: Context) {
         cancelHudSpeedHide()
         stopTurnSignalBlinking()
         removeMapView()
+        laneGuidanceHadVisibleContent = false
+        mapHadVisibleContent = false
+        mapTransparentFillPending = false
         val wm = windowManager
         val view = overlayView
         if (wm != null && view != null) {
@@ -1914,6 +1920,11 @@ class HudOverlayController(private val context: Context) {
             state.trafficLights
         }
         val laneGuidanceManeuver = routeSnapshot.laneManeuver
+        val laneGuidanceVisible = laneGuidanceAllowed && (previewLaneGuidance || laneGuidanceManeuver != null)
+        val laneGuidanceTransparentFillVisible = !laneGuidanceVisible && laneGuidanceHadVisibleContent
+        val mapVisible = mapAllowed && (previewMap || hasMapRoute)
+        val mapTransparentFillVisible = !mapVisible && mapHadVisibleContent
+        mapTransparentFillPending = mapTransparentFillVisible
 
         setTextOrHide(primary, primaryText)
         setTextOrHide(secondary, secondaryText)
@@ -1953,7 +1964,11 @@ class HudOverlayController(private val context: Context) {
         updateHudSpeedOverspeed(hudSpeedLimitOverspeed)
         updateRoadCamera(state.roadCameraIcon, roadCameraDistanceText, roadCameraAllowed, previewRoadCamera)
         updateTrafficLights(trafficLights, trafficLightAllowed, previewTrafficLight)
-        updateLaneGuidance(laneGuidanceManeuver, previewLaneGuidance)
+        updateLaneGuidance(
+            maneuver = laneGuidanceManeuver,
+            preview = previewLaneGuidance,
+            fillTransparentBackground = laneGuidanceTransparentFillVisible
+        )
         updateManeuver(state.maneuverBitmap, previewNav)
         updateArrowManeuver(state.maneuverBitmap, previewArrow)
         if (clock != null) {
@@ -1969,7 +1984,6 @@ class HudOverlayController(private val context: Context) {
         } else {
             navHasContent && !hideNavigationByDistance
         }
-        val laneGuidanceVisible = laneGuidanceAllowed && (previewLaneGuidance || laneGuidanceManeuver != null)
         val arrowEligible = if (arrowOnlyWhenNoIcon) {
             NativeNavigationController.isActive() &&
                 state.nativeTurnId == NavigationReceiver.DEFAULT_NATIVE_TURN_ID
@@ -1997,12 +2011,15 @@ class HudOverlayController(private val context: Context) {
         val turnSignalsVisible = turnSignalsAllowed &&
             (previewTurnSignals || turnSignalLeft || turnSignalRight || turnSignalsTransparentFillVisible)
         val clockVisible = if (showPreview) previewClock else true
-        val mapVisible = mapAllowed && (previewMap || hasMapRoute)
         val roadCameraVisible = roadCameraAllowed && (previewRoadCamera || roadCameraHasData)
         val trafficLightVisible = trafficLightAllowed && (previewTrafficLight || trafficLights.isNotEmpty())
         navContainer?.visibility = if (navAllowed && navVisible) View.VISIBLE else View.GONE
-        laneGuidanceContainer?.visibility = if (laneGuidanceVisible) View.VISIBLE else View.GONE
-        mapContainer?.visibility = if (mapVisible) View.VISIBLE else View.GONE
+        laneGuidanceContainer?.visibility = if (laneGuidanceVisible || laneGuidanceTransparentFillVisible) {
+            View.VISIBLE
+        } else {
+            View.GONE
+        }
+        mapContainer?.visibility = if (mapVisible || mapTransparentFillVisible) View.VISIBLE else View.GONE
         arrowContainer?.visibility = if (arrowAllowed && arrowVisible) View.VISIBLE else View.GONE
         speedLimitView?.visibility = if (speedAllowed && speedVisible) View.VISIBLE else View.GONE
         hudSpeedContainer?.visibility = if (hudSpeedAllowed && hudSpeedVisible) View.VISIBLE else View.GONE
@@ -2012,7 +2029,9 @@ class HudOverlayController(private val context: Context) {
         // Hide main container if nothing is visible
         val anyVisible = (navAllowed && navVisible) ||
             laneGuidanceVisible ||
+            laneGuidanceTransparentFillVisible ||
             mapVisible ||
+            mapTransparentFillVisible ||
             (arrowAllowed && arrowVisible) ||
             (speedAllowed && speedVisible) ||
             (hudSpeedAllowed && hudSpeedVisible) ||
@@ -2022,6 +2041,8 @@ class HudOverlayController(private val context: Context) {
             turnSignalsVisible ||
             (clockAllowed && clockVisible)
         container?.visibility = if (showPreview || anyVisible) View.VISIBLE else View.GONE
+        laneGuidanceHadVisibleContent = laneGuidanceVisible
+        mapHadVisibleContent = mapVisible
 
         applyLayout()
     }
@@ -2095,12 +2116,28 @@ class HudOverlayController(private val context: Context) {
         hudSpeedHideRunnable = null
     }
 
-    private fun updateLaneGuidance(maneuver: MapLaneManeuver?, preview: Boolean) {
+    private fun updateLaneGuidance(
+        maneuver: MapLaneManeuver?,
+        preview: Boolean,
+        fillTransparentBackground: Boolean
+    ) {
         val container = laneGuidanceContainer ?: return
         val image = laneGuidanceImageView ?: return
         val placeholder = laneGuidancePlaceholderView ?: return
         val distance = laneGuidanceDistanceView ?: return
         val showDistance = OverlayPrefs.laneGuidanceShowDistance(context)
+        container.setBackgroundColor(Color.TRANSPARENT)
+        if (fillTransparentBackground) {
+            val hadImage = image.visibility == View.VISIBLE && image.drawable != null
+            val hadPlaceholder = placeholder.visibility == View.VISIBLE
+            val hadDistance = distance.visibility == View.VISIBLE && distance.text.isNotBlank()
+            image.visibility = if (hadImage) View.INVISIBLE else View.GONE
+            placeholder.visibility = if (hadPlaceholder) View.INVISIBLE else View.GONE
+            distance.visibility = if (hadDistance) View.INVISIBLE else View.GONE
+            container.invalidate()
+            container.postInvalidateOnAnimation()
+            return
+        }
         val bitmap = maneuver?.bitmap?.takeUnless { it.isRecycled || it.width <= 0 || it.height <= 0 }
         if (bitmap != null) {
             image.setImageBitmap(resolveLaneGuidanceHudBitmap(maneuver))
@@ -3173,10 +3210,6 @@ class HudOverlayController(private val context: Context) {
             mapContainerReady = mapContainerView != null,
             mapContentReady = mapContentView != null,
         )
-        if ((!mapEnabled || !hasMapRoute) && !previewMap) {
-            removeMapView()
-            return
-        }
         val mapContainer = mapContainerView ?: return
         val mapContent = mapContentView ?: return
         val mapTripStatus = mapTripStatusView ?: return
@@ -3200,7 +3233,18 @@ class HudOverlayController(private val context: Context) {
             containerWidthPx.toFloat(),
             containerHeightPx.toFloat()
         )
+        if ((!mapEnabled || !hasMapRoute) && !previewMap) {
+            releaseMapController()
+            if (mapTransparentFillPending) {
+                clearMapBlock(mapContainer, mapContent, mapTripStatus, placeholder)
+            } else {
+                hideMapBlock()
+            }
+            return
+        }
         mapContainer.visibility = View.VISIBLE
+        mapContainer.background = null
+        mapContainer.setBackgroundColor(Color.TRANSPARENT)
         updateMapTripStatus(
             view = mapTripStatus,
             state = lastState,
@@ -3234,6 +3278,35 @@ class HudOverlayController(private val context: Context) {
         }
     }
 
+    private fun releaseMapController() {
+        hudMapController?.release()
+        hudMapController = null
+    }
+
+    private fun hideMapBlock() {
+        mapContainerView?.visibility = View.GONE
+        mapContentView?.visibility = View.GONE
+        mapTripStatusView?.visibility = View.GONE
+        mapPlaceholderView?.visibility = View.GONE
+    }
+
+    private fun clearMapBlock(
+        mapContainer: FrameLayout,
+        mapContent: FrameLayout,
+        mapTripStatus: MapTripStatusView,
+        placeholder: FrameLayout
+    ) {
+        mapContainer.background = null
+        mapContainer.setBackgroundColor(Color.TRANSPARENT)
+        mapContent.setBackgroundColor(Color.TRANSPARENT)
+        mapContent.visibility = View.GONE
+        mapTripStatus.visibility = View.GONE
+        placeholder.visibility = View.GONE
+        mapContainer.visibility = View.VISIBLE
+        mapContainer.invalidate()
+        mapContainer.postInvalidateOnAnimation()
+    }
+
     private fun logMapState(
         stage: String,
         previewMap: Boolean,
@@ -3252,12 +3325,8 @@ class HudOverlayController(private val context: Context) {
     }
 
     private fun removeMapView() {
-        hudMapController?.release()
-        hudMapController = null
-        mapContainerView?.visibility = View.GONE
-        mapContentView?.visibility = View.GONE
-        mapTripStatusView?.visibility = View.GONE
-        mapPlaceholderView?.visibility = View.GONE
+        releaseMapController()
+        hideMapBlock()
     }
 
     private fun updateMapTripStatus(

@@ -70,7 +70,6 @@
     <string name="position_blocks_hint">Нажмите блок, чтобы открыть настройку положения.</string>
     <string name="position_container_label">Контейнер HUD</string>
     <string name="position_map_block_label">Блок карты</string>
-    <string name="position_map_style_label">Стиль карты</string>
     <string name="map_road_events_button">Дорожные события</string>
     <string name="map_trip_status_button">Статус поездки</string>
     <string name="map_lane_guidance_button">Подсказки перестроения</string>
@@ -174,6 +173,13 @@
     <string name="map_settings_tilt">Наклон</string>
     <string name="map_settings_tilt_value">%1$d°</string>
     <string name="map_settings_arrow_scale">Размер маркера положения</string>
+    <string name="map_settings_tile_source">Источник тайлов</string>
+    <string name="map_settings_tile_source_hint">При смене источника тайлов кэш карты очищается.</string>
+    <string name="map_settings_tile_source_unavailable">StarLine в этой сборке недоступен: ключи карт не настроены.</string>
+    <string name="map_settings_tile_source_change_title">Сменить источник тайлов?</string>
+    <string name="map_settings_tile_source_change_message">При смене источника тайлов кэш карты будет очищен. Переключить на %1$s?</string>
+    <string name="map_settings_tile_source_change_confirm">Переключить</string>
+    <string name="map_settings_tile_source_changed">Источник тайлов переключён. Кэш очищается.</string>
     <string name="map_settings_cache">Размер кэша карт</string>
     <string name="map_settings_cache_value">%1$s из %2$s</string>
     <string name="map_settings_cache_error">ошибка кэша: %1$s</string>
