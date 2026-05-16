@@ -218,6 +218,7 @@ internal fun normalizeDownloadedTemplateJson(rawJson: String): String {
 internal fun prepareHudMapStyleJson(
     templateJson: String,
     provider: MapTileProvider,
+    settings: MapRenderSettings,
 ): String {
     val style = JSONObject(templateJson)
     val sources = style.optJSONObject("sources") ?: JSONObject().also { style.put("sources", it) }
@@ -233,7 +234,37 @@ internal fun prepareHudMapStyleJson(
         sources.put(sourceName, source)
     }
     style.put("sources", sources)
+    applyBuildingVisibility(style.optJSONArray("layers"), settings)
     return style.toString()
+}
+
+private fun applyBuildingVisibility(
+    layers: JSONArray?,
+    settings: MapRenderSettings,
+) {
+    if (layers == null) return
+    for (index in 0 until layers.length()) {
+        val layer = layers.optJSONObject(index) ?: continue
+        val type = layer.optString("type")
+        if (!isBuildingGeometryLayer(layer, type)) continue
+        val visibility = when (type) {
+            "fill-extrusion" -> if (settings.are3dBuildingsVisible()) "visible" else "none"
+            else -> if (settings.buildingsEnabled) "visible" else "none"
+        }
+        val layout = layer.optJSONObject("layout") ?: JSONObject()
+        layout.put("visibility", visibility)
+        layer.put("layout", layout)
+    }
+}
+
+private fun isBuildingGeometryLayer(layer: JSONObject, type: String): Boolean {
+    if (type != "fill" && type != "line" && type != "fill-extrusion") {
+        return false
+    }
+    if (layer.optString("source-layer") == "building") {
+        return true
+    }
+    return layer.optJSONObject("metadata")?.optString("taxonomy:group") == "building"
 }
 
 private fun rewriteVectorSource(

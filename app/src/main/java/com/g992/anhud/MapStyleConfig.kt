@@ -45,7 +45,11 @@ fun advanceMapTileProvider(context: Context, failedProviderId: String): MapTileP
 
 fun buildHudMapStyle(context: Context): Style.Builder {
     val templateJson = MapStyleTemplateStore.loadTemplateJson(context)
-    val styleJson = prepareHudMapStyleJson(templateJson, currentMapTileProvider(context))
+    val styleJson = prepareHudMapStyleJson(
+        templateJson = templateJson,
+        provider = currentMapTileProvider(context),
+        settings = MapRenderSettingsStore.current()
+    )
     return Style.Builder().fromJson(styleJson)
 }
 

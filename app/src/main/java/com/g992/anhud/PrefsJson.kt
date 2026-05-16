@@ -393,6 +393,8 @@ object PrefsJson {
         putString("style_mode_id", settings.styleModeId)
         putString("custom_style_name", settings.customStyleName)
         putString("custom_style_json", settings.customStyleJson)
+        putBoolean("buildings_enabled", settings.buildingsEnabled)
+        putBoolean("buildings_3d_enabled", settings.buildings3dEnabled)
         putBoolean("map_vignette_enabled", settings.mapVignetteEnabled)
         putBoolean("auto_zoom_enabled", settings.autoZoomEnabled)
         putFloat("auto_zoom_at_0", settings.autoZoomAt0Kmh)

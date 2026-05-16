@@ -74,6 +74,10 @@ private const val MAP_ROUTE_PROGRESS_RENDER_GRANULARITY_METERS = 25.0
 private const val MAP_ROUTE_TRIM_RENDER_GRANULARITY_METERS = 5.0
 private const val MAP_LOCATION_TELEPORT_AGE_MS = 4_000L
 private const val MAP_LOCATION_TELEPORT_DISTANCE_METERS = 80f
+private const val MAP_LOCATION_ROUTE_SNAP_MAX_METERS = 10.0
+private const val MAP_LOCATION_ROUTE_SNAP_BACKTRACK_TOLERANCE_METERS = 25.0
+private const val MAP_LOCATION_ROUTE_SNAP_FORWARD_TOLERANCE_METERS = 150.0
+private const val MAP_LOCATION_ROUTE_SNAP_PROGRESS_STALE_MS = 10_000L
 private const val MAP_HEADING_FALLBACK_MIN_DISTANCE_METERS = 2.0
 private const val MAP_HEADING_STUCK_EPSILON_DEGREES = 2f
 private const val MAP_HEADING_FALLBACK_DIVERGENCE_DEGREES = 5f
@@ -124,11 +128,16 @@ class HudMapController(
     private var appliedLaneManeuverImageKey: String? = null
     private var lastRawDeviceLocation: Location? = null
     private var lastResolvedDeviceBearing: Float? = null
+    private var lastSnappedRouteToken: String? = null
+    private var lastSnappedRouteProgressMeters: Double? = null
+    private var lastSnappedRouteProgressUptimeMs: Long = 0L
 
     private val settingsListener: (MapRenderSettings) -> Unit = { settings ->
         val tileProviderChanged = currentSettings.tileProviderId != settings.tileProviderId
         val mapStyleChanged = currentSettings.styleModeId != settings.styleModeId ||
             currentSettings.customStyleJson != settings.customStyleJson
+        val buildingVisibilityChanged = currentSettings.buildingsEnabled != settings.buildingsEnabled ||
+            currentSettings.buildings3dEnabled != settings.buildings3dEnabled
         val vignetteChanged = currentSettings.mapVignetteEnabled != settings.mapVignetteEnabled
         val locationStyleChanged = currentSettings.arrowScalePercent != settings.arrowScalePercent
         val roadEventSettingsChanged = currentSettings.roadEventsEnabled != settings.roadEventsEnabled ||
@@ -140,7 +149,7 @@ class HudMapController(
         if (locationStyleChanged) {
             applyLocationStyle()
         }
-        if (tileProviderChanged || mapStyleChanged) {
+        if (tileProviderChanged || mapStyleChanged || buildingVisibilityChanged) {
             mapLibreMap?.let(::loadMapStyle)
         }
         if (vignetteChanged) {
@@ -165,6 +174,13 @@ class HudMapController(
     private val routeListener: (MapRouteTelemetrySnapshot) -> Unit = { snapshot ->
         logRouteSnapshot(snapshot)
         currentSnapshot = snapshot
+        if (currentSettings.snapLocationToRoadsEnabled &&
+            lastSnappedRouteToken != null &&
+            snapshot.routeToken != null &&
+            snapshot.routeToken != lastSnappedRouteToken
+        ) {
+            resetRouteSnapProgress()
+        }
         if (currentLocation == null) {
             currentLocation = snapshot.startLocation
         }
@@ -767,8 +783,65 @@ class HudMapController(
 
     private fun updateDisplayLocation() {
         val rawLocation = currentLocation ?: currentSnapshot.startLocation ?: return
-        currentDisplayLocation = rawLocation
-        locationComponent?.forceLocationUpdate(rawLocation)
+        val displayLocation = resolveDisplayLocation(rawLocation)
+        currentDisplayLocation = displayLocation
+        locationComponent?.forceLocationUpdate(displayLocation)
+    }
+
+    private fun resolveDisplayLocation(rawLocation: Location): Location {
+        val routePoints = currentSnapshot.routePoints
+        if (!currentSettings.snapLocationToRoadsEnabled || routePoints.size < 2) {
+            resetRouteSnapProgress()
+            return rawLocation
+        }
+        val projection = findClosestRouteProjectionOnRoute(routePoints, rawLocation) ?: return rawLocation
+        val maxSnapDistanceMeters = minOf(
+            currentSettings.routeSnapDistanceMeters.toDouble(),
+            MAP_LOCATION_ROUTE_SNAP_MAX_METERS
+        )
+        if (projection.distanceMeters > maxSnapDistanceMeters) {
+            return rawLocation
+        }
+        val routeToken = currentSnapshot.routeToken ?: routeGeometryToken(routePoints)
+        val projectedProgressMeters = routeProgressMetersAtProjection(routePoints, projection)
+        if (!isAcceptedRouteSnapProgress(routeToken, projectedProgressMeters)) {
+            return rawLocation
+        }
+        rememberRouteSnapProgress(routeToken, projectedProgressMeters)
+        return Location(rawLocation).apply {
+            latitude = projection.projectedPoint.latitude
+            longitude = projection.projectedPoint.longitude
+        }
+    }
+
+    private fun isAcceptedRouteSnapProgress(routeToken: String, projectedProgressMeters: Double): Boolean {
+        val previousToken = lastSnappedRouteToken
+        val previousProgress = lastSnappedRouteProgressMeters
+        val previousUptimeMs = lastSnappedRouteProgressUptimeMs
+        val now = SystemClock.uptimeMillis()
+        if (
+            previousToken == null ||
+            previousProgress == null ||
+            previousToken != routeToken ||
+            now - previousUptimeMs > MAP_LOCATION_ROUTE_SNAP_PROGRESS_STALE_MS
+        ) {
+            return true
+        }
+        val deltaMeters = projectedProgressMeters - previousProgress
+        return deltaMeters >= -MAP_LOCATION_ROUTE_SNAP_BACKTRACK_TOLERANCE_METERS &&
+            deltaMeters <= MAP_LOCATION_ROUTE_SNAP_FORWARD_TOLERANCE_METERS
+    }
+
+    private fun rememberRouteSnapProgress(routeToken: String, projectedProgressMeters: Double) {
+        lastSnappedRouteToken = routeToken
+        lastSnappedRouteProgressMeters = projectedProgressMeters
+        lastSnappedRouteProgressUptimeMs = SystemClock.uptimeMillis()
+    }
+
+    private fun resetRouteSnapProgress() {
+        lastSnappedRouteToken = null
+        lastSnappedRouteProgressMeters = null
+        lastSnappedRouteProgressUptimeMs = 0L
     }
 
     private fun prepareDeviceLocation(location: Location): Location {

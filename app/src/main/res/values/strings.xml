@@ -191,6 +191,9 @@
     <string name="map_settings_style_custom_loaded">Пользовательский стиль загружен: %1$s</string>
     <string name="map_settings_style_custom_invalid">Не удалось загрузить стиль карты: %1$s</string>
     <string name="map_settings_style_custom_unknown_error">неизвестная ошибка</string>
+    <string name="map_settings_display_settings">Настройки отображения</string>
+    <string name="map_settings_show_buildings">Отображать здания</string>
+    <string name="map_settings_buildings_3d">Здания в 3D</string>
     <string name="map_settings_style_reset_title">Удалить пользовательский стиль?</string>
     <string name="map_settings_style_reset_message">При возврате к системному стилю загруженный пользовательский пресет будет удалён. Переключить на системный?</string>
     <string name="map_settings_style_reset_confirm">Удалить и переключить</string>
@@ -204,8 +207,8 @@
     <string name="map_settings_route_download_hint">При включении приложение заранее прогревает кэш вдоль активного маршрута.</string>
     <string name="map_settings_route_snap">Привязывать маршрут к дорогам</string>
     <string name="map_settings_route_snap_hint">Перед отрисовкой маршрут подгоняется к ближайшим видимым дорогам карты.</string>
-    <string name="map_settings_location_snap">Привязывать стрелку к дороге</string>
-    <string name="map_settings_location_snap_hint">Маркер положения визуально подгоняется к ближайшей дороге карты; GPS-данные не меняются.</string>
+    <string name="map_settings_location_snap">Привязывать стрелку к маршруту</string>
+    <string name="map_settings_location_snap_hint">Маркер положения визуально подгоняется к ближайшей точке активного маршрута в пределах заданной дистанции до 10 м; GPS-данные не меняются.</string>
     <string name="map_settings_route_snap_distance">Дистанция привязки</string>
     <string name="map_settings_route_snap_distance_value">%1$d м</string>
     <string name="map_settings_offline_region">Оффлайн-регион</string>

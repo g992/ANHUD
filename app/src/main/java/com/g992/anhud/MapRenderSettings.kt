@@ -49,6 +49,8 @@ data class MapRenderSettings(
     val styleModeId: String = defaultMapStyleMode().id,
     val customStyleName: String? = null,
     val customStyleJson: String? = null,
+    val buildingsEnabled: Boolean = true,
+    val buildings3dEnabled: Boolean = true,
     val mapVignetteEnabled: Boolean = true,
     val autoZoomEnabled: Boolean = false,
     val autoZoomAt0Kmh: Double = 20.0,
@@ -252,6 +254,8 @@ object MapRenderSettingsStore {
     private const val KEY_STYLE_MODE_ID = "style_mode_id"
     private const val KEY_CUSTOM_STYLE_NAME = "custom_style_name"
     private const val KEY_CUSTOM_STYLE_JSON = "custom_style_json"
+    private const val KEY_BUILDINGS_ENABLED = "buildings_enabled"
+    private const val KEY_BUILDINGS_3D_ENABLED = "buildings_3d_enabled"
     private const val KEY_MAP_VIGNETTE_ENABLED = "map_vignette_enabled"
     private const val KEY_AUTO_ZOOM_ENABLED = "auto_zoom_enabled"
     private const val KEY_AUTO_ZOOM_AT_0 = "auto_zoom_at_0"
@@ -318,6 +322,8 @@ object MapRenderSettingsStore {
             .putString(KEY_STYLE_MODE_ID, updated.styleModeId)
             .putString(KEY_CUSTOM_STYLE_NAME, updated.customStyleName)
             .putString(KEY_CUSTOM_STYLE_JSON, updated.customStyleJson)
+            .putBoolean(KEY_BUILDINGS_ENABLED, updated.buildingsEnabled)
+            .putBoolean(KEY_BUILDINGS_3D_ENABLED, updated.buildings3dEnabled)
             .putBoolean(KEY_MAP_VIGNETTE_ENABLED, updated.mapVignetteEnabled)
             .putBoolean(KEY_AUTO_ZOOM_ENABLED, updated.autoZoomEnabled)
             .putFloat(KEY_AUTO_ZOOM_AT_0, updated.autoZoomAt0Kmh.toFloat())
@@ -368,6 +374,8 @@ object MapRenderSettingsStore {
                 ?: defaultMapStyleMode().id,
             customStyleName = source.getString(KEY_CUSTOM_STYLE_NAME, null),
             customStyleJson = source.getString(KEY_CUSTOM_STYLE_JSON, null),
+            buildingsEnabled = source.getBoolean(KEY_BUILDINGS_ENABLED, true),
+            buildings3dEnabled = source.getBoolean(KEY_BUILDINGS_3D_ENABLED, true),
             mapVignetteEnabled = source.getBoolean(KEY_MAP_VIGNETTE_ENABLED, true),
             autoZoomEnabled = source.getBoolean(KEY_AUTO_ZOOM_ENABLED, false),
             autoZoomAt0Kmh = source.getFloat(KEY_AUTO_ZOOM_AT_0, 20.0f).toDouble(),
@@ -409,6 +417,10 @@ fun MapRenderSettings.effectiveMapStyleMode(): MapStyleMode {
     } else {
         MapStyleMode.SYSTEM
     }
+}
+
+fun MapRenderSettings.are3dBuildingsVisible(): Boolean {
+    return buildingsEnabled && buildings3dEnabled
 }
 
 private fun SharedPreferences.Editor.putOptionalFloat(key: String, value: Double?): SharedPreferences.Editor {

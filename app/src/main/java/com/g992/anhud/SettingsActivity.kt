@@ -32,6 +32,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.BaseAdapter
 import android.widget.Button
+import android.widget.CheckBox
 import android.widget.EditText
 import android.widget.FrameLayout
 import android.widget.ImageView
@@ -856,6 +857,12 @@ class SettingsActivity : ScaledActivity() {
         val styleModeRow = createMapButtonRow(
             MapStyleMode.entries.mapNotNull { mode -> mapStyleModeButtons[mode] }
         )
+        val mapDisplaySettingsButton = createSettingsButton(
+            getString(R.string.map_settings_display_settings),
+            SETTINGS_BUTTON_SECONDARY
+        ).apply {
+            setOnClickListener { showMapDisplaySettingsDialog() }
+        }
 
         val offlineDownloadsButton = createSettingsButton(
             getString(R.string.map_settings_offline_downloads),
@@ -897,6 +904,9 @@ class SettingsActivity : ScaledActivity() {
                     createMapSwitchRow(mapVignetteSwitch, getString(R.string.map_settings_vignette_hint)),
                     createMapValueRow(getString(R.string.map_settings_style), mapStyleModeValue, styleModeRow),
                     mapStyleModeHint,
+                    createMapButtonRow(listOf(mapDisplaySettingsButton)),
+                    createMapSwitchRow(mapLocationSnapSwitch, getString(R.string.map_settings_location_snap_hint)),
+                    *routeSnapRows.toTypedArray(),
                     createMapValueRow(getString(R.string.map_settings_cache), mapCacheValue, cacheRow),
                     createMapButtonRow(listOf(mapCacheClearButton)),
                 )
@@ -1609,6 +1619,139 @@ class SettingsActivity : ScaledActivity() {
             syncMapUiFromPrefs()
             showToast(R.string.map_settings_style_system_restored)
         }
+    }
+
+    private fun showMapDisplaySettingsDialog() {
+        val settings = MapRenderSettingsStore.current()
+        var dialog: AlertDialog? = null
+        val root = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+        }
+        val buildingsCheckBox = CheckBox(this).apply {
+            text = getString(R.string.map_settings_show_buildings)
+            textSize = 16f
+            setTextColor(ContextCompat.getColor(context, R.color.white))
+            isChecked = settings.buildingsEnabled
+        }
+        val buildings3dCheckBox = CheckBox(this).apply {
+            text = getString(R.string.map_settings_buildings_3d)
+            textSize = 16f
+            setTextColor(ContextCompat.getColor(context, R.color.white))
+            isChecked = settings.buildings3dEnabled
+        }
+        fun syncBuildings3dState() {
+            buildings3dCheckBox.isEnabled = buildingsCheckBox.isChecked
+            buildings3dCheckBox.alpha = if (buildingsCheckBox.isChecked) 1f else 0.45f
+        }
+        buildingsCheckBox.setOnCheckedChangeListener { _, _ ->
+            syncBuildings3dState()
+        }
+        syncBuildings3dState()
+        val contentColumn = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            background = roundedDrawable(
+                fill = Color.parseColor("#101010"),
+                stroke = ContextCompat.getColor(this@SettingsActivity, R.color.hud_blue),
+                radiusDp = 12
+            )
+            setPadding(dp(20), dp(20), dp(20), dp(20))
+        }
+        contentColumn.addView(TextView(this).apply {
+            text = getString(R.string.map_settings_display_settings)
+            setTextColor(ContextCompat.getColor(context, R.color.white))
+            textSize = 20f
+            setTypeface(typeface, android.graphics.Typeface.BOLD)
+        })
+        contentColumn.addView(
+            buildingsCheckBox,
+            LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply {
+                topMargin = dp(14)
+            }
+        )
+        contentColumn.addView(
+            buildings3dCheckBox,
+            LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply {
+                topMargin = dp(8)
+            }
+        )
+        val cancelButton = createSettingsButton(
+            getString(android.R.string.cancel),
+            SETTINGS_BUTTON_SECONDARY
+        ).apply {
+            minHeight = dp(36)
+            minimumHeight = dp(36)
+        }
+        val confirmButton = createSettingsButton(
+            getString(android.R.string.ok),
+            SETTINGS_BUTTON_PRIMARY
+        ).apply {
+            minHeight = dp(36)
+            minimumHeight = dp(36)
+        }
+        val buttonsRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.END
+            addView(cancelButton)
+            addView(
+                confirmButton,
+                LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply {
+                    marginStart = dp(10)
+                }
+            )
+        }
+        contentColumn.addView(
+            buttonsRow,
+            LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply {
+                topMargin = dp(18)
+            }
+        )
+        root.addView(contentColumn)
+        val container = ScrollView(this).apply {
+            isFillViewport = true
+            overScrollMode = View.OVER_SCROLL_IF_CONTENT_SCROLLS
+            setPadding(dp(12), dp(12), dp(12), dp(12))
+            addView(
+                root,
+                ViewGroup.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT
+                )
+            )
+        }
+        cancelButton.setOnClickListener {
+            dialog?.dismiss()
+        }
+        confirmButton.setOnClickListener {
+            MapRenderSettingsStore.update {
+                it.copy(
+                    buildingsEnabled = buildingsCheckBox.isChecked,
+                    buildings3dEnabled = buildings3dCheckBox.isChecked,
+                )
+            }
+            syncMapUiFromPrefs()
+            dialog?.dismiss()
+        }
+        dialog = AlertDialog.Builder(this, R.style.ThemeOverlay_ANHUD_Dialog)
+            .setView(container)
+            .create()
+        dialog.show()
+        dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
+        dialog.window?.setLayout(
+            (resources.displayMetrics.widthPixels * 0.92f).roundToInt(),
+            ViewGroup.LayoutParams.WRAP_CONTENT
+        )
     }
 
     private fun showStyledConfirmationDialog(

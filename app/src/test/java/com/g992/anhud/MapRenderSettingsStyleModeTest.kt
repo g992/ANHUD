@@ -45,4 +45,24 @@ class MapRenderSettingsStyleModeTest {
         assertEquals("custom.json", normalized.customStyleName)
         assertEquals("""{"version":8,"sources":{},"layers":[]}""", normalized.customStyleJson)
     }
+
+    @Test
+    fun are3dBuildingsVisible_requiresBuildingsMasterSwitch() {
+        val settings = MapRenderSettings(
+            buildingsEnabled = false,
+            buildings3dEnabled = true,
+        )
+
+        assertEquals(false, settings.are3dBuildingsVisible())
+    }
+
+    @Test
+    fun are3dBuildingsVisible_keeps3dWhenBothSwitchesEnabled() {
+        val settings = MapRenderSettings(
+            buildingsEnabled = true,
+            buildings3dEnabled = true,
+        )
+
+        assertEquals(true, settings.are3dBuildingsVisible())
+    }
 }

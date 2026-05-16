@@ -1,6 +1,6 @@
 {
   "version": 8,
-  "name": "ANHUD-new",
+  "name": "anhud-v3",
   "metadata": {
     "mapbox:autocomposite": false,
     "mapbox:groups": {
@@ -1231,18 +1231,29 @@
         "line-color": "rgba(255, 255, 255, 1)",
         "line-opacity": 1,
         "line-width": {
+          "property": "",
+          "type": "exponential",
           "base": 1.2,
           "stops": [
             [
-              8,
+              {
+                "zoom": 8,
+                "value": 0
+              },
               1.5
             ],
             [
-              16,
+              {
+                "zoom": 16,
+                "value": 0
+              },
               16
             ],
             [
-              20,
+              {
+                "zoom": 20,
+                "value": 0
+              },
               27
             ]
           ]
@@ -1282,38 +1293,63 @@
       "paint": {
         "line-color": "rgba(255, 255, 255, 1)",
         "line-opacity": {
+          "property": "",
+          "type": "exponential",
           "stops": [
             [
-              7,
-              0
+              {
+                "zoom": 7,
+                "value": 0
+              },
+              1
             ],
             [
-              8,
+              {
+                "zoom": 8,
+                "value": 0
+              },
               1
             ]
           ]
         },
         "line-width": {
-          "base": 1.2,
+          "property": "",
+          "type": "exponential",
+          "base": 0.5,
           "stops": [
             [
-              7,
-              0
+              {
+                "zoom": 7,
+                "value": 0
+              },
+              1
             ],
             [
-              8,
+              {
+                "zoom": 8,
+                "value": 0
+              },
               0.6
             ],
             [
-              9,
+              {
+                "zoom": 9,
+                "value": 0
+              },
               1.5
             ],
             [
-              18,
+              {
+                "zoom": 18,
+                "value": 0
+              },
               22
             ],
             [
-              20,
+              {
+                "zoom": 20,
+                "value": 0
+              },
               42
             ]
           ]
@@ -1711,6 +1747,7 @@
       },
       "source": "starlinemaps",
       "source-layer": "transportation",
+      "maxzoom": 24,
       "filter": [
         "all",
         [
@@ -1733,27 +1770,24 @@
       },
       "paint": {
         "line-color": "rgba(255, 255, 255, 1)",
-        "line-width": {
-          "base": 1.2,
-          "stops": [
-            [
-              6.5,
-              0
-            ],
-            [
-              8,
-              0.5
-            ],
-            [
-              16,
-              13
-            ],
-            [
-              20,
-              23
-            ]
-          ]
-        }
+        "line-width": [
+          "interpolate",
+          [
+            "exponential",
+            0.5
+          ],
+          [
+            "zoom"
+          ],
+          6.5,
+          0,
+          8,
+          0.5,
+          16,
+          5,
+          20,
+          10
+        ]
       }
     },
     {
@@ -1795,11 +1829,11 @@
       "paint": {
         "line-color": "rgba(255, 255, 255, 1)",
         "line-width": {
-          "base": 1.2,
+          "base": 1,
           "stops": [
             [
               8.5,
-              0
+              1
             ],
             [
               9,
@@ -1807,13 +1841,14 @@
             ],
             [
               18,
-              18
+              8
             ],
             [
               20,
               38
             ]
-          ]
+          ],
+          "type": "exponential"
         }
       }
     },
@@ -2697,7 +2732,80 @@
           ]
         }
       }
+    },
+    {
+      "id": "buildings-3d",
+      "type": "fill-extrusion",
+      "source": "starlinemaps",
+      "source-layer": "building",
+      "minzoom": 9,
+      "paint": {
+        "fill-extrusion-color": "rgba(224, 222, 212, 1)",
+        "fill-extrusion-height": [
+          "interpolate",
+          [
+            "linear"
+          ],
+          [
+            "zoom"
+          ],
+          15.5,
+          0,
+          16.5,
+          [
+            "*",
+            0.15,
+            [
+              "get",
+              "render_height"
+            ]
+          ],
+          17,
+          [
+            "get",
+            "render_height"
+          ]
+        ],
+        "fill-extrusion-base": [
+          "interpolate",
+          [
+            "linear"
+          ],
+          [
+            "zoom"
+          ],
+          15.5,
+          0,
+          16.5,
+          [
+            "*",
+            0.15,
+            [
+              "get",
+              "render_min_height"
+            ]
+          ],
+          18,
+          [
+            "get",
+            "render_min_height"
+          ]
+        ],
+        "fill-extrusion-opacity": 0.8,
+        "fill-extrusion-vertical-gradient": {
+          "stops": [
+            [
+              6,
+              true
+            ],
+            [
+              10,
+              true
+            ]
+          ]
+        }
+      }
     }
   ],
-  "id": "43504ca8-9faf-48db-9b8c-f0043c8bcc01"
+  "id": "a6ae5730-9c41-406a-bb1e-0c19af7385c4"
 }
