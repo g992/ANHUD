@@ -78,6 +78,7 @@ private const val MAP_HEADING_FALLBACK_MIN_DISTANCE_METERS = 2.0
 private const val MAP_HEADING_STUCK_EPSILON_DEGREES = 2f
 private const val MAP_HEADING_FALLBACK_DIVERGENCE_DEGREES = 5f
 private const val MAP_HEADING_FALLBACK_SMOOTHING = 0.35
+private const val MAP_ARROW_BASE_SIZE_DP = 180
 private const val HUD_MAP_TAG = "HudMapController"
 
 class HudMapController(
@@ -99,6 +100,7 @@ class HudMapController(
             .logoEnabled(false)
             .attributionEnabled(false)
     )
+    private val mapVignetteView = MapVignetteView(context)
     private val renderHandler = Handler(Looper.getMainLooper())
     private var mapLibreMap: MapLibreMap? = null
     private var locationComponent: LocationComponent? = null
@@ -125,6 +127,9 @@ class HudMapController(
 
     private val settingsListener: (MapRenderSettings) -> Unit = { settings ->
         val tileProviderChanged = currentSettings.tileProviderId != settings.tileProviderId
+        val mapStyleChanged = currentSettings.styleModeId != settings.styleModeId ||
+            currentSettings.customStyleJson != settings.customStyleJson
+        val vignetteChanged = currentSettings.mapVignetteEnabled != settings.mapVignetteEnabled
         val locationStyleChanged = currentSettings.arrowScalePercent != settings.arrowScalePercent
         val roadEventSettingsChanged = currentSettings.roadEventsEnabled != settings.roadEventsEnabled ||
             currentSettings.roadEventIconSizePx != settings.roadEventIconSizePx ||
@@ -135,8 +140,11 @@ class HudMapController(
         if (locationStyleChanged) {
             applyLocationStyle()
         }
-        if (tileProviderChanged) {
+        if (tileProviderChanged || mapStyleChanged) {
             mapLibreMap?.let(::loadMapStyle)
+        }
+        if (vignetteChanged) {
+            applyVignetteVisibility()
         }
         if (roadEventSettingsChanged) {
             routeAlertFeatureCache = null
@@ -192,23 +200,15 @@ class HudMapController(
         mapView.getMapAsync(::onMapReady)
         mapView.onStart()
         mapView.onResume()
+        mapVignetteView.visibility = View.GONE
     }
 
     fun attachTo(container: FrameLayout) {
         if (released) return
-        val currentParent = mapView.parent as? ViewGroup
-        if (currentParent !== container) {
-            currentParent?.removeView(mapView)
-            container.addView(
-                mapView,
-                0,
-                FrameLayout.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                    ViewGroup.LayoutParams.MATCH_PARENT
-                )
-            )
-        }
+        attachChildToContainer(container, mapView, 0)
+        attachChildToContainer(container, mapVignetteView, 1)
         mapView.visibility = View.VISIBLE
+        applyVignetteVisibility()
         applyTrackingConfig()
         requestTelemetryRender()
     }
@@ -216,6 +216,11 @@ class HudMapController(
     fun setVisible(visible: Boolean) {
         if (released) return
         mapView.visibility = if (visible) View.VISIBLE else View.INVISIBLE
+        mapVignetteView.visibility = if (visible) {
+            if (currentSettings.mapVignetteEnabled) View.VISIBLE else View.GONE
+        } else {
+            View.INVISIBLE
+        }
     }
 
     fun release() {
@@ -232,6 +237,30 @@ class HudMapController(
         mapView.onStop()
         mapView.onDestroy()
         (mapView.parent as? ViewGroup)?.removeView(mapView)
+        (mapVignetteView.parent as? ViewGroup)?.removeView(mapVignetteView)
+    }
+
+    private fun attachChildToContainer(container: FrameLayout, child: View, index: Int) {
+        val currentParent = child.parent as? ViewGroup
+        if (currentParent !== container) {
+            currentParent?.removeView(child)
+            container.addView(
+                child,
+                index,
+                FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT
+                )
+            )
+        }
+    }
+
+    private fun applyVignetteVisibility() {
+        mapVignetteView.visibility = if (currentSettings.mapVignetteEnabled) {
+            View.VISIBLE
+        } else {
+            View.GONE
+        }
     }
 
     private fun onMapReady(map: MapLibreMap) {
@@ -678,8 +707,11 @@ class HudMapController(
 
     private fun trackingPadding(): IntArray {
         val side = dp(18)
-        val bottom = if (mapView.height > 0) dp(MAP_TRACKING_BOTTOM_PADDING_DP) else 0
-        val top = (mapView.height.coerceAtLeast(1) * MAP_TRACKING_TOP_PADDING_RATIO).roundToInt()
+        val baseBottom = if (mapView.height > 0) dp(MAP_TRACKING_BOTTOM_PADDING_DP) else 0
+        val baseTop = (mapView.height.coerceAtLeast(1) * MAP_TRACKING_TOP_PADDING_RATIO).roundToInt()
+        val arrowScreenShiftPx = resolveArrowScreenShiftPx(currentSettings)
+        val top = (baseTop - arrowScreenShiftPx).coerceAtLeast(0)
+        val bottom = baseBottom + arrowScreenShiftPx
         return intArrayOf(side, top, side, bottom)
     }
 
@@ -761,6 +793,19 @@ class HudMapController(
 
     private fun dp(value: Int): Int =
         (value * context.resources.displayMetrics.density).roundToInt()
+
+    private fun resolveArrowScreenShiftPx(settings: MapRenderSettings): Int {
+        val arrowScale = (settings.arrowScalePercent / 100f)
+            .coerceIn(
+                MAP_ARROW_SCALE_MIN_PERCENT / 100f,
+                MAP_ARROW_SCALE_MAX_PERCENT / 100f
+            )
+        val baseArrowHeightPx = ContextCompat.getDrawable(context, R.drawable.ic_nav_arrow)
+            ?.intrinsicHeight
+            ?.takeIf { it > 0 }
+            ?: dp(MAP_ARROW_BASE_SIZE_DP)
+        return (baseArrowHeightPx * arrowScale / 2f).roundToInt()
+    }
 
     private fun renderResourceToBitmap(resourceId: Int, sizePx: Int): Bitmap? {
         val drawable: Drawable = ContextCompat.getDrawable(context, resourceId) ?: return null

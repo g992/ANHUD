@@ -22,6 +22,7 @@ import android.os.Environment
 import android.os.Handler
 import android.os.Looper
 import android.provider.MediaStore
+import android.provider.OpenableColumns
 import android.provider.Settings
 import android.text.Editable
 import android.text.TextWatcher
@@ -116,17 +117,21 @@ class SettingsActivity : ScaledActivity() {
     private lateinit var mapTiltValue: TextView
     private lateinit var mapArrowValue: TextView
     private lateinit var mapTileProviderValue: TextView
+    private lateinit var mapStyleModeValue: TextView
+    private lateinit var mapStyleModeHint: TextView
     private lateinit var mapCacheValue: TextView
     private lateinit var mapCacheClearButton: Button
     private lateinit var mapRouteSnapDistanceValue: TextView
     private lateinit var mapOfflineRegionValue: TextView
     private lateinit var mapAutoZoomSwitch: SwitchCompat
+    private lateinit var mapVignetteSwitch: SwitchCompat
     private lateinit var mapRouteDownloadSwitch: SwitchCompat
     private lateinit var mapRouteSnapSwitch: SwitchCompat
     private lateinit var mapLocationSnapSwitch: SwitchCompat
     private var mapAutoZoomConfigRows: List<View> = emptyList()
     private var mapRouteSnapConfigRows: List<View> = emptyList()
     private var mapTileProviderButtons: Map<MapTileProvider, Button> = emptyMap()
+    private var mapStyleModeButtons: Map<MapStyleMode, Button> = emptyMap()
     private var mapCacheButtons: List<Button> = emptyList()
     private var offlineDownloadsAdapter: OfflineDownloadsAdapter? = null
 
@@ -189,6 +194,14 @@ class SettingsActivity : ScaledActivity() {
     ) { uri ->
         if (uri != null) {
             importSettings(uri)
+        }
+    }
+
+    private val customMapStylePickerLauncher = registerForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            importCustomMapStyle(uri)
         }
     }
 
@@ -617,6 +630,8 @@ class SettingsActivity : ScaledActivity() {
         mapTiltValue = createMapValueView()
         mapArrowValue = createMapValueView()
         mapTileProviderValue = createMapValueView()
+        mapStyleModeValue = createMapValueView()
+        mapStyleModeHint = createMapHintView("")
         mapCacheValue = createMapValueView()
         mapRouteSnapDistanceValue = createMapValueView()
         mapOfflineRegionValue = createMapValueView()
@@ -627,6 +642,15 @@ class SettingsActivity : ScaledActivity() {
                 if (!isSyncingUi) {
                     MapRenderSettingsStore.update { it.copy(autoZoomEnabled = isChecked) }
                     syncMapUiFromPrefs()
+                }
+            }
+        }
+        mapVignetteSwitch = SwitchCompat(this).apply {
+            text = getString(R.string.map_settings_vignette)
+            setTextColor(ContextCompat.getColor(this@SettingsActivity, R.color.white))
+            setOnCheckedChangeListener { _, isChecked ->
+                if (!isSyncingUi) {
+                    MapRenderSettingsStore.update { it.copy(mapVignetteEnabled = isChecked) }
                 }
             }
         }
@@ -795,6 +819,24 @@ class SettingsActivity : ScaledActivity() {
                 }
             }
         }
+        mapStyleModeButtons = MapStyleMode.entries.associateWith { mode ->
+            createSettingsButton(
+                getString(
+                    when (mode) {
+                        MapStyleMode.SYSTEM -> R.string.map_settings_style_system
+                        MapStyleMode.USER -> R.string.map_settings_style_custom
+                    }
+                ),
+                SETTINGS_BUTTON_SECONDARY
+            ).apply {
+                setOnClickListener {
+                    if (isSyncingUi) {
+                        return@setOnClickListener
+                    }
+                    handleMapStyleModeClick(mode)
+                }
+            }
+        }
         mapCacheButtons = cacheButtons
         val cacheRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -810,6 +852,9 @@ class SettingsActivity : ScaledActivity() {
         }
         val tileProviderRow = createMapButtonRow(
             MapTileProvider.entries.mapNotNull { provider -> mapTileProviderButtons[provider] }
+        )
+        val styleModeRow = createMapButtonRow(
+            MapStyleMode.entries.mapNotNull { mode -> mapStyleModeButtons[mode] }
         )
 
         val offlineDownloadsButton = createSettingsButton(
@@ -849,6 +894,9 @@ class SettingsActivity : ScaledActivity() {
                             getString(R.string.map_settings_tile_source_unavailable)
                         }
                     ),
+                    createMapSwitchRow(mapVignetteSwitch, getString(R.string.map_settings_vignette_hint)),
+                    createMapValueRow(getString(R.string.map_settings_style), mapStyleModeValue, styleModeRow),
+                    mapStyleModeHint,
                     createMapValueRow(getString(R.string.map_settings_cache), mapCacheValue, cacheRow),
                     createMapButtonRow(listOf(mapCacheClearButton)),
                 )
@@ -987,12 +1035,29 @@ class SettingsActivity : ScaledActivity() {
         mapTiltValue.text = getString(R.string.map_settings_tilt_value, settings.tilt.roundToInt())
         mapArrowValue.text = settings.arrowScalePercent.toString()
         mapTileProviderValue.text = resolveConfiguredMapTileProvider(settings.tileProviderId).displayName
+        val styleMode = settings.effectiveMapStyleMode()
+        mapStyleModeValue.text = getString(
+            if (styleMode == MapStyleMode.USER) {
+                R.string.map_settings_style_custom
+            } else {
+                R.string.map_settings_style_system
+            }
+        )
+        mapStyleModeHint.text = if (styleMode == MapStyleMode.USER) {
+            getString(
+                R.string.map_settings_style_custom_hint,
+                settings.customStyleName ?: getString(R.string.map_settings_style_custom_default_name)
+            )
+        } else {
+            getString(R.string.map_settings_style_system_hint)
+        }
         mapRouteSnapDistanceValue.text = getString(
             R.string.map_settings_route_snap_distance_value,
             settings.routeSnapDistanceMeters
         )
         mapOfflineRegionValue.text = formatOfflineRegion(settings)
         mapAutoZoomSwitch.isChecked = settings.autoZoomEnabled
+        mapVignetteSwitch.isChecked = settings.mapVignetteEnabled
         mapRouteDownloadSwitch.isChecked = settings.downloadRouteEnabled
         mapRouteSnapSwitch.isChecked = settings.snapRouteToRoadsEnabled
         mapLocationSnapSwitch.isChecked = settings.snapLocationToRoadsEnabled
@@ -1004,6 +1069,7 @@ class SettingsActivity : ScaledActivity() {
         ) View.VISIBLE else View.GONE
         mapRouteSnapConfigRows.forEach { it.visibility = routeSnapVisibility }
         refreshMapTileProviderButtons(settings.tileProviderId)
+        refreshMapStyleModeButtons(styleMode)
         refreshMapCacheButtons(settings.cacheSizeStep)
         syncMapCacheUi(MapCacheController.current())
     }
@@ -1027,6 +1093,21 @@ class SettingsActivity : ScaledActivity() {
                 clearingCache -> 0.65f
                 else -> 1f
             }
+        }
+    }
+
+    private fun refreshMapStyleModeButtons(selectedMode: MapStyleMode) {
+        mapStyleModeButtons.forEach { (mode, button) ->
+            styleSettingsButton(
+                button = button,
+                variant = if (mode == selectedMode) {
+                    SETTINGS_BUTTON_PRIMARY
+                } else {
+                    SETTINGS_BUTTON_SECONDARY
+                }
+            )
+            button.alpha = 1f
+            button.isEnabled = true
         }
     }
 
@@ -1369,7 +1450,7 @@ class SettingsActivity : ScaledActivity() {
         }
     }
 
-    private fun createMapHintView(text: String): View {
+    private fun createMapHintView(text: String): TextView {
         return TextView(this).apply {
             this.text = text
             setTextColor(Color.parseColor("#808080"))
@@ -1451,11 +1532,92 @@ class SettingsActivity : ScaledActivity() {
         }
     }
 
-    private fun confirmMapTileProviderChange(provider: MapTileProvider) {
-        if (!provider.isConfigured()) {
-            showToast(R.string.map_settings_tile_source_unavailable)
+    private fun handleMapStyleModeClick(mode: MapStyleMode) {
+        when (mode) {
+            MapStyleMode.SYSTEM -> confirmSystemMapStyleSelection()
+            MapStyleMode.USER -> customMapStylePickerLauncher.launch(arrayOf("application/json", "text/*", "*/*"))
+        }
+    }
+
+    private fun importCustomMapStyle(uri: Uri) {
+        val settings = MapRenderSettingsStore.current()
+        val currentStyleJson = settings.customStyleJson
+        val displayName = resolveDocumentDisplayName(uri)
+            ?: getString(R.string.map_settings_style_custom_default_name)
+        runCatching {
+            val rawJson = contentResolver.openInputStream(uri)
+                ?.bufferedReader(Charsets.UTF_8)
+                ?.use { it.readText() }
+                ?: error("не удалось прочитать файл")
+            validateCustomMapStyleJson(rawJson)
+        }.onSuccess { styleJson ->
+            if (
+                settings.effectiveMapStyleMode() == MapStyleMode.USER &&
+                currentStyleJson == styleJson &&
+                settings.customStyleName == displayName
+            ) {
+                return
+            }
+            MapRenderSettingsStore.update {
+                it.copy(
+                    styleModeId = MapStyleMode.USER.id,
+                    customStyleName = displayName,
+                    customStyleJson = styleJson,
+                )
+            }
+            syncMapUiFromPrefs()
+            showToast(getString(R.string.map_settings_style_custom_loaded, displayName))
+        }.onFailure { error ->
+            showToast(
+                getString(
+                    R.string.map_settings_style_custom_invalid,
+                    error.message ?: getString(R.string.map_settings_style_custom_unknown_error)
+                )
+            )
+        }
+    }
+
+    private fun resolveDocumentDisplayName(uri: Uri): String? {
+        return runCatching {
+            contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
+                ?.use { cursor ->
+                    if (!cursor.moveToFirst()) return@use null
+                    val index = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                    if (index >= 0) cursor.getString(index) else null
+                }
+        }.getOrNull()?.takeIf { it.isNotBlank() }
+    }
+
+    private fun confirmSystemMapStyleSelection() {
+        val settings = MapRenderSettingsStore.current()
+        if (settings.effectiveMapStyleMode() != MapStyleMode.USER) {
             return
         }
+        showStyledConfirmationDialog(
+            title = getString(R.string.map_settings_style_reset_title),
+            message = getString(R.string.map_settings_style_reset_message),
+            confirmLabel = getString(R.string.map_settings_style_reset_confirm),
+            confirmVariant = SETTINGS_BUTTON_DANGER,
+        ) {
+            MapRenderSettingsStore.update {
+                it.copy(
+                    styleModeId = MapStyleMode.SYSTEM.id,
+                    customStyleName = null,
+                    customStyleJson = null,
+                )
+            }
+            syncMapUiFromPrefs()
+            showToast(R.string.map_settings_style_system_restored)
+        }
+    }
+
+    private fun showStyledConfirmationDialog(
+        title: String,
+        message: String,
+        confirmLabel: String,
+        confirmVariant: Int = SETTINGS_BUTTON_PRIMARY,
+        onConfirm: () -> Unit,
+    ) {
         var dialog: AlertDialog? = null
         val cancelButton = createSettingsButton(
             getString(android.R.string.cancel),
@@ -1470,10 +1632,7 @@ class SettingsActivity : ScaledActivity() {
             includeFontPadding = true
             setPadding(dp(16), dp(8), dp(16), dp(8))
         }
-        val confirmButton = createSettingsButton(
-            getString(R.string.map_settings_tile_source_change_confirm),
-            SETTINGS_BUTTON_PRIMARY
-        ).apply {
+        val confirmButton = createSettingsButton(confirmLabel, confirmVariant).apply {
             minHeight = dp(36)
             minimumHeight = dp(36)
             maxLines = 2
@@ -1516,16 +1675,13 @@ class SettingsActivity : ScaledActivity() {
                     )
                     setPadding(dp(20), dp(20), dp(20), dp(20))
                     addView(TextView(context).apply {
-                        text = getString(R.string.map_settings_tile_source_change_title)
+                        text = title
                         setTextColor(ContextCompat.getColor(context, R.color.white))
                         textSize = 20f
                         setTypeface(typeface, android.graphics.Typeface.BOLD)
                     })
                     addView(TextView(context).apply {
-                        text = getString(
-                            R.string.map_settings_tile_source_change_message,
-                            provider.displayName
-                        )
+                        text = message
                         setTextColor(Color.parseColor("#D0D0D0"))
                         textSize = 15f
                         setLineSpacing(0f, 1.15f)
@@ -1559,10 +1715,7 @@ class SettingsActivity : ScaledActivity() {
         }
         confirmButton.setOnClickListener {
             dialog?.dismiss()
-            MapRenderSettingsStore.update { it.copy(tileProviderId = provider.id) }
-            syncMapUiFromPrefs()
-            MapCacheController.clearCache()
-            showToast(R.string.map_settings_tile_source_changed)
+            onConfirm()
         }
         dialog.show()
         dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
@@ -1570,6 +1723,23 @@ class SettingsActivity : ScaledActivity() {
             (resources.displayMetrics.widthPixels * 0.92f).roundToInt(),
             ViewGroup.LayoutParams.WRAP_CONTENT
         )
+    }
+
+    private fun confirmMapTileProviderChange(provider: MapTileProvider) {
+        if (!provider.isConfigured()) {
+            showToast(R.string.map_settings_tile_source_unavailable)
+            return
+        }
+        showStyledConfirmationDialog(
+            title = getString(R.string.map_settings_tile_source_change_title),
+            message = getString(R.string.map_settings_tile_source_change_message, provider.displayName),
+            confirmLabel = getString(R.string.map_settings_tile_source_change_confirm),
+        ) {
+            MapRenderSettingsStore.update { it.copy(tileProviderId = provider.id) }
+            syncMapUiFromPrefs()
+            MapCacheController.clearCache()
+            showToast(R.string.map_settings_tile_source_changed)
+        }
     }
 
     private fun currentOfflineMaxZoom(): Double {

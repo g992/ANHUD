@@ -46,6 +46,10 @@ data class ManualOfflineBounds(
 data class MapRenderSettings(
     val zoom: Double = 17.8,
     val tileProviderId: String = defaultMapTileProvider().id,
+    val styleModeId: String = defaultMapStyleMode().id,
+    val customStyleName: String? = null,
+    val customStyleJson: String? = null,
+    val mapVignetteEnabled: Boolean = true,
     val autoZoomEnabled: Boolean = false,
     val autoZoomAt0Kmh: Double = 20.0,
     val autoZoomAt60Kmh: Double = 15.0,
@@ -70,6 +74,11 @@ data class MapRenderSettings(
     val offlineManualLat2: Double? = null,
     val offlineManualLon2: Double? = null,
 )
+
+enum class MapStyleMode(val id: String) {
+    SYSTEM("system"),
+    USER("user"),
+}
 
 const val MAP_ARROW_SCALE_MIN_PERCENT = 7
 const val MAP_ARROW_SCALE_MAX_PERCENT = 30
@@ -163,9 +172,22 @@ fun MapRenderSettings.manualOfflineBoundsOrNull(): ManualOfflineBounds? {
 }
 
 fun MapRenderSettings.normalized(): MapRenderSettings {
+    val normalizedCustomStyleName = customStyleName?.trim()?.takeIf { it.isNotBlank() }
+    val normalizedCustomStyleJson = customStyleJson
+        ?.trim()
+        ?.trimStart('\uFEFF')
+        ?.takeIf { it.isNotBlank() }
+    val normalizedStyleMode = if (normalizedCustomStyleJson == null) {
+        MapStyleMode.SYSTEM
+    } else {
+        resolveMapStyleMode(styleModeId)
+    }
     val base = copy(
         zoom = zoom.coerceIn(MAP_ZOOM_MIN, MAP_ZOOM_MAX),
         tileProviderId = resolveConfiguredMapTileProvider(tileProviderId).id,
+        styleModeId = normalizedStyleMode.id,
+        customStyleName = normalizedCustomStyleName.takeIf { normalizedStyleMode == MapStyleMode.USER },
+        customStyleJson = normalizedCustomStyleJson.takeIf { normalizedStyleMode == MapStyleMode.USER },
         autoZoomAt0Kmh = autoZoomAt0Kmh.coerceIn(MAP_ZOOM_MIN, MAP_ZOOM_MAX),
         autoZoomAt60Kmh = autoZoomAt60Kmh.coerceIn(MAP_ZOOM_MIN, MAP_ZOOM_MAX),
         autoZoomAt90Kmh = autoZoomAt90Kmh.coerceIn(MAP_ZOOM_MIN, MAP_ZOOM_MAX),
@@ -227,6 +249,10 @@ object MapRenderSettingsStore {
     private const val PREFS_NAME = "map_render_settings"
     private const val KEY_ZOOM = "zoom"
     private const val KEY_TILE_PROVIDER_ID = "tile_provider_id"
+    private const val KEY_STYLE_MODE_ID = "style_mode_id"
+    private const val KEY_CUSTOM_STYLE_NAME = "custom_style_name"
+    private const val KEY_CUSTOM_STYLE_JSON = "custom_style_json"
+    private const val KEY_MAP_VIGNETTE_ENABLED = "map_vignette_enabled"
     private const val KEY_AUTO_ZOOM_ENABLED = "auto_zoom_enabled"
     private const val KEY_AUTO_ZOOM_AT_0 = "auto_zoom_at_0"
     private const val KEY_AUTO_ZOOM_AT_60 = "auto_zoom_at_60"
@@ -289,6 +315,10 @@ object MapRenderSettingsStore {
         prefs.edit()
             .putFloat(KEY_ZOOM, updated.zoom.toFloat())
             .putString(KEY_TILE_PROVIDER_ID, updated.tileProviderId)
+            .putString(KEY_STYLE_MODE_ID, updated.styleModeId)
+            .putString(KEY_CUSTOM_STYLE_NAME, updated.customStyleName)
+            .putString(KEY_CUSTOM_STYLE_JSON, updated.customStyleJson)
+            .putBoolean(KEY_MAP_VIGNETTE_ENABLED, updated.mapVignetteEnabled)
             .putBoolean(KEY_AUTO_ZOOM_ENABLED, updated.autoZoomEnabled)
             .putFloat(KEY_AUTO_ZOOM_AT_0, updated.autoZoomAt0Kmh.toFloat())
             .putFloat(KEY_AUTO_ZOOM_AT_60, updated.autoZoomAt60Kmh.toFloat())
@@ -334,6 +364,11 @@ object MapRenderSettingsStore {
             zoom = source.getFloat(KEY_ZOOM, 17.8f).toDouble(),
             tileProviderId = source.getString(KEY_TILE_PROVIDER_ID, defaultMapTileProvider().id)
                 ?: defaultMapTileProvider().id,
+            styleModeId = source.getString(KEY_STYLE_MODE_ID, defaultMapStyleMode().id)
+                ?: defaultMapStyleMode().id,
+            customStyleName = source.getString(KEY_CUSTOM_STYLE_NAME, null),
+            customStyleJson = source.getString(KEY_CUSTOM_STYLE_JSON, null),
+            mapVignetteEnabled = source.getBoolean(KEY_MAP_VIGNETTE_ENABLED, true),
             autoZoomEnabled = source.getBoolean(KEY_AUTO_ZOOM_ENABLED, false),
             autoZoomAt0Kmh = source.getFloat(KEY_AUTO_ZOOM_AT_0, 20.0f).toDouble(),
             autoZoomAt60Kmh = source.getFloat(KEY_AUTO_ZOOM_AT_60, 15.0f).toDouble(),
@@ -358,6 +393,21 @@ object MapRenderSettingsStore {
             offlineManualLat2 = source.getOptionalFloat(KEY_OFFLINE_MANUAL_LAT2),
             offlineManualLon2 = source.getOptionalFloat(KEY_OFFLINE_MANUAL_LON2),
         ).normalized()
+    }
+}
+
+fun defaultMapStyleMode(): MapStyleMode = MapStyleMode.SYSTEM
+
+fun resolveMapStyleMode(styleModeId: String?): MapStyleMode {
+    return MapStyleMode.entries.firstOrNull { it.id == styleModeId } ?: defaultMapStyleMode()
+}
+
+fun MapRenderSettings.effectiveMapStyleMode(): MapStyleMode {
+    val preferred = resolveMapStyleMode(styleModeId)
+    return if (preferred == MapStyleMode.USER && !customStyleJson.isNullOrBlank()) {
+        MapStyleMode.USER
+    } else {
+        MapStyleMode.SYSTEM
     }
 }
 

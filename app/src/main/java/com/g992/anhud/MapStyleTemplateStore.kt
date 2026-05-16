@@ -48,6 +48,11 @@ object MapStyleTemplateStore {
     }
 
     fun loadTemplateJson(context: Context): String {
+        loadCustomTemplateJson()?.let { return it }
+        return loadSystemTemplateJson(context)
+    }
+
+    fun loadSystemTemplateJson(context: Context): String {
         val downloadedFile = downloadedTemplateFile(context.applicationContext)
         if (downloadedFile.isFile) {
             val downloadedJson = runCatching {
@@ -162,6 +167,29 @@ object MapStyleTemplateStore {
             error("Не удалось сохранить шаблон стиля")
         }
     }
+
+    private fun loadCustomTemplateJson(): String? {
+        val settings = MapRenderSettingsStore.current()
+        if (settings.effectiveMapStyleMode() != MapStyleMode.USER) {
+            return null
+        }
+        val rawJson = settings.customStyleJson ?: return null
+        return runCatching {
+            validateCustomMapStyleJson(rawJson)
+        }.onFailure { error ->
+            Log.w(MAP_STYLE_TEMPLATE_TAG, "custom style template is invalid, fallback to system: ${error.message}")
+        }.getOrNull()
+    }
+}
+
+internal fun validateCustomMapStyleJson(rawJson: String): String {
+    val normalized = rawJson.trim().trimStart('\uFEFF')
+    require(normalized.isNotBlank()) { "файл пуст" }
+    val style = JSONObject(normalized)
+    require(style.optInt("version", -1) == 8) { "ожидалась версия style spec 8" }
+    require(style.optJSONObject("sources") != null) { "не найден блок sources" }
+    require(style.optJSONArray("layers") != null) { "не найден массив layers" }
+    return style.toString()
 }
 
 internal fun normalizeDownloadedTemplateJson(rawJson: String): String {
