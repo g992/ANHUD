@@ -8,16 +8,10 @@ enum class MapTileProvider(
     val id: String,
     val displayName: String,
 ) {
-    STARLINE("starline", "StarLine Maps"),
-    OPEN_FREE_MAP("openfreemap", "OpenFreeMap");
+    OPEN_FREE_MAP("openfreemap", "OpenFreeMap"),
+    OPEN_FREE_MAP_PROXY("openfreemap_proxy", "OpenFreeMap (прокси)");
 
-    fun isConfigured(): Boolean {
-        return when (this) {
-            STARLINE -> BuildConfig.STARLINE_MAP_STYLE_ID.isNotBlank() &&
-                BuildConfig.STARLINE_MAPS_ACCESS_TOKEN.isNotBlank()
-            OPEN_FREE_MAP -> true
-        }
-    }
+    fun isConfigured(): Boolean = true
 }
 
 fun initializeMapTileProviderFallbacks(context: Context) {
@@ -25,7 +19,7 @@ fun initializeMapTileProviderFallbacks(context: Context) {
 }
 
 fun defaultMapTileProvider(): MapTileProvider {
-    return MapTileProvider.OPEN_FREE_MAP
+    return MapTileProvider.OPEN_FREE_MAP_PROXY
 }
 
 fun resolveMapTileProvider(providerId: String?): MapTileProvider {

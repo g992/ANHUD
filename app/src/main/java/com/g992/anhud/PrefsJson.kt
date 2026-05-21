@@ -280,6 +280,10 @@ object PrefsJson {
         putFloat("overlay_turn_signals_scale", OverlayPrefs.turnSignalsScale(context))
         putFloat("overlay_turn_signals_spacing_dp", OverlayPrefs.turnSignalsSpacingDp(context))
         putInt("overlay_turn_signals_icon_style", OverlayPrefs.turnSignalsIconStyle(context))
+        putBoolean(
+            "overlay_turn_signals_icon_style_migrated_v2",
+            prefs.getBoolean("overlay_turn_signals_icon_style_migrated_v2", true)
+        )
         putString("overlay_turn_signals_custom_icon_uri", customTurnSignalIcon?.uriString)
         putString("overlay_turn_signals_custom_icon_name", customTurnSignalIcon?.displayName)
         putString(
@@ -334,6 +338,12 @@ object PrefsJson {
         putBoolean("info_mirror_starsheep7", OverlayPrefs.infoMirrorStarsheep7Enabled(context))
         putBoolean("hide_turn_when_far_enabled", OverlayPrefs.hideTurnWhenFarEnabled(context))
         putInt("hide_turn_when_far_distance_meters", OverlayPrefs.hideTurnWhenFarDistanceMeters(context))
+        putBoolean("hide_turn_dynamic_enabled", OverlayPrefs.hideTurnDynamicEnabled(context))
+        val dynamicHideTurnDistances = OverlayPrefs.hideTurnDynamicDistances(context)
+        putInt("hide_turn_dynamic_up_to_40_meters", dynamicHideTurnDistances.upTo40Kmh)
+        putInt("hide_turn_dynamic_40_to_60_meters", dynamicHideTurnDistances.from40To60Kmh)
+        putInt("hide_turn_dynamic_60_to_100_meters", dynamicHideTurnDistances.from60To100Kmh)
+        putInt("hide_turn_dynamic_100_plus_meters", dynamicHideTurnDistances.from100Kmh)
         putBoolean("guide_shown", OverlayPrefs.guideShown(context))
 
         return items

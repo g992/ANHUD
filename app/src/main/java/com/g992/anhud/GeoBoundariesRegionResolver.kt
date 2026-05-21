@@ -8,10 +8,14 @@ import java.io.File
 import java.io.InputStreamReader
 import java.net.HttpURLConnection
 import java.net.URL
+import java.util.concurrent.Callable
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 
 private const val GEOBOUNDARIES_API_BASE = "https://www.geoboundaries.org/api/current"
 private const val GEOBOUNDARIES_PRODUCT = "gbOpen"
 private const val GEOBOUNDARIES_TIMEOUT_MS = 60_000
+private const val GEOBOUNDARIES_EXACT_PREFERRED_TIMEOUT_MS = 200
 private const val GEOBOUNDARIES_USER_AGENT = "ANHUD/1.0"
 private const val GEOBOUNDARIES_GEOMETRY_CACHE_DIR = "offline_region_geometry"
 
@@ -20,9 +24,12 @@ data class ResolvedOfflineGeometry(
     val regionId: String,
     val bounds: OfflineRegionBounds,
     val geometryJson: String,
+    val sourceHint: String,
 )
 
 object GeoBoundariesRegionResolver {
+    private val exactLookupExecutor = Executors.newCachedThreadPool()
+
     fun resolveSelected(context: Context, settings: MapRenderSettings): ResolvedOfflineGeometry {
         settings.manualOfflineBoundsOrNull()?.let { manual ->
             return ResolvedOfflineGeometry(
@@ -30,6 +37,7 @@ object GeoBoundariesRegionResolver {
                 regionId = manual.offlineRegionId(),
                 bounds = manual.boundsPreview(),
                 geometryJson = manual.toPolygonFeatureJson(),
+                sourceHint = "manual",
             )
         }
         val entry = OfflineRegionCatalog.findById(context, settings.offlineRegionId)
@@ -38,25 +46,29 @@ object GeoBoundariesRegionResolver {
     }
 
     fun resolveCatalogEntry(context: Context, entry: OfflineRegionEntry): ResolvedOfflineGeometry {
-        val cacheFile = File(
-            File(context.filesDir, GEOBOUNDARIES_GEOMETRY_CACHE_DIR).apply { mkdirs() },
-            "${entry.id}.geojson"
-        )
-        if (cacheFile.isFile) {
-            return ResolvedOfflineGeometry(
-                label = entry.displayLabel,
-                regionId = entry.id,
-                bounds = entry.boundsPreview(),
-                geometryJson = cacheFile.readText(Charsets.UTF_8),
-            )
+        cachedExactGeometry(context, entry)?.let { return it }
+        if (entry.bundledGeometryAvailable) {
+            resolveExactWithinBudget(context, entry, GEOBOUNDARIES_EXACT_PREFERRED_TIMEOUT_MS)?.let { exact ->
+                return exact
+            }
+            BundledOfflineGeometryStore.resolveCatalogEntry(context, entry)?.let { bundled ->
+                return bundled
+            }
         }
+        return resolveExactCatalogEntry(context, entry, GEOBOUNDARIES_TIMEOUT_MS)
+    }
 
+    private fun resolveExactCatalogEntry(
+        context: Context,
+        entry: OfflineRegionEntry,
+        timeoutMs: Int,
+    ): ResolvedOfflineGeometry {
         val metadataUrl = "$GEOBOUNDARIES_API_BASE/$GEOBOUNDARIES_PRODUCT/${entry.countryIso3}/${entry.level}/"
-        val metadata = JSONObject(httpGetText(metadataUrl))
+        val metadata = JSONObject(httpGetText(metadataUrl, timeoutMs))
         val geometryUrl = metadata.optString("simplifiedGeometryGeoJSON")
             .ifBlank { metadata.optString("gjDownloadURL") }
             .ifBlank { error("geoBoundaries did not return a GeoJSON URL") }
-        val sourceFeatureJson = findFeatureJson(geometryUrl, entry)
+        val sourceFeatureJson = findFeatureJson(geometryUrl, entry, timeoutMs)
             ?: error("Не удалось найти границы для ${entry.displayLabel}")
         val geometry = JSONObject(sourceFeatureJson).optJSONObject("geometry")
             ?: error("geoBoundaries returned empty geometry")
@@ -65,17 +77,55 @@ object GeoBoundariesRegionResolver {
             .put("properties", JSONObject())
             .put("geometry", geometry)
             .toString()
-        cacheFile.writeText(featureJson, Charsets.UTF_8)
+        exactGeometryCacheFile(context, entry).writeText(featureJson, Charsets.UTF_8)
         return ResolvedOfflineGeometry(
             label = entry.displayLabel,
             regionId = entry.id,
             bounds = entry.boundsPreview(),
             geometryJson = featureJson,
+            sourceHint = "geoboundaries_exact",
         )
     }
 
-    private fun findFeatureJson(url: String, entry: OfflineRegionEntry): String? {
-        return withHttpReader(url) { reader ->
+    private fun resolveExactWithinBudget(
+        context: Context,
+        entry: OfflineRegionEntry,
+        timeoutMs: Int,
+    ): ResolvedOfflineGeometry? {
+        val future = exactLookupExecutor.submit(
+            Callable {
+                resolveExactCatalogEntry(context, entry, timeoutMs)
+            }
+        )
+        return try {
+            future.get(timeoutMs.toLong(), TimeUnit.MILLISECONDS)
+        } catch (_: Exception) {
+            future.cancel(true)
+            null
+        }
+    }
+
+    private fun cachedExactGeometry(context: Context, entry: OfflineRegionEntry): ResolvedOfflineGeometry? {
+        val cacheFile = exactGeometryCacheFile(context, entry)
+        if (!cacheFile.isFile) return null
+        return ResolvedOfflineGeometry(
+            label = entry.displayLabel,
+            regionId = entry.id,
+            bounds = entry.boundsPreview(),
+            geometryJson = cacheFile.readText(Charsets.UTF_8),
+            sourceHint = "cached_exact",
+        )
+    }
+
+    private fun exactGeometryCacheFile(context: Context, entry: OfflineRegionEntry): File {
+        return File(
+            File(context.filesDir, GEOBOUNDARIES_GEOMETRY_CACHE_DIR).apply { mkdirs() },
+            "${entry.id}.geojson"
+        )
+    }
+
+    private fun findFeatureJson(url: String, entry: OfflineRegionEntry, timeoutMs: Int): String? {
+        return withHttpReader(url, timeoutMs) { reader ->
             if (!skipToFeaturesArray(reader)) {
                 error("geoBoundaries GeoJSON does not contain features[]")
             }
@@ -107,11 +157,11 @@ object GeoBoundariesRegionResolver {
         return hasJsonStringProperty(featureJson, "shapeName", entry.name, ignoreCase = true)
     }
 
-    private fun httpGetText(url: String): String {
+    private fun httpGetText(url: String, timeoutMs: Int): String {
         val connection = (URL(url).openConnection() as HttpURLConnection).apply {
             requestMethod = "GET"
-            connectTimeout = GEOBOUNDARIES_TIMEOUT_MS
-            readTimeout = GEOBOUNDARIES_TIMEOUT_MS
+            connectTimeout = timeoutMs
+            readTimeout = timeoutMs
             setRequestProperty("User-Agent", GEOBOUNDARIES_USER_AGENT)
             setRequestProperty("Accept", "application/json")
         }
@@ -128,11 +178,11 @@ object GeoBoundariesRegionResolver {
         }
     }
 
-    private fun <T> withHttpReader(url: String, block: (PushbackReader) -> T): T {
+    private fun <T> withHttpReader(url: String, timeoutMs: Int, block: (PushbackReader) -> T): T {
         val connection = (URL(url).openConnection() as HttpURLConnection).apply {
             requestMethod = "GET"
-            connectTimeout = GEOBOUNDARIES_TIMEOUT_MS
-            readTimeout = GEOBOUNDARIES_TIMEOUT_MS
+            connectTimeout = timeoutMs
+            readTimeout = timeoutMs
             setRequestProperty("User-Agent", GEOBOUNDARIES_USER_AGENT)
             setRequestProperty("Accept", "application/geo+json, application/json")
         }

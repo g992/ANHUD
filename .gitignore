@@ -39,4 +39,6 @@ captures/
 /apply_changes.sh
 /app/release/
 /.kotlin/
-
+/tmp/
+__pycache__/
+*.pyc

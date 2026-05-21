@@ -5,6 +5,32 @@ import android.graphics.PointF
 import kotlin.math.abs
 
 object OverlayPrefs {
+    data class DynamicHideTurnDistances(
+        val upTo40Kmh: Int = HIDE_TURN_DYNAMIC_DEFAULT_UP_TO_40_METERS,
+        val from40To60Kmh: Int = HIDE_TURN_DYNAMIC_DEFAULT_40_TO_60_METERS,
+        val from60To100Kmh: Int = HIDE_TURN_DYNAMIC_DEFAULT_60_TO_100_METERS,
+        val from100Kmh: Int = HIDE_TURN_DYNAMIC_DEFAULT_100_PLUS_METERS,
+    ) {
+        fun normalized(): DynamicHideTurnDistances {
+            return copy(
+                upTo40Kmh = normalizeDynamicHideTurnDistance(upTo40Kmh),
+                from40To60Kmh = normalizeDynamicHideTurnDistance(from40To60Kmh),
+                from60To100Kmh = normalizeDynamicHideTurnDistance(from60To100Kmh),
+                from100Kmh = normalizeDynamicHideTurnDistance(from100Kmh),
+            )
+        }
+
+        fun resolveForSpeed(speedKmh: Int?): Int {
+            val speed = (speedKmh ?: 0).coerceAtLeast(0)
+            return when {
+                speed < 40 -> upTo40Kmh
+                speed < 60 -> from40To60Kmh
+                speed < 100 -> from60To100Kmh
+                else -> from100Kmh
+            }
+        }
+    }
+
     private const val PREFS_NAME = "hud_overlay_prefs"
     private const val KEY_ENABLED = "overlay_enabled"
     private const val KEY_DISPLAY_ID = "overlay_display_id"
@@ -104,6 +130,11 @@ object OverlayPrefs {
     private const val KEY_INFO_MIRROR_STARSHEEP7 = "info_mirror_starsheep7"
     private const val KEY_HIDE_TURN_WHEN_FAR_ENABLED = "hide_turn_when_far_enabled"
     private const val KEY_HIDE_TURN_WHEN_FAR_DISTANCE_METERS = "hide_turn_when_far_distance_meters"
+    private const val KEY_HIDE_TURN_DYNAMIC_ENABLED = "hide_turn_dynamic_enabled"
+    private const val KEY_HIDE_TURN_DYNAMIC_UP_TO_40_METERS = "hide_turn_dynamic_up_to_40_meters"
+    private const val KEY_HIDE_TURN_DYNAMIC_40_TO_60_METERS = "hide_turn_dynamic_40_to_60_meters"
+    private const val KEY_HIDE_TURN_DYNAMIC_60_TO_100_METERS = "hide_turn_dynamic_60_to_100_meters"
+    private const val KEY_HIDE_TURN_DYNAMIC_100_PLUS_METERS = "hide_turn_dynamic_100_plus_meters"
     private const val KEY_GUIDE_SHOWN = "guide_shown"
     private const val KEY_NAV_WIDTH_DP = "overlay_nav_width_dp"
 
@@ -118,6 +149,12 @@ object OverlayPrefs {
     const val SPEED_CORRECTION_MIN = -10
     const val SPEED_CORRECTION_MAX = 10
     const val HIDE_TURN_DISTANCE_DEFAULT_METERS = 1000
+    const val HIDE_TURN_DYNAMIC_DISTANCE_MIN_METERS = 100
+    const val HIDE_TURN_DYNAMIC_DISTANCE_MAX_METERS = 10_000
+    const val HIDE_TURN_DYNAMIC_DEFAULT_UP_TO_40_METERS = 100
+    const val HIDE_TURN_DYNAMIC_DEFAULT_40_TO_60_METERS = 300
+    const val HIDE_TURN_DYNAMIC_DEFAULT_60_TO_100_METERS = 500
+    const val HIDE_TURN_DYNAMIC_DEFAULT_100_PLUS_METERS = 1_000
     private val HIDE_TURN_DISTANCE_STEPS_METERS = intArrayOf(
         100, 300, 500, 1000, 3000, 5000, 10_000, 30_000, 50_000
     )
@@ -1143,6 +1180,56 @@ object OverlayPrefs {
             .apply()
     }
 
+    fun hideTurnDynamicEnabled(context: Context): Boolean {
+        return prefs(context).getBoolean(KEY_HIDE_TURN_DYNAMIC_ENABLED, false)
+    }
+
+    fun setHideTurnDynamicEnabled(context: Context, enabled: Boolean) {
+        prefs(context).edit()
+            .putBoolean(KEY_HIDE_TURN_DYNAMIC_ENABLED, enabled)
+            .apply()
+    }
+
+    fun hideTurnDynamicDistances(context: Context): DynamicHideTurnDistances {
+        val prefs = prefs(context)
+        return DynamicHideTurnDistances(
+            upTo40Kmh = prefs.getInt(
+                KEY_HIDE_TURN_DYNAMIC_UP_TO_40_METERS,
+                HIDE_TURN_DYNAMIC_DEFAULT_UP_TO_40_METERS
+            ),
+            from40To60Kmh = prefs.getInt(
+                KEY_HIDE_TURN_DYNAMIC_40_TO_60_METERS,
+                HIDE_TURN_DYNAMIC_DEFAULT_40_TO_60_METERS
+            ),
+            from60To100Kmh = prefs.getInt(
+                KEY_HIDE_TURN_DYNAMIC_60_TO_100_METERS,
+                HIDE_TURN_DYNAMIC_DEFAULT_60_TO_100_METERS
+            ),
+            from100Kmh = prefs.getInt(
+                KEY_HIDE_TURN_DYNAMIC_100_PLUS_METERS,
+                HIDE_TURN_DYNAMIC_DEFAULT_100_PLUS_METERS
+            ),
+        ).normalized()
+    }
+
+    fun setHideTurnDynamicDistances(context: Context, distances: DynamicHideTurnDistances) {
+        val normalized = distances.normalized()
+        prefs(context).edit()
+            .putInt(KEY_HIDE_TURN_DYNAMIC_UP_TO_40_METERS, normalized.upTo40Kmh)
+            .putInt(KEY_HIDE_TURN_DYNAMIC_40_TO_60_METERS, normalized.from40To60Kmh)
+            .putInt(KEY_HIDE_TURN_DYNAMIC_60_TO_100_METERS, normalized.from60To100Kmh)
+            .putInt(KEY_HIDE_TURN_DYNAMIC_100_PLUS_METERS, normalized.from100Kmh)
+            .apply()
+    }
+
+    fun resolveHideTurnThresholdMeters(context: Context, speedKmh: Int?): Int {
+        return if (hideTurnDynamicEnabled(context)) {
+            hideTurnDynamicDistances(context).resolveForSpeed(speedKmh)
+        } else {
+            hideTurnWhenFarDistanceMeters(context)
+        }
+    }
+
     fun guideShown(context: Context): Boolean {
         return prefs(context).getBoolean(KEY_GUIDE_SHOWN, false)
     }
@@ -1164,6 +1251,13 @@ object OverlayPrefs {
             }
         }
         return nearest
+    }
+
+    private fun normalizeDynamicHideTurnDistance(distanceMeters: Int): Int {
+        return distanceMeters.coerceIn(
+            HIDE_TURN_DYNAMIC_DISTANCE_MIN_METERS,
+            HIDE_TURN_DYNAMIC_DISTANCE_MAX_METERS
+        )
     }
 
     private fun prefs(context: Context) = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)

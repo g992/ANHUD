@@ -24,6 +24,7 @@ private val MAP_STYLE_TEMPLATE_RETRY_DELAYS_MS = longArrayOf(60_000L, 180_000L, 
 private const val MAP_STYLE_TEMPLATE_MAX_ATTEMPTS = 4
 private const val STARLINE_STYLE_TOKEN_PLACEHOLDER = "__STARLINE_ACCESS_TOKEN__"
 private const val OPEN_FREE_MAP_TILEJSON_URL = "https://tiles.openfreemap.org/planet"
+private const val OPEN_FREE_MAP_PROXY_TILEJSON_URL = "https://ofmproxy.ragdesign.ru/planet"
 
 object MapStyleTemplateStore {
     private val listeners = CopyOnWriteArraySet<() -> Unit>()
@@ -275,17 +276,14 @@ private fun rewriteVectorSource(
     source.put("type", "vector")
     source.put("maxzoom", MAP_STYLE_SOURCE_MAX_ZOOM)
     when (provider) {
-        MapTileProvider.STARLINE -> {
-            source.remove("url")
-            source.put(
-                "tiles",
-                JSONArray().put(buildConfiguredStarLineTilesUrl(sourceName, source))
-            )
-        }
-
         MapTileProvider.OPEN_FREE_MAP -> {
             source.remove("tiles")
             source.put("url", OPEN_FREE_MAP_TILEJSON_URL)
+        }
+
+        MapTileProvider.OPEN_FREE_MAP_PROXY -> {
+            source.remove("tiles")
+            source.put("url", OPEN_FREE_MAP_PROXY_TILEJSON_URL)
         }
     }
 }

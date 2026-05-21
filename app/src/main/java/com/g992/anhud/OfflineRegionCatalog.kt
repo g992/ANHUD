@@ -4,6 +4,11 @@ import android.content.Context
 import org.json.JSONArray
 import org.json.JSONObject
 
+enum class OfflineRegionSource {
+    BUNDLED,
+    ONLINE_ONLY,
+}
+
 data class OfflineRegionEntry(
     val id: String,
     val countryIso3: String,
@@ -16,10 +21,12 @@ data class OfflineRegionEntry(
     val south: Double,
     val east: Double,
     val north: Double,
+    val source: OfflineRegionSource = OfflineRegionSource.BUNDLED,
+    val bundledGeometryAvailable: Boolean = source == OfflineRegionSource.BUNDLED,
 ) {
     val displayLabel: String = "$name · $countryRu"
     val secondaryLabel: String = listOfNotNull(countryRu, level, shapeISO).joinToString(" · ")
-    val searchKey: String = listOf(name, countryRu, countryIso3, level, shapeISO.orEmpty())
+    val searchKey: String = listOf(name, countryRu, countryName, countryIso3, level, shapeISO.orEmpty())
         .joinToString(" ")
         .lowercase()
 }
@@ -48,6 +55,21 @@ object OfflineRegionCatalog {
         return all(context).filter { it.searchKey.contains(normalized) }
     }
 
+    fun searchAllSources(context: Context, query: String): List<OfflineRegionEntry> {
+        val normalized = query.trim()
+        if (normalized.isEmpty()) return all(context)
+        val bundled = search(context, normalized)
+        val online = OnlineOnlyOfflineRegionCatalog.search(context, normalized)
+        return buildList(bundled.size + online.size) {
+            addAll(bundled)
+            online.forEach { candidate ->
+                if (none { it.id == candidate.id }) {
+                    add(candidate)
+                }
+            }
+        }
+    }
+
     private fun load(context: Context): List<OfflineRegionEntry> {
         val json = context.assets.open(ASSET_PATH).bufferedReader().use { it.readText() }
         val array = when {
@@ -70,6 +92,8 @@ object OfflineRegionCatalog {
                         south = item.optJSONArray("bbox")?.optDouble(1) ?: 0.0,
                         east = item.optJSONArray("bbox")?.optDouble(2) ?: 0.0,
                         north = item.optJSONArray("bbox")?.optDouble(3) ?: 0.0,
+                        source = OfflineRegionSource.BUNDLED,
+                        bundledGeometryAvailable = true,
                     )
                 )
             }

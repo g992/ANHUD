@@ -115,6 +115,13 @@
                 <action android:name="G992.ANHUD.SET_PRESET" />
             </intent-filter>
         </receiver>
+        <receiver
+            android:name=".OfflineDebugReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.g992.anhud.DEBUG_OFFLINE" />
+            </intent-filter>
+        </receiver>
 
         <provider
             android:name="androidx.core.content.FileProvider"

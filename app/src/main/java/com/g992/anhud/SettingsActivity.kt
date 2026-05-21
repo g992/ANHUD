@@ -15,6 +15,9 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
+import android.location.Location
+import android.location.LocationListener
+import android.location.LocationManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -25,6 +28,7 @@ import android.provider.MediaStore
 import android.provider.OpenableColumns
 import android.provider.Settings
 import android.text.Editable
+import android.text.InputType
 import android.text.TextWatcher
 import android.view.Gravity
 import android.view.LayoutInflater
@@ -52,8 +56,20 @@ import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.appcompat.widget.AppCompatImageButton
 import androidx.appcompat.widget.SwitchCompat
 import com.google.android.material.tabs.TabLayout
+import org.maplibre.android.camera.CameraUpdateFactory
+import org.maplibre.android.geometry.LatLng
+import org.maplibre.android.geometry.LatLngBounds
+import org.maplibre.android.location.LocationComponent
+import org.maplibre.android.location.LocationComponentActivationOptions
+import org.maplibre.android.location.LocationComponentOptions
+import org.maplibre.android.location.modes.RenderMode
+import org.maplibre.android.maps.MapLibreMap
+import org.maplibre.android.maps.MapLibreMapOptions
+import org.maplibre.android.maps.MapView
+import org.maplibre.android.net.ConnectivityReceiver
 import org.json.JSONObject
 import java.io.File
 import java.io.FileOutputStream
@@ -92,6 +108,8 @@ class SettingsActivity : ScaledActivity() {
     private lateinit var hideTurnWhenFarSwitch: SwitchCompat
     private lateinit var hideTurnWhenFarDistanceSeek: SeekBar
     private lateinit var hideTurnWhenFarDistanceValue: TextView
+    private lateinit var hideTurnDynamicSwitch: SwitchCompat
+    private lateinit var hideTurnDynamicConfigButton: Button
     private lateinit var maneuverRowContainer: LinearLayout
     private lateinit var helpListContainer: LinearLayout
     private lateinit var helpStartGuideButton: View
@@ -135,6 +153,8 @@ class SettingsActivity : ScaledActivity() {
     private var mapStyleModeButtons: Map<MapStyleMode, Button> = emptyMap()
     private var mapCacheButtons: List<Button> = emptyList()
     private var offlineDownloadsAdapter: OfflineDownloadsAdapter? = null
+    private var offlineDownloadsRecommendationsSection: OfflineDownloadsRecommendationsSection? = null
+    private var offlineCachePreviewSession: OfflineCachePreviewSession? = null
 
     private var updateDownloadId: Long = -1L
     private var updatesTabIndex: Int = -1
@@ -236,6 +256,7 @@ class SettingsActivity : ScaledActivity() {
         runOnUiThread {
             syncMapCacheUi(snapshot)
             offlineDownloadsAdapter?.updateSnapshot(snapshot)
+            offlineDownloadsRecommendationsSection?.updateSnapshot(snapshot)
         }
     }
 
@@ -301,6 +322,9 @@ class SettingsActivity : ScaledActivity() {
         hideTurnWhenFarSwitch = findViewById(R.id.hideTurnWhenFarSwitch)
         hideTurnWhenFarDistanceSeek = findViewById(R.id.hideTurnWhenFarDistanceSeek)
         hideTurnWhenFarDistanceValue = findViewById(R.id.hideTurnWhenFarDistanceValue)
+        hideTurnDynamicSwitch = findViewById(R.id.hideTurnDynamicSwitch)
+        hideTurnDynamicConfigButton = findViewById(R.id.hideTurnDynamicConfigButton)
+        styleSettingsButton(hideTurnDynamicConfigButton, SETTINGS_BUTTON_SECONDARY)
         maneuverRowContainer = findViewById(R.id.maneuverRowContainer)
         helpListContainer = findViewById(R.id.helpListContainer)
         helpStartGuideButton = findViewById(R.id.helpStartGuideButton)
@@ -371,6 +395,7 @@ class SettingsActivity : ScaledActivity() {
     }
 
     override fun onStop() {
+        offlineCachePreviewSession?.dismiss()
         MapCacheController.removeListener(mapCacheListener)
         try {
             unregisterReceiver(updateReceiver)
@@ -595,6 +620,10 @@ class SettingsActivity : ScaledActivity() {
             if (isSyncingUi) return@setOnCheckedChangeListener
             OverlayPrefs.setHideTurnWhenFarEnabled(this, isChecked)
             updateHideTurnDistanceControls(isChecked)
+            updateHideTurnDynamicControls(
+                hideTurnEnabled = isChecked,
+                dynamicEnabled = OverlayPrefs.hideTurnDynamicEnabled(this)
+            )
         }
 
         hideTurnWhenFarDistanceSeek.max = OverlayPrefs.hideTurnDistanceStepsMeters().lastIndex
@@ -618,6 +647,18 @@ class SettingsActivity : ScaledActivity() {
                 OverlayPrefs.setHideTurnWhenFarDistanceMeters(this@SettingsActivity, distance)
             }
         })
+
+        hideTurnDynamicSwitch.setOnCheckedChangeListener { _, isChecked ->
+            if (isSyncingUi) return@setOnCheckedChangeListener
+            OverlayPrefs.setHideTurnDynamicEnabled(this, isChecked)
+            updateHideTurnDynamicControls(
+                hideTurnEnabled = OverlayPrefs.hideTurnWhenFarEnabled(this),
+                dynamicEnabled = isChecked
+            )
+        }
+        hideTurnDynamicConfigButton.setOnClickListener {
+            showHideTurnDynamicSettingsDialog()
+        }
     }
 
     private fun setupMapTab() {
@@ -894,13 +935,7 @@ class SettingsActivity : ScaledActivity() {
                     createMapSliderRow(getString(R.string.map_settings_tilt), mapTiltValue, tiltSeek),
                     createMapSliderRow(getString(R.string.map_settings_arrow_scale), mapArrowValue, arrowSeek),
                     createMapValueRow(getString(R.string.map_settings_tile_source), mapTileProviderValue, tileProviderRow),
-                    createMapHintView(
-                        if (MapTileProvider.STARLINE.isConfigured()) {
-                            getString(R.string.map_settings_tile_source_hint)
-                        } else {
-                            getString(R.string.map_settings_tile_source_unavailable)
-                        }
-                    ),
+                    createMapHintView(getString(R.string.map_settings_tile_source_hint)),
                     createMapSwitchRow(mapVignetteSwitch, getString(R.string.map_settings_vignette_hint)),
                     createMapValueRow(getString(R.string.map_settings_style), mapStyleModeValue, styleModeRow),
                     mapStyleModeHint,
@@ -909,6 +944,7 @@ class SettingsActivity : ScaledActivity() {
                     *routeSnapRows.toTypedArray(),
                     createMapValueRow(getString(R.string.map_settings_cache), mapCacheValue, cacheRow),
                     createMapButtonRow(listOf(mapCacheClearButton)),
+                    createMapButtonRow(listOf(offlineDownloadsButton)),
                 )
             )
         )
@@ -1313,128 +1349,8 @@ class SettingsActivity : ScaledActivity() {
             }
             val views = row.tag as OfflineDownloadRowViews
             val item = getItem(position)
-            val downloaded = item.id in snapshot.offlineDownloadedRegionIds
-            val isCurrent = snapshot.offlineDownloadedRegionId == item.id
-            val inProgress = isCurrent && snapshot.offlineDownloadStatus != OFFLINE_STATUS_IDLE
-            views.title.text = item.name
-            views.subtitle.text = offlineRegionDetailsText(item, downloaded, isCurrent, inProgress)
-            views.progress.visibility = if (inProgress) View.VISIBLE else View.GONE
-            views.button.apply {
-                visibility = if (inProgress) View.GONE else View.VISIBLE
-                isEnabled = !inProgress
-                text = if (downloaded) {
-                    getString(R.string.map_settings_offline_delete_short)
-                } else {
-                    getString(R.string.map_settings_offline_download_short)
-                }
-                styleSettingsButton(
-                    button = this,
-                    variant = if (downloaded) SETTINGS_BUTTON_DANGER else SETTINGS_BUTTON_PRIMARY
-                )
-                setOnClickListener {
-                    if (downloaded) {
-                        MapCacheController.deleteOfflineRegion(item.id)
-                    } else {
-                        MapCacheController.startOfflineRegionDownload(item)
-                    }
-                }
-            }
+            bindOfflineDownloadRow(row, views, item, snapshot)
             return row
-        }
-
-        private fun createOfflineDownloadRow(): LinearLayout {
-            val title = TextView(this@SettingsActivity).apply {
-                setTextColor(ContextCompat.getColor(context, R.color.white))
-                textSize = 16f
-                setTypeface(typeface, android.graphics.Typeface.BOLD)
-            }
-            val subtitle = TextView(this@SettingsActivity).apply {
-                setTextColor(Color.parseColor("#99FFFFFF"))
-                textSize = 12f
-            }
-            val button = Button(this@SettingsActivity).apply {
-                isAllCaps = false
-                minHeight = dp(44)
-                minWidth = dp(96)
-            }
-            val progress = ProgressBar(this@SettingsActivity).apply {
-                isIndeterminate = true
-                visibility = View.GONE
-            }
-            return LinearLayout(this@SettingsActivity).apply {
-                orientation = LinearLayout.HORIZONTAL
-                gravity = Gravity.CENTER_VERTICAL
-                setPadding(dp(16), dp(12), dp(12), dp(12))
-                background = roundedDrawable(
-                    fill = Color.parseColor("#171717"),
-                    stroke = Color.parseColor("#2A2A2A"),
-                    radiusDp = 10
-                )
-                addView(
-                    LinearLayout(context).apply {
-                        orientation = LinearLayout.VERTICAL
-                        addView(title)
-                        addView(subtitle)
-                    },
-                    LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
-                )
-                addView(
-                    FrameLayout(context).apply {
-                        addView(
-                            button,
-                            FrameLayout.LayoutParams(
-                                FrameLayout.LayoutParams.MATCH_PARENT,
-                                FrameLayout.LayoutParams.WRAP_CONTENT,
-                                Gravity.CENTER
-                            )
-                        )
-                        addView(
-                            progress,
-                            FrameLayout.LayoutParams(dp(44), dp(44), Gravity.CENTER)
-                        )
-                    },
-                    LinearLayout.LayoutParams(dp(108), LinearLayout.LayoutParams.WRAP_CONTENT)
-                )
-                tag = OfflineDownloadRowViews(title, subtitle, button, progress)
-            }
-        }
-
-        private fun offlineRegionDetailsText(
-            item: OfflineRegionEntry,
-            downloaded: Boolean,
-            isCurrent: Boolean,
-            inProgress: Boolean,
-        ): String {
-            val statusText = when {
-                inProgress && snapshot.offlineDownloadStatus == OFFLINE_STATUS_RESOLVING -> {
-                    getString(R.string.map_settings_offline_row_preparing)
-                }
-                inProgress && snapshot.offlineDownloadStatus == OFFLINE_STATUS_DOWNLOADING -> {
-                    getString(
-                        R.string.map_settings_offline_row_downloading,
-                        snapshot.offlineDownloadPercent,
-                        snapshot.offlineDownloadCompletedResources,
-                        snapshot.offlineDownloadRequiredResources,
-                    )
-                }
-                isCurrent && !snapshot.offlineLastError.isNullOrBlank() -> {
-                    getString(R.string.map_settings_offline_row_error, snapshot.offlineLastError.orEmpty())
-                }
-                else -> null
-            }
-            val sizeText = if (downloaded) {
-                snapshot.offlineDownloadedRegionSizesBytes[item.id]?.let { formatStorageBytes(it) }
-                    ?: getString(R.string.map_settings_offline_size_unknown)
-            } else {
-                estimateOfflineSizeText(item)
-            }
-            return listOfNotNull(item.countryRu, statusText, sizeText).joinToString(" · ")
-        }
-
-        private fun estimateOfflineSizeText(item: OfflineRegionEntry): String {
-            return OfflineRegionSizeEstimator
-                .estimate(this@SettingsActivity, item.boundsPreview(), currentOfflineMaxZoom())
-                .displayText(this@SettingsActivity)
         }
     }
 
@@ -1444,6 +1360,289 @@ class SettingsActivity : ScaledActivity() {
         val button: Button,
         val progress: ProgressBar,
     )
+
+    private inner class OfflineDownloadsRecommendationsSection(
+        private val container: LinearLayout,
+        private val entries: List<OfflineRegionEntry>,
+        private var snapshot: MapCacheSnapshot,
+    ) {
+        private var requestedVisible = false
+
+        fun updateSnapshot(updatedSnapshot: MapCacheSnapshot) {
+            snapshot = updatedSnapshot
+            syncVisibilityAndRender()
+        }
+
+        fun setVisible(visible: Boolean) {
+            requestedVisible = visible
+            syncVisibilityAndRender()
+        }
+
+        private fun syncVisibilityAndRender() {
+            val items = buildRecommendedOfflineRegions(entries, snapshot)
+            container.visibility = if (requestedVisible && items.isNotEmpty()) View.VISIBLE else View.GONE
+            if (container.visibility == View.VISIBLE) {
+                render(items)
+            } else {
+                container.removeAllViews()
+            }
+        }
+
+        private fun render(items: List<OfflineRegionEntry>) {
+            container.removeAllViews()
+            if (items.isEmpty()) return
+            container.addView(
+                TextView(this@SettingsActivity).apply {
+                    text = getString(R.string.map_settings_offline_recommended_title)
+                    setTextColor(ContextCompat.getColor(context, R.color.white))
+                    textSize = 16f
+                    setTypeface(typeface, android.graphics.Typeface.BOLD)
+                }
+            )
+            items.forEachIndexed { index, item ->
+                container.addView(
+                    createOfflineDownloadRow().also { row ->
+                        val views = row.tag as OfflineDownloadRowViews
+                        bindOfflineDownloadRow(row, views, item, snapshot)
+                    },
+                    LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT,
+                        LinearLayout.LayoutParams.WRAP_CONTENT
+                    ).apply {
+                        topMargin = if (index == 0) dp(12) else dp(8)
+                    }
+                )
+            }
+        }
+    }
+
+    private fun createOfflineDownloadRow(): LinearLayout {
+        val title = TextView(this).apply {
+            setTextColor(ContextCompat.getColor(context, R.color.white))
+            textSize = 16f
+            setTypeface(typeface, android.graphics.Typeface.BOLD)
+        }
+        val subtitle = TextView(this).apply {
+            setTextColor(Color.parseColor("#99FFFFFF"))
+            textSize = 12f
+        }
+        val button = Button(this).apply {
+            isAllCaps = false
+            minHeight = dp(44)
+            minWidth = dp(96)
+        }
+        val progress = ProgressBar(this).apply {
+            isIndeterminate = true
+            visibility = View.GONE
+        }
+        return LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(16), dp(12), dp(12), dp(12))
+            background = roundedDrawable(
+                fill = Color.parseColor("#171717"),
+                stroke = Color.parseColor("#2A2A2A"),
+                radiusDp = 10
+            )
+            addView(
+                LinearLayout(context).apply {
+                    orientation = LinearLayout.VERTICAL
+                    addView(title)
+                    addView(subtitle)
+                },
+                LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+            )
+            addView(
+                FrameLayout(context).apply {
+                    addView(
+                        button,
+                        FrameLayout.LayoutParams(
+                            FrameLayout.LayoutParams.MATCH_PARENT,
+                            FrameLayout.LayoutParams.WRAP_CONTENT,
+                            Gravity.CENTER
+                        )
+                    )
+                    addView(
+                        progress,
+                        FrameLayout.LayoutParams(dp(44), dp(44), Gravity.CENTER)
+                    )
+                },
+                LinearLayout.LayoutParams(dp(108), LinearLayout.LayoutParams.WRAP_CONTENT)
+            )
+            tag = OfflineDownloadRowViews(title, subtitle, button, progress)
+        }
+    }
+
+    private fun bindOfflineDownloadRow(
+        row: LinearLayout,
+        views: OfflineDownloadRowViews,
+        item: OfflineRegionEntry,
+        snapshot: MapCacheSnapshot,
+    ) {
+        val downloaded = item.id in snapshot.offlineDownloadedRegionIds
+        val isCurrent = snapshot.offlineDownloadedRegionId == item.id
+        val anyProgress = snapshot.offlineDownloadStatus != OFFLINE_STATUS_IDLE
+        val inProgress = isCurrent && snapshot.offlineDownloadStatus != OFFLINE_STATUS_IDLE
+        views.title.text = item.name
+        views.subtitle.text = offlineRegionDetailsText(item, snapshot, downloaded, isCurrent, inProgress)
+        views.progress.visibility = if (inProgress) View.VISIBLE else View.GONE
+        views.button.apply {
+            visibility = if (inProgress) View.GONE else View.VISIBLE
+            isEnabled = !anyProgress
+            text = if (downloaded) {
+                getString(R.string.map_settings_offline_delete_short)
+            } else {
+                getString(R.string.map_settings_offline_download_short)
+            }
+            styleSettingsButton(
+                button = this,
+                variant = if (downloaded) SETTINGS_BUTTON_DANGER else SETTINGS_BUTTON_PRIMARY
+            )
+            setOnClickListener {
+                if (downloaded) {
+                    MapCacheController.deleteOfflineRegion(item.id)
+                } else {
+                    MapCacheController.startOfflineRegionDownload(item)
+                }
+            }
+        }
+    }
+
+    private fun offlineRegionDetailsText(
+        item: OfflineRegionEntry,
+        snapshot: MapCacheSnapshot,
+        downloaded: Boolean,
+        isCurrent: Boolean,
+        inProgress: Boolean,
+    ): String {
+        val sourceText = when (item.source) {
+            OfflineRegionSource.BUNDLED -> null
+            OfflineRegionSource.ONLINE_ONLY -> getString(R.string.map_settings_offline_source_online_only)
+        }
+        val statusText = when {
+            inProgress && snapshot.offlineDownloadStatus == OFFLINE_STATUS_RESOLVING -> {
+                getString(R.string.map_settings_offline_row_preparing)
+            }
+            inProgress && snapshot.offlineDownloadStatus == OFFLINE_STATUS_DOWNLOADING -> {
+                buildOfflineDownloadStatusText(snapshot)
+            }
+            isCurrent && !snapshot.offlineLastError.isNullOrBlank() -> {
+                getString(R.string.map_settings_offline_row_error, snapshot.offlineLastError.orEmpty())
+            }
+            else -> null
+        }
+        val sizeText = if (downloaded) {
+            snapshot.offlineDownloadedRegionSizesBytes[item.id]?.let { formatStorageBytes(it) }
+                ?: getString(R.string.map_settings_offline_size_unknown)
+        } else {
+            null
+        }
+        return listOfNotNull(item.countryRu, sourceText, statusText, sizeText).joinToString(" · ")
+    }
+
+    private fun buildOfflineDownloadStatusText(snapshot: MapCacheSnapshot): String {
+        return if (snapshot.offlineDownloadProgressPrecise) {
+            getString(R.string.map_settings_offline_row_downloading_percent, snapshot.offlineDownloadPercent)
+        } else {
+            getString(R.string.map_settings_offline_row_packaging)
+        }
+    }
+
+    private fun buildRecommendedOfflineRegions(
+        entries: List<OfflineRegionEntry>,
+        snapshot: MapCacheSnapshot,
+    ): List<OfflineRegionEntry> {
+        val anchor = resolveOfflineRecommendationsAnchorLocation()
+        val prioritizedIds = LinkedHashSet<String>()
+        val prioritizedEntries = mutableListOf<OfflineRegionEntry>()
+        val activeRegionId = snapshot.offlineDownloadedRegionId
+            ?.takeIf { snapshot.offlineDownloadStatus != OFFLINE_STATUS_IDLE }
+
+        activeRegionId?.let { regionId ->
+            entries.firstOrNull { it.id == regionId }?.let { entry ->
+                prioritizedIds += entry.id
+                prioritizedEntries += entry
+            }
+        }
+
+        val downloadedEntries = entries
+            .asSequence()
+            .filter { it.id in snapshot.offlineDownloadedRegionIds && it.id !in prioritizedIds }
+            .let { sequence ->
+                if (anchor == null) {
+                    sequence.sortedWith(
+                        compareBy<OfflineRegionEntry>(
+                            { it.countryRu },
+                            { it.level.recommendationLevelRank() },
+                            { it.name }
+                        )
+                    )
+                } else {
+                    sequence.sortedWith(
+                        compareBy<OfflineRegionEntry>(
+                            { !it.boundsPreview().contains(anchor) },
+                            { it.boundsPreview().distanceMetersTo(anchor) },
+                            { it.level.recommendationLevelRank() },
+                            { it.name }
+                        )
+                    )
+                }
+            }
+            .toList()
+        downloadedEntries.forEach { entry ->
+            prioritizedIds += entry.id
+            prioritizedEntries += entry
+        }
+
+        if (anchor == null) {
+            return prioritizedEntries
+        }
+
+        val contains = entries
+            .asSequence()
+            .filterNot { it.id in prioritizedIds }
+            .filter { it.boundsPreview().contains(anchor) }
+            .sortedWith(
+                compareBy<OfflineRegionEntry>(
+                    { it.level.recommendationLevelRank() },
+                    { it.boundsPreview().areaApprox() }
+                )
+            )
+            .toList()
+        val containsIds = contains.asSequence().map { it.id }.toHashSet()
+        val nearest = entries
+            .asSequence()
+            .filterNot { it.id in prioritizedIds || containsIds.contains(it.id) }
+            .sortedBy { it.boundsPreview().distanceMetersTo(anchor) }
+            .take(6)
+            .toList()
+        return buildList(prioritizedEntries.size + 6) {
+            addAll(prioritizedEntries)
+            addAll(contains.take(4))
+            nearest.forEach { candidate ->
+                if (none { it.id == candidate.id }) {
+                    add(candidate)
+                }
+            }
+        }
+    }
+
+    private fun resolveOfflineRecommendationsAnchorLocation(): Location? {
+        latestKnownSettingsLocation()?.let { return it }
+        return MapRouteTelemetryStore.current().startLocation
+    }
+
+    private fun latestKnownSettingsLocation(): Location? {
+        if (!hasPreviewLocationPermission()) return null
+        val manager = getSystemService(LOCATION_SERVICE) as? LocationManager ?: return null
+        return listOf(
+            LocationManager.GPS_PROVIDER,
+            LocationManager.NETWORK_PROVIDER,
+            LocationManager.PASSIVE_PROVIDER
+        ).mapNotNull { provider ->
+            runCatching { manager.getLastKnownLocation(provider) }.getOrNull()
+        }.maxByOrNull { it.time }
+    }
 
     private fun createMapButtonRow(buttons: List<Button>): View {
         return LinearLayout(this).apply {
@@ -1891,7 +2090,7 @@ class SettingsActivity : ScaledActivity() {
             maxOf(settings.autoZoomAt0Kmh, settings.autoZoomAt60Kmh, settings.autoZoomAt90Kmh)
         } else {
             settings.zoom
-        }.coerceIn(MAP_ZOOM_MIN, MAP_ZOOM_MAX)
+        }.coerceIn(MAP_ZOOM_MIN, OFFLINE_REGION_MAX_ZOOM)
     }
 
     private fun showOfflineDownloadsDialog() {
@@ -1900,11 +2099,33 @@ class SettingsActivity : ScaledActivity() {
             showToast(R.string.map_settings_region_empty)
             return
         }
+        val initialSnapshot = MapCacheController.current()
         val adapter = OfflineDownloadsAdapter(
             items = allEntries.toMutableList(),
-            snapshot = MapCacheController.current()
+            snapshot = initialSnapshot
         )
         offlineDownloadsAdapter = adapter
+        val recommendedContainer = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            visibility = View.GONE
+        }
+        offlineDownloadsRecommendationsSection = OfflineDownloadsRecommendationsSection(
+            container = recommendedContainer,
+            entries = allEntries,
+            snapshot = initialSnapshot,
+        )
+        val recommendedHeader = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(
+                recommendedContainer,
+                LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply {
+                    bottomMargin = dp(12)
+                }
+            )
+        }
         val searchInput = EditText(this).apply {
             hint = getString(R.string.map_settings_region_search)
             setTextColor(ContextCompat.getColor(this@SettingsActivity, R.color.white))
@@ -1917,8 +2138,21 @@ class SettingsActivity : ScaledActivity() {
             setPadding(dp(16), dp(16), dp(16), dp(16))
             textSize = 18f
         }
+        val previewButton = createSettingsButton(
+            getString(R.string.map_settings_cache_preview_button),
+            SETTINGS_BUTTON_PRIMARY
+        ).apply {
+            setOnClickListener {
+                showOfflineCachePreviewDialog()
+            }
+        }
+        val closeButton = createSettingsButton(
+            getString(R.string.map_settings_region_close),
+            SETTINGS_BUTTON_SECONDARY
+        )
         val listView = ListView(this).apply {
             dividerHeight = 0
+            addHeaderView(recommendedHeader, null, false)
             setAdapter(adapter)
             setBackgroundColor(Color.parseColor("#101010"))
             cacheColorHint = Color.TRANSPARENT
@@ -1926,10 +2160,19 @@ class SettingsActivity : ScaledActivity() {
         searchInput.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
-                adapter.replace(OfflineRegionCatalog.search(this@SettingsActivity, s?.toString().orEmpty()))
+                val query = s?.toString().orEmpty()
+                offlineDownloadsRecommendationsSection?.setVisible(query.isBlank())
+                adapter.replace(
+                    if (query.isBlank()) {
+                        OfflineRegionCatalog.all(this@SettingsActivity)
+                    } else {
+                        OfflineRegionCatalog.searchAllSources(this@SettingsActivity, query)
+                    }
+                )
             }
             override fun afterTextChanged(s: Editable?) = Unit
         })
+        val dialogHeight = (resources.displayMetrics.heightPixels * 0.82f).roundToInt()
         val dialog = AlertDialog.Builder(this)
             .setTitle(R.string.map_settings_offline_downloads)
             .setView(
@@ -1941,8 +2184,29 @@ class SettingsActivity : ScaledActivity() {
                         radiusDp = 12
                     )
                     setPadding(dp(24), dp(24), dp(24), dp(24))
+                    minimumHeight = dialogHeight - dp(32)
                     addView(
-                        searchInput,
+                        LinearLayout(this@SettingsActivity).apply {
+                            orientation = LinearLayout.HORIZONTAL
+                            gravity = Gravity.CENTER_VERTICAL
+                            addView(
+                                searchInput,
+                                LinearLayout.LayoutParams(
+                                    0,
+                                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                                    1f
+                                )
+                            )
+                            addView(
+                                previewButton,
+                                LinearLayout.LayoutParams(
+                                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                                    LinearLayout.LayoutParams.WRAP_CONTENT
+                                ).apply {
+                                    marginStart = dp(12)
+                                }
+                            )
+                        },
                         LinearLayout.LayoutParams(
                             LinearLayout.LayoutParams.MATCH_PARENT,
                             LinearLayout.LayoutParams.WRAP_CONTENT
@@ -1954,26 +2218,444 @@ class SettingsActivity : ScaledActivity() {
                         listView,
                         LinearLayout.LayoutParams(
                             LinearLayout.LayoutParams.MATCH_PARENT,
-                            dp(520)
+                            0,
+                            1f
+                        ).apply {
+                            topMargin = dp(12)
+                        }
+                    )
+                    addView(
+                        createMapButtonRow(listOf(closeButton)),
+                        LinearLayout.LayoutParams(
+                            LinearLayout.LayoutParams.MATCH_PARENT,
+                            LinearLayout.LayoutParams.WRAP_CONTENT
                         ).apply {
                             topMargin = dp(12)
                         }
                     )
                 }
             )
-            .setNegativeButton(R.string.map_settings_region_close, null)
             .create()
+        closeButton.setOnClickListener { dialog.dismiss() }
         dialog.setOnDismissListener {
             if (offlineDownloadsAdapter === adapter) {
                 offlineDownloadsAdapter = null
             }
+            offlineDownloadsRecommendationsSection = null
         }
         dialog.show()
-        listOf(AlertDialog.BUTTON_NEGATIVE).forEach { which ->
-            dialog.getButton(which)?.let { styleSettingsButton(it, SETTINGS_BUTTON_SECONDARY) }
-        }
+        offlineDownloadsRecommendationsSection?.setVisible(true)
         dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
-        dialog.window?.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+        dialog.window?.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, dialogHeight)
+    }
+
+    private fun showOfflineCachePreviewDialog() {
+        offlineCachePreviewSession?.dismiss()
+        OfflineCachePreviewSession().also { session ->
+            offlineCachePreviewSession = session
+            session.show()
+        }
+    }
+
+    private inner class OfflineCachePreviewSession {
+        private val connectivityReceiver = ConnectivityReceiver.instance(applicationContext)
+        private val centerUserButton = createSettingsIconButton(
+            R.drawable.my_location_24,
+            SETTINGS_BUTTON_PRIMARY
+        )
+        private val closeButton = createSettingsButton(
+            getString(R.string.map_settings_region_close),
+            SETTINGS_BUTTON_SECONDARY
+        )
+        private val mapView = MapView(
+            this@SettingsActivity,
+            MapLibreMapOptions()
+                .textureMode(true)
+                .rotateGesturesEnabled(false)
+                .tiltGesturesEnabled(false)
+                .zoomGesturesEnabled(true)
+                .doubleTapGesturesEnabled(true)
+                .quickZoomGesturesEnabled(true)
+                .scrollGesturesEnabled(true)
+                .horizontalScrollGesturesEnabled(true)
+                .compassEnabled(false)
+                .logoEnabled(false)
+                .attributionEnabled(false)
+        ).apply {
+            setBackgroundColor(Color.BLACK)
+        }
+        private val locationUpdateListener = LocationListener { location ->
+            applyPreviewLocation(location)
+        }
+        private val dialogHeight = (resources.displayMetrics.heightPixels * 0.82f).roundToInt()
+        private val dialog = AlertDialog.Builder(this@SettingsActivity)
+            .setTitle(R.string.map_settings_cache_preview_title)
+            .setView(
+                LinearLayout(this@SettingsActivity).apply {
+                    orientation = LinearLayout.VERTICAL
+                    background = roundedDrawable(
+                        fill = Color.parseColor("#101010"),
+                        stroke = ContextCompat.getColor(this@SettingsActivity, R.color.hud_blue),
+                        radiusDp = 12
+                    )
+                    setPadding(dp(24), dp(24), dp(24), dp(24))
+                    minimumHeight = dialogHeight - dp(32)
+                    addView(
+                        mapView,
+                        LinearLayout.LayoutParams(
+                            LinearLayout.LayoutParams.MATCH_PARENT,
+                            0,
+                            1f
+                        )
+                    )
+                    addView(
+                        LinearLayout(this@SettingsActivity).apply {
+                            orientation = LinearLayout.HORIZONTAL
+                            gravity = Gravity.CENTER_VERTICAL
+                            addView(
+                                centerUserButton,
+                                LinearLayout.LayoutParams(dp(52), dp(52))
+                            )
+                            addView(
+                                closeButton,
+                                LinearLayout.LayoutParams(
+                                    0,
+                                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                                    1f
+                                ).apply {
+                                    marginStart = dp(12)
+                                }
+                            )
+                        },
+                        LinearLayout.LayoutParams(
+                            LinearLayout.LayoutParams.MATCH_PARENT,
+                            LinearLayout.LayoutParams.WRAP_CONTENT
+                        ).apply {
+                            topMargin = dp(12)
+                        }
+                    )
+                }
+            )
+            .create()
+        private var mapStarted = false
+        private var disposed = false
+        private var previewMap: MapLibreMap? = null
+        private var locationComponent: LocationComponent? = null
+        private var locationManager: LocationManager? = null
+        private var currentUserLocation: Location? = null
+
+        fun show() {
+            centerUserButton.setOnClickListener {
+                centerOnUserLocation()
+            }
+            closeButton.setOnClickListener {
+                dialog.dismiss()
+            }
+            dialog.setOnShowListener {
+                if (mapStarted) return@setOnShowListener
+                mapStarted = true
+                connectivityReceiver.setConnected(false)
+                mapView.onCreate(null)
+                mapView.getMapAsync(::onMapReady)
+                mapView.onStart()
+                mapView.onResume()
+            }
+            dialog.setOnDismissListener {
+                dispose()
+            }
+            dialog.show()
+            updateCenterUserButtonState()
+            dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
+            dialog.window?.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, dialogHeight)
+        }
+
+        fun dismiss() {
+            if (dialog.isShowing) {
+                dialog.dismiss()
+            } else {
+                dispose()
+            }
+        }
+
+        private fun onMapReady(map: MapLibreMap) {
+            previewMap = map
+            map.uiSettings.setAllGesturesEnabled(true)
+            map.uiSettings.setRotateGesturesEnabled(false)
+            map.uiSettings.setTiltGesturesEnabled(false)
+            map.uiSettings.setCompassEnabled(false)
+            map.uiSettings.setLogoEnabled(false)
+            map.uiSettings.setAttributionEnabled(false)
+            map.setPrefetchesTiles(false)
+            map.setTileCacheEnabled(true)
+            map.setStyle(buildOfflineCachePreviewMapStyle()) {
+                enablePreviewLocationComponent(map, it)
+                startPreviewLocationTracking()
+                mapView.post {
+                    if (!disposed) {
+                        applyOfflineCachePreviewCamera(map)
+                    }
+                }
+            }
+        }
+
+        private fun dispose() {
+            if (disposed) return
+            disposed = true
+            if (offlineCachePreviewSession === this) {
+                offlineCachePreviewSession = null
+            }
+            stopPreviewLocationTracking()
+            previewMap = null
+            if (mapStarted) {
+                mapView.onPause()
+                mapView.onStop()
+                mapView.onDestroy()
+                (mapView.parent as? ViewGroup)?.removeView(mapView)
+            }
+            connectivityReceiver.setConnected(null)
+        }
+
+        private fun enablePreviewLocationComponent(map: MapLibreMap, style: org.maplibre.android.maps.Style) {
+            if (!hasPreviewLocationPermission()) {
+                updateCenterUserButtonState()
+                return
+            }
+            val component = map.locationComponent
+            component.activateLocationComponent(
+                LocationComponentActivationOptions.builder(this@SettingsActivity, style)
+                    .locationComponentOptions(buildPreviewLocationOptions())
+                    .useDefaultLocationEngine(false)
+                    .build()
+            )
+            component.isLocationComponentEnabled = true
+            component.renderMode = RenderMode.GPS
+            locationComponent = component
+            previewLastKnownLocation()?.let(::applyPreviewLocation)
+            updateCenterUserButtonState()
+        }
+
+        private fun startPreviewLocationTracking() {
+            if (!hasPreviewLocationPermission()) {
+                updateCenterUserButtonState()
+                return
+            }
+            val manager = getSystemService(LOCATION_SERVICE) as? LocationManager ?: return
+            locationManager = manager
+            previewLastKnownLocation(manager)?.let(::applyPreviewLocation)
+            listOf(
+                LocationManager.GPS_PROVIDER,
+                LocationManager.NETWORK_PROVIDER,
+                LocationManager.PASSIVE_PROVIDER
+            ).forEach { provider ->
+                val enabled = runCatching { manager.isProviderEnabled(provider) }.getOrDefault(provider == LocationManager.PASSIVE_PROVIDER)
+                if (!enabled) return@forEach
+                runCatching {
+                    manager.requestLocationUpdates(provider, 1000L, 0f, locationUpdateListener, Looper.getMainLooper())
+                }
+            }
+            updateCenterUserButtonState()
+        }
+
+        private fun stopPreviewLocationTracking() {
+            locationManager?.let { manager ->
+                runCatching { manager.removeUpdates(locationUpdateListener) }
+            }
+            locationManager = null
+            locationComponent = null
+        }
+
+        private fun applyPreviewLocation(location: Location) {
+            currentUserLocation = Location(location)
+            locationComponent?.forceLocationUpdate(location)
+            updateCenterUserButtonState()
+        }
+
+        private fun centerOnUserLocation() {
+            val map = previewMap ?: return
+            val location = currentUserLocation
+            if (location == null) {
+                showToast(R.string.map_settings_cache_preview_no_location)
+                updateCenterUserButtonState()
+                return
+            }
+            map.animateCamera(
+                CameraUpdateFactory.newLatLngZoom(
+                    LatLng(location.latitude, location.longitude),
+                    14.0
+                )
+            )
+        }
+
+        private fun updateCenterUserButtonState() {
+            val enabled = currentUserLocation != null
+            centerUserButton.isEnabled = enabled
+            centerUserButton.alpha = if (enabled) 1f else 0.5f
+        }
+
+        private fun previewLastKnownLocation(manager: LocationManager? = locationManager): Location? {
+            val locationManager = manager ?: return null
+            return listOf(
+                LocationManager.GPS_PROVIDER,
+                LocationManager.NETWORK_PROVIDER,
+                LocationManager.PASSIVE_PROVIDER
+            ).mapNotNull { provider ->
+                runCatching { locationManager.getLastKnownLocation(provider) }.getOrNull()
+            }.maxByOrNull { it.time }
+        }
+    }
+
+    private fun applyOfflineCachePreviewCamera(map: MapLibreMap) {
+        resolveOfflineCachePreviewBounds()?.let { bounds ->
+            map.moveCamera(CameraUpdateFactory.newLatLngZoom(bounds.center, 14.0))
+            return
+        }
+        val startLocation = MapRouteTelemetryStore.current().startLocation
+        if (startLocation != null) {
+            map.moveCamera(
+                CameraUpdateFactory.newLatLngZoom(
+                    LatLng(startLocation.latitude, startLocation.longitude),
+                    14.0
+                )
+            )
+            return
+        }
+        map.moveCamera(CameraUpdateFactory.newLatLngZoom(LatLng(0.0, 0.0), 14.0))
+    }
+
+    private fun resolveOfflineCachePreviewBounds(): LatLngBounds? {
+        val settings = MapRenderSettingsStore.current()
+        settings.manualOfflineBoundsOrNull()?.boundsPreview()?.toLatLngBounds()?.let { return it }
+        OfflineRegionCatalog.findById(this, settings.offlineRegionId)?.boundsPreview()?.toLatLngBounds()
+            ?.let { return it }
+        val routePoints = MapRouteTelemetryStore.current().routePoints
+        if (routePoints.size < 2) return null
+        val west = routePoints.minOf { it.longitude }
+        val east = routePoints.maxOf { it.longitude }
+        val south = routePoints.minOf { it.latitude }
+        val north = routePoints.maxOf { it.latitude }
+        if (west == east || south == north) return null
+        return LatLngBounds.from(north, east, south, west)
+    }
+
+    private fun OfflineRegionBounds.toLatLngBounds(): LatLngBounds {
+        return LatLngBounds.from(north, east, south, west)
+    }
+
+    private fun OfflineRegionBounds.contains(location: Location): Boolean {
+        return location.longitude in west..east && location.latitude in south..north
+    }
+
+    private fun OfflineRegionBounds.distanceMetersTo(location: Location): Float {
+        val clampedLat = location.latitude.coerceIn(south, north)
+        val clampedLon = location.longitude.coerceIn(west, east)
+        val result = FloatArray(1)
+        Location.distanceBetween(location.latitude, location.longitude, clampedLat, clampedLon, result)
+        return result[0]
+    }
+
+    private fun OfflineRegionBounds.areaApprox(): Double {
+        return (east - west) * (north - south)
+    }
+
+    private fun String.recommendationLevelRank(): Int {
+        return when (uppercase(Locale.US)) {
+            "ADM3" -> 0
+            "ADM2" -> 1
+            "ADM1" -> 2
+            else -> 3
+        }
+    }
+
+    private fun hasPreviewLocationPermission(): Boolean {
+        return ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
+            ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+    }
+
+    private fun buildPreviewLocationOptions(): LocationComponentOptions {
+        val arrowScale = (MapRenderSettingsStore.current().arrowScalePercent / 100f)
+            .coerceIn(
+                MAP_ARROW_SCALE_MIN_PERCENT / 100f,
+                MAP_ARROW_SCALE_MAX_PERCENT / 100f
+            )
+        return LocationComponentOptions.builder(this)
+            .gpsDrawable(R.drawable.ic_nav_arrow)
+            .foregroundDrawable(R.drawable.ic_nav_arrow)
+            .foregroundDrawableStale(R.drawable.ic_nav_arrow)
+            .backgroundDrawable(R.drawable.ic_transparent_puck)
+            .backgroundDrawableStale(R.drawable.ic_transparent_puck)
+            .bearingDrawable(R.drawable.ic_transparent_puck)
+            .maxZoomIconScale(arrowScale)
+            .minZoomIconScale(arrowScale)
+            .build()
+    }
+
+    private fun createSettingsIconButton(
+        drawableRes: Int,
+        variant: Int = SETTINGS_BUTTON_SECONDARY,
+    ): AppCompatImageButton {
+        return AppCompatImageButton(this).apply {
+            setImageResource(drawableRes)
+            imageTintList = android.content.res.ColorStateList.valueOf(ContextCompat.getColor(context, R.color.white))
+            scaleType = ImageView.ScaleType.CENTER_INSIDE
+            minimumWidth = dp(44)
+            minimumHeight = dp(44)
+            setPadding(dp(12), dp(12), dp(12), dp(12))
+            background = when (variant) {
+                SETTINGS_BUTTON_PRIMARY -> roundedDrawable(
+                    fill = ContextCompat.getColor(context, R.color.hud_blue),
+                    stroke = Color.parseColor("#4EA3FF"),
+                    radiusDp = 10
+                )
+                SETTINGS_BUTTON_DANGER -> roundedDrawable(
+                    fill = Color.parseColor("#3A1515"),
+                    stroke = Color.parseColor("#FF4433"),
+                    radiusDp = 10
+                )
+                else -> roundedDrawable(
+                    fill = Color.parseColor("#222222"),
+                    stroke = Color.parseColor("#3A3A3A"),
+                    radiusDp = 10
+                )
+            }
+        }
+    }
+
+    private fun buildOfflineCachePreviewMapStyle(): org.maplibre.android.maps.Style.Builder {
+        val templateJson = MapStyleTemplateStore.loadTemplateJson(this)
+        val baseStyleJson = prepareHudMapStyleJson(
+            templateJson = templateJson,
+            provider = currentMapTileProvider(this),
+            settings = MapRenderSettingsStore.current()
+        )
+        return org.maplibre.android.maps.Style.Builder()
+            .fromJson(normalizeOfflineCachePreviewStyleJson(baseStyleJson))
+    }
+
+    private fun normalizeOfflineCachePreviewStyleJson(rawJson: String): String {
+        val style = JSONObject(rawJson)
+        val sources = style.optJSONObject("sources")
+        if (sources != null) {
+            val iterator = sources.keys()
+            while (iterator.hasNext()) {
+                val key = iterator.next()
+                val source = sources.optJSONObject(key) ?: continue
+                source.put("minzoom", 0)
+                source.put("maxzoom", 24)
+                sources.put(key, source)
+            }
+            style.put("sources", sources)
+        }
+        val layers = style.optJSONArray("layers")
+        if (layers != null) {
+            for (index in 0 until layers.length()) {
+                val layer = layers.optJSONObject(index) ?: continue
+                layer.put("minzoom", 0)
+                layer.put("maxzoom", 24)
+                layers.put(index, layer)
+            }
+            style.put("layers", layers)
+        }
+        return style.toString()
     }
 
     private fun exportSettingsToDownloads() {
@@ -2729,8 +3411,11 @@ class SettingsActivity : ScaledActivity() {
             val hideDistance = OverlayPrefs.hideTurnWhenFarDistanceMeters(this)
             hideTurnWhenFarDistanceSeek.progress = OverlayPrefs.hideTurnWhenFarDistanceProgress(this)
             hideTurnWhenFarDistanceValue.text = formatManeuverHideDistance(hideDistance)
+            val hideTurnDynamicEnabled = OverlayPrefs.hideTurnDynamicEnabled(this)
+            hideTurnDynamicSwitch.isChecked = hideTurnDynamicEnabled
             updateHideTurnSwitchLabel(hideDistance)
             updateHideTurnDistanceControls(hideTurnWhenFarEnabled)
+            updateHideTurnDynamicControls(hideTurnWhenFarEnabled, hideTurnDynamicEnabled)
             syncMapUiFromPrefs()
         } finally {
             isSyncingUi = false
@@ -2752,6 +3437,197 @@ class SettingsActivity : ScaledActivity() {
         hideTurnWhenFarDistanceSeek.isEnabled = enabled
         hideTurnWhenFarDistanceSeek.alpha = if (enabled) 1f else 0.5f
         hideTurnWhenFarDistanceValue.alpha = if (enabled) 1f else 0.5f
+    }
+
+    private fun updateHideTurnDynamicControls(hideTurnEnabled: Boolean, dynamicEnabled: Boolean) {
+        hideTurnDynamicSwitch.isEnabled = hideTurnEnabled
+        hideTurnDynamicSwitch.alpha = if (hideTurnEnabled) 1f else 0.5f
+        hideTurnDynamicConfigButton.isEnabled = hideTurnEnabled && dynamicEnabled
+        hideTurnDynamicConfigButton.alpha = if (hideTurnEnabled && dynamicEnabled) 1f else 0.5f
+    }
+
+    private fun showHideTurnDynamicSettingsDialog() {
+        val current = OverlayPrefs.hideTurnDynamicDistances(this)
+        var dialog: AlertDialog? = null
+        val contentColumn = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            background = roundedDrawable(
+                fill = Color.parseColor("#101010"),
+                stroke = ContextCompat.getColor(this@SettingsActivity, R.color.hud_blue),
+                radiusDp = 12
+            )
+            setPadding(dp(20), dp(20), dp(20), dp(20))
+        }
+        contentColumn.addView(TextView(this).apply {
+            text = getString(R.string.hide_turn_dynamic_dialog_title)
+            setTextColor(ContextCompat.getColor(context, R.color.white))
+            textSize = 20f
+            setTypeface(typeface, android.graphics.Typeface.BOLD)
+        })
+        contentColumn.addView(TextView(this).apply {
+            text = getString(R.string.hide_turn_dynamic_dialog_hint)
+            setTextColor(Color.parseColor("#B3B3B3"))
+            textSize = 13f
+        }, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        ).apply {
+            topMargin = dp(8)
+        })
+
+        val table = TableLayout(this).apply {
+            isStretchAllColumns = true
+            isShrinkAllColumns = true
+        }
+        val inputs = linkedMapOf<String, EditText>()
+
+        fun createCellText(text: String, bold: Boolean = false): TextView {
+            return TextView(this).apply {
+                this.text = text
+                setTextColor(ContextCompat.getColor(context, R.color.white))
+                textSize = 14f
+                if (bold) {
+                    setTypeface(typeface, android.graphics.Typeface.BOLD)
+                }
+                setPadding(dp(8), dp(10), dp(8), dp(10))
+            }
+        }
+
+        fun createCellInput(initialValue: Int): EditText {
+            return EditText(this).apply {
+                setText(initialValue.toString())
+                setTextColor(ContextCompat.getColor(context, R.color.white))
+                setHintTextColor(Color.parseColor("#808080"))
+                backgroundTintList = ContextCompat.getColorStateList(context, R.color.hud_blue)
+                inputType = InputType.TYPE_CLASS_NUMBER
+                gravity = Gravity.CENTER
+                setPadding(dp(8), dp(8), dp(8), dp(8))
+            }
+        }
+
+        table.addView(TableRow(this).apply {
+            addView(createCellText(getString(R.string.hide_turn_dynamic_speed_column), true))
+            addView(createCellText(getString(R.string.hide_turn_dynamic_distance_column), true))
+        })
+
+        val rows = listOf(
+            Triple("upTo40", getString(R.string.hide_turn_dynamic_speed_up_to_40), current.upTo40Kmh),
+            Triple("from40To60", getString(R.string.hide_turn_dynamic_speed_40_to_60), current.from40To60Kmh),
+            Triple("from60To100", getString(R.string.hide_turn_dynamic_speed_60_to_100), current.from60To100Kmh),
+            Triple("from100", getString(R.string.hide_turn_dynamic_speed_100_plus), current.from100Kmh),
+        )
+        rows.forEach { (key, label, value) ->
+            val input = createCellInput(value)
+            inputs[key] = input
+            table.addView(TableRow(this).apply {
+                addView(createCellText(label))
+                addView(input)
+            })
+        }
+
+        contentColumn.addView(table, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        ).apply {
+            topMargin = dp(16)
+        })
+
+        val cancelButton = createSettingsButton(
+            getString(android.R.string.cancel),
+            SETTINGS_BUTTON_SECONDARY
+        ).apply {
+            minHeight = dp(36)
+            minimumHeight = dp(36)
+        }
+        val confirmButton = createSettingsButton(
+            getString(android.R.string.ok),
+            SETTINGS_BUTTON_PRIMARY
+        ).apply {
+            minHeight = dp(36)
+            minimumHeight = dp(36)
+        }
+        val buttonsRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.END
+            addView(cancelButton)
+            addView(
+                confirmButton,
+                LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply {
+                    marginStart = dp(10)
+                }
+            )
+        }
+        contentColumn.addView(buttonsRow, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        ).apply {
+            topMargin = dp(18)
+        })
+
+        val container = ScrollView(this).apply {
+            isFillViewport = true
+            overScrollMode = View.OVER_SCROLL_IF_CONTENT_SCROLLS
+            setPadding(dp(12), dp(12), dp(12), dp(12))
+            addView(
+                contentColumn,
+                ViewGroup.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT
+                )
+            )
+        }
+
+        cancelButton.setOnClickListener { dialog?.dismiss() }
+        confirmButton.setOnClickListener {
+            val parsed = inputs.mapValues { (_, input) ->
+                input.text.toString().trim().toIntOrNull()
+            }
+            val values = parsed.values
+            if (values.any { it == null }) {
+                showToast(R.string.hide_turn_dynamic_validation_invalid_number)
+                return@setOnClickListener
+            }
+            val distances = OverlayPrefs.DynamicHideTurnDistances(
+                upTo40Kmh = parsed.getValue("upTo40")!!,
+                from40To60Kmh = parsed.getValue("from40To60")!!,
+                from60To100Kmh = parsed.getValue("from60To100")!!,
+                from100Kmh = parsed.getValue("from100")!!,
+            )
+            val invalid = listOf(
+                distances.upTo40Kmh,
+                distances.from40To60Kmh,
+                distances.from60To100Kmh,
+                distances.from100Kmh,
+            ).any {
+                it !in OverlayPrefs.HIDE_TURN_DYNAMIC_DISTANCE_MIN_METERS..
+                    OverlayPrefs.HIDE_TURN_DYNAMIC_DISTANCE_MAX_METERS
+            }
+            if (invalid) {
+                showToast(
+                    getString(
+                        R.string.hide_turn_dynamic_validation_range,
+                        OverlayPrefs.HIDE_TURN_DYNAMIC_DISTANCE_MIN_METERS,
+                        OverlayPrefs.HIDE_TURN_DYNAMIC_DISTANCE_MAX_METERS
+                    )
+                )
+                return@setOnClickListener
+            }
+            OverlayPrefs.setHideTurnDynamicDistances(this, distances)
+            dialog?.dismiss()
+        }
+
+        dialog = AlertDialog.Builder(this, R.style.ThemeOverlay_ANHUD_Dialog)
+            .setView(container)
+            .create()
+        dialog.show()
+        dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
+        dialog.window?.setLayout(
+            (resources.displayMetrics.widthPixels * 0.92f).roundToInt(),
+            ViewGroup.LayoutParams.WRAP_CONTENT
+        )
     }
 
     private fun formatManeuverHideDistance(distanceMeters: Int): String {

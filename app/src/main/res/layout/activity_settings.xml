@@ -366,6 +366,23 @@
                     android:max="8"
                     android:progress="3" />
 
+                <androidx.appcompat.widget.SwitchCompat
+                    android:id="@+id/hideTurnDynamicSwitch"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="16dp"
+                    android:text="@string/hide_turn_dynamic_enabled_label"
+                    android:textColor="@color/white"
+                    android:textSize="14sp" />
+
+                <Button
+                    android:id="@+id/hideTurnDynamicConfigButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:minHeight="40dp"
+                    android:text="@string/hide_turn_dynamic_config_button" />
+
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"

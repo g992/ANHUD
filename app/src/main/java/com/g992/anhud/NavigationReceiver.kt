@@ -765,7 +765,7 @@ class NavigationReceiver : BroadcastReceiver() {
             val street = state.rawNextStreet.trim()
             val maneuverDistanceMeters = resolveManeuverDistanceMeters(state)
             if (shouldHideNativeNavigationByDistance(context, maneuverDistanceMeters)) {
-                val thresholdMeters = OverlayPrefs.hideTurnWhenFarDistanceMeters(context)
+                val thresholdMeters = OverlayPrefs.resolveHideTurnThresholdMeters(context, state.speedKmh)
                 if (NativeNavigationController.isActive()) {
                     Log.d(
                         TAG,
@@ -849,7 +849,8 @@ class NavigationReceiver : BroadcastReceiver() {
                 return false
             }
             val distanceMeters = maneuverDistanceMeters ?: return false
-            val thresholdMeters = OverlayPrefs.hideTurnWhenFarDistanceMeters(context)
+            val speedKmh = NavigationHudStore.snapshot().speedKmh
+            val thresholdMeters = OverlayPrefs.resolveHideTurnThresholdMeters(context, speedKmh)
             return distanceMeters > thresholdMeters
         }
 
