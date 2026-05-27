@@ -5,6 +5,13 @@ import android.graphics.PointF
 import kotlin.math.abs
 
 object OverlayPrefs {
+    internal enum class DynamicHideTurnSpeedBucket {
+        UP_TO_40,
+        FROM_40_TO_60,
+        FROM_60_TO_100,
+        FROM_100_PLUS,
+    }
+
     data class DynamicHideTurnDistances(
         val upTo40Kmh: Int = HIDE_TURN_DYNAMIC_DEFAULT_UP_TO_40_METERS,
         val from40To60Kmh: Int = HIDE_TURN_DYNAMIC_DEFAULT_40_TO_60_METERS,
@@ -21,12 +28,15 @@ object OverlayPrefs {
         }
 
         fun resolveForSpeed(speedKmh: Int?): Int {
-            val speed = (speedKmh ?: 0).coerceAtLeast(0)
-            return when {
-                speed < 40 -> upTo40Kmh
-                speed < 60 -> from40To60Kmh
-                speed < 100 -> from60To100Kmh
-                else -> from100Kmh
+            return resolveForBucket(resolveDynamicHideTurnSpeedBucket(speedKmh))
+        }
+
+        internal fun resolveForBucket(bucket: DynamicHideTurnSpeedBucket): Int {
+            return when (bucket) {
+                DynamicHideTurnSpeedBucket.UP_TO_40 -> upTo40Kmh
+                DynamicHideTurnSpeedBucket.FROM_40_TO_60 -> from40To60Kmh
+                DynamicHideTurnSpeedBucket.FROM_60_TO_100 -> from60To100Kmh
+                DynamicHideTurnSpeedBucket.FROM_100_PLUS -> from100Kmh
             }
         }
     }
@@ -1227,6 +1237,52 @@ object OverlayPrefs {
             hideTurnDynamicDistances(context).resolveForSpeed(speedKmh)
         } else {
             hideTurnWhenFarDistanceMeters(context)
+        }
+    }
+
+    internal fun resolveDynamicHideTurnSpeedBucket(speedKmh: Int?): DynamicHideTurnSpeedBucket {
+        val speed = (speedKmh ?: 0).coerceAtLeast(0)
+        return when {
+            speed < 40 -> DynamicHideTurnSpeedBucket.UP_TO_40
+            speed < 60 -> DynamicHideTurnSpeedBucket.FROM_40_TO_60
+            speed < 100 -> DynamicHideTurnSpeedBucket.FROM_60_TO_100
+            else -> DynamicHideTurnSpeedBucket.FROM_100_PLUS
+        }
+    }
+
+    internal fun applyDynamicHideTurnSpeedBucketHysteresis(
+        currentBucket: DynamicHideTurnSpeedBucket?,
+        speedKmh: Int?,
+        hysteresisKmh: Int = 5
+    ): DynamicHideTurnSpeedBucket {
+        val safeSpeed = (speedKmh ?: 0).coerceAtLeast(0)
+        val hysteresis = hysteresisKmh.coerceAtLeast(0)
+        val bucket = currentBucket ?: return resolveDynamicHideTurnSpeedBucket(safeSpeed)
+        return when (bucket) {
+            DynamicHideTurnSpeedBucket.UP_TO_40 -> {
+                if (safeSpeed >= 40 + hysteresis) {
+                    DynamicHideTurnSpeedBucket.FROM_40_TO_60
+                } else {
+                    bucket
+                }
+            }
+            DynamicHideTurnSpeedBucket.FROM_40_TO_60 -> when {
+                safeSpeed < 40 - hysteresis -> DynamicHideTurnSpeedBucket.UP_TO_40
+                safeSpeed >= 60 + hysteresis -> DynamicHideTurnSpeedBucket.FROM_60_TO_100
+                else -> bucket
+            }
+            DynamicHideTurnSpeedBucket.FROM_60_TO_100 -> when {
+                safeSpeed < 60 - hysteresis -> DynamicHideTurnSpeedBucket.FROM_40_TO_60
+                safeSpeed >= 100 + hysteresis -> DynamicHideTurnSpeedBucket.FROM_100_PLUS
+                else -> bucket
+            }
+            DynamicHideTurnSpeedBucket.FROM_100_PLUS -> {
+                if (safeSpeed < 100 - hysteresis) {
+                    DynamicHideTurnSpeedBucket.FROM_60_TO_100
+                } else {
+                    bucket
+                }
+            }
         }
     }
 

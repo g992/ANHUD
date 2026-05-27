@@ -13,6 +13,8 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.SeekBar
 import android.widget.Button
+import android.widget.ArrayAdapter
+import android.widget.Spinner
 import android.widget.TextView
 import android.graphics.Color
 import androidx.appcompat.app.AlertDialog
@@ -80,6 +82,8 @@ internal fun MainActivity.openPositionDialog(
     val roadEventsButton = dialogView.findViewById<Button>(R.id.dialogRoadEventsButton)
     val tripStatusRow = dialogView.findViewById<View>(R.id.dialogTripStatusRow)
     val tripStatusCheck = dialogView.findViewById<CheckBox>(R.id.dialogTripStatusCheck)
+    val mapArrowPlacementRow = dialogView.findViewById<View>(R.id.dialogMapArrowPlacementRow)
+    val mapArrowPlacementSpinner = dialogView.findViewById<Spinner>(R.id.dialogMapArrowPlacementSpinner)
     val laneGuidanceRow = dialogView.findViewById<View>(R.id.dialogLaneGuidanceRow)
     val laneGuidanceCheck = dialogView.findViewById<CheckBox>(R.id.dialogLaneGuidanceCheck)
     val laneGuidanceButton = dialogView.findViewById<Button>(R.id.dialogLaneGuidanceButton)
@@ -133,6 +137,22 @@ internal fun MainActivity.openPositionDialog(
     var mapHeightDp = mapSize.y
     var navWidthDp = OverlayPrefs.navWidthDp(this)
     var turnSignalsSpacingDp = OverlayPrefs.turnSignalsSpacingDp(this)
+    val mapArrowPlacementOptions = listOf(
+        defaultMapArrowPlacement(),
+        MapArrowPlacement.BOTTOM,
+    )
+    mapArrowPlacementSpinner.adapter = ArrayAdapter(
+        this,
+        R.layout.spinner_item,
+        mapArrowPlacementOptions.map { placement ->
+            when (placement) {
+                MapArrowPlacement.DEFAULT -> getString(R.string.map_settings_arrow_placement_default)
+                MapArrowPlacement.BOTTOM -> getString(R.string.map_settings_arrow_placement_bottom)
+            }
+        }
+    ).also { spinnerAdapter ->
+        spinnerAdapter.setDropDownViewResource(R.layout.spinner_dropdown_item)
+    }
     var currentScale = 1f
     val density = displayDensity.takeIf { it > 0f } ?: resources.displayMetrics.density
     TurnSignalIcons.applyPair(this, previewTurnSignalsLeft, previewTurnSignalsRight, turnSignalsIconStyle)
@@ -277,9 +297,16 @@ internal fun MainActivity.openPositionDialog(
     if (target == OverlayTarget.MAP) {
         roadEventsRow.visibility = View.VISIBLE
         tripStatusRow.visibility = View.VISIBLE
+        mapArrowPlacementRow.visibility = View.VISIBLE
         laneGuidanceRow.visibility = View.VISIBLE
         roadEventsCheck.isChecked = MapRenderSettingsStore.current().roadEventsEnabled
         tripStatusCheck.isChecked = MapRenderSettingsStore.current().tripStatusEnabled
+        mapArrowPlacementSpinner.setSelection(
+            mapArrowPlacementOptions.indexOf(
+                resolveMapArrowPlacement(MapRenderSettingsStore.current().arrowPlacementId)
+            ).coerceAtLeast(0),
+            false
+        )
         laneGuidanceCheck.isChecked = MapRenderSettingsStore.current().laneGuidanceEnabled
         roadEventsCheck.setOnCheckedChangeListener { _, isChecked ->
             if (isChecked == MapRenderSettingsStore.current().roadEventsEnabled) return@setOnCheckedChangeListener
@@ -303,6 +330,20 @@ internal fun MainActivity.openPositionDialog(
                 previewShowOthers = showOthersCheck.isChecked
             )
         }
+        mapArrowPlacementSpinner.onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: android.widget.AdapterView<*>?, view: View?, position: Int, id: Long) {
+                val placement = mapArrowPlacementOptions.getOrNull(position) ?: defaultMapArrowPlacement()
+                if (placement.id == MapRenderSettingsStore.current().arrowPlacementId) return
+                MapRenderSettingsStore.update { it.copy(arrowPlacementId = placement.id) }
+                notifyOverlaySettingsChanged(
+                    preview = true,
+                    previewTarget = target,
+                    previewShowOthers = showOthersCheck.isChecked
+                )
+            }
+
+            override fun onNothingSelected(parent: android.widget.AdapterView<*>?) = Unit
+        }
         laneGuidanceCheck.setOnCheckedChangeListener { _, isChecked ->
             if (isChecked == MapRenderSettingsStore.current().laneGuidanceEnabled) return@setOnCheckedChangeListener
             MapRenderSettingsStore.update { it.copy(laneGuidanceEnabled = isChecked) }
@@ -318,6 +359,7 @@ internal fun MainActivity.openPositionDialog(
     } else {
         roadEventsRow.visibility = View.GONE
         tripStatusRow.visibility = View.GONE
+        mapArrowPlacementRow.visibility = View.GONE
         laneGuidanceRow.visibility = View.GONE
     }
 

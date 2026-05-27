@@ -49,6 +49,7 @@ class NavigationReceiver : BroadcastReceiver() {
                 if (intent.hasExtra(EXTRA_ROUTE_ACTIVE) && !update.routeActive) {
                     UiLogStore.append(LogCategory.NAVIGATION, "маршрут завершен (route_active=false)")
                     cancelNavigatorIntentTimeout()
+                    dynamicHideTurnSpeedBucket = null
                     NavigationHudStore.reset(
                         intent.action.orEmpty(),
                         update.timestamp,
@@ -434,6 +435,7 @@ class NavigationReceiver : BroadcastReceiver() {
         private var lastNavigatorIntentAt: Long = 0L
         @Volatile
         private var lastNativeNavPayload: NativeNavPayload? = null
+        private var dynamicHideTurnSpeedBucket: OverlayPrefs.DynamicHideTurnSpeedBucket? = null
         private val recentYandexPayloads = LinkedHashMap<String, Long>()
 
         const val ACTION_NAV_UPDATE = "plus.monjaro.NAVIGATION_UPDATE"
@@ -765,7 +767,7 @@ class NavigationReceiver : BroadcastReceiver() {
             val street = state.rawNextStreet.trim()
             val maneuverDistanceMeters = resolveManeuverDistanceMeters(state)
             if (shouldHideNativeNavigationByDistance(context, maneuverDistanceMeters)) {
-                val thresholdMeters = OverlayPrefs.resolveHideTurnThresholdMeters(context, state.speedKmh)
+                val thresholdMeters = resolveDynamicHideTurnThresholdMeters(context, state.speedKmh)
                 if (NativeNavigationController.isActive()) {
                     Log.d(
                         TAG,
@@ -846,12 +848,26 @@ class NavigationReceiver : BroadcastReceiver() {
             maneuverDistanceMeters: Int?
         ): Boolean {
             if (!OverlayPrefs.hideTurnWhenFarEnabled(context)) {
+                dynamicHideTurnSpeedBucket = null
                 return false
             }
             val distanceMeters = maneuverDistanceMeters ?: return false
             val speedKmh = NavigationHudStore.snapshot().speedKmh
-            val thresholdMeters = OverlayPrefs.resolveHideTurnThresholdMeters(context, speedKmh)
+            val thresholdMeters = resolveDynamicHideTurnThresholdMeters(context, speedKmh)
             return distanceMeters > thresholdMeters
+        }
+
+        private fun resolveDynamicHideTurnThresholdMeters(context: Context, speedKmh: Int?): Int {
+            if (!OverlayPrefs.hideTurnDynamicEnabled(context)) {
+                dynamicHideTurnSpeedBucket = null
+                return OverlayPrefs.hideTurnWhenFarDistanceMeters(context)
+            }
+            val nextBucket = OverlayPrefs.applyDynamicHideTurnSpeedBucketHysteresis(
+                currentBucket = dynamicHideTurnSpeedBucket,
+                speedKmh = speedKmh
+            )
+            dynamicHideTurnSpeedBucket = nextBucket
+            return OverlayPrefs.hideTurnDynamicDistances(context).resolveForBucket(nextBucket)
         }
 
         private fun resolveManeuverDistanceMeters(state: NavigationHudState): Int? {
@@ -899,6 +915,7 @@ class NavigationReceiver : BroadcastReceiver() {
             }
             cancelStreetReset()
             lastNativeNavPayload = null
+            dynamicHideTurnSpeedBucket = null
             NavigationHudStore.reset(
                 action,
                 preserveSpeedLimit = true,

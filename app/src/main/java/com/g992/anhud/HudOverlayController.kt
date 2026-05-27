@@ -290,6 +290,21 @@ class HudOverlayController(private val context: Context) {
         }
     }
 
+    fun shouldRefreshForMapRouteTelemetry(): Boolean {
+        val target = previewTarget
+        val previewMap = previewMode && (
+            target == null ||
+                target == OverlayBroadcasts.PREVIEW_TARGET_MAP ||
+                previewShowOthers
+            )
+        val previewLaneGuidance = previewMode && (
+            target == null ||
+                target == OverlayBroadcasts.PREVIEW_TARGET_LANE_GUIDANCE ||
+                previewShowOthers
+            )
+        return mapEnabled || laneGuidanceEnabled || previewMap || previewLaneGuidance
+    }
+
     private fun buildRenderSignature(state: NavigationHudState): RenderSignature {
         val showPreview = previewMode
         val target = previewTarget
@@ -376,22 +391,33 @@ class HudOverlayController(private val context: Context) {
                 target == OverlayBroadcasts.PREVIEW_TARGET_MAP ||
                 previewShowOthers
             )
-        val tripStatusDistanceText = if (previewMap) {
+        val includeTripStatusInSignature = previewMap || mapEnabled || mapHadVisibleContent
+        val tripStatusDistanceText = if (!includeTripStatusInSignature) {
+            ""
+        } else if (previewMap) {
             context.getString(R.string.preview_distance_text)
         } else {
             state.distance.trim()
         }
-        val tripStatusArrivalText = if (previewMap) {
+        val tripStatusArrivalText = if (!includeTripStatusInSignature) {
+            ""
+        } else if (previewMap) {
             context.getString(R.string.preview_trip_status_arrival_text)
         } else {
             resolveArrivalText(state)
         }
-        val tripStatusTimeText = if (previewMap) {
+        val tripStatusTimeText = if (!includeTripStatusInSignature) {
+            ""
+        } else if (previewMap) {
             context.getString(R.string.preview_trip_status_eta_text)
         } else {
             state.time.trim()
         }
-        val tripStatusBitmap = state.tripStatusBitmap?.takeUnless { it.isRecycled || it.width <= 0 || it.height <= 0 }
+        val tripStatusBitmap = if (includeTripStatusInSignature) {
+            state.tripStatusBitmap?.takeUnless { it.isRecycled || it.width <= 0 || it.height <= 0 }
+        } else {
+            null
+        }
         val trafficLightSignatures = state.trafficLights.map { light ->
             TrafficLightSignature(
                 id = light.id,
@@ -2507,7 +2533,9 @@ class HudOverlayController(private val context: Context) {
         if (text.isBlank()) {
             view.visibility = View.GONE
         } else {
-            view.text = text
+            if (view.text.toString() != text) {
+                view.text = text
+            }
             view.visibility = View.VISIBLE
         }
     }

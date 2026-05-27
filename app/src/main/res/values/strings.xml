@@ -194,6 +194,9 @@
     <string name="map_settings_display_settings">Настройки отображения</string>
     <string name="map_settings_show_buildings">Отображать здания</string>
     <string name="map_settings_buildings_3d">Здания в 3D</string>
+    <string name="map_settings_arrow_placement">Положение стрелки</string>
+    <string name="map_settings_arrow_placement_default">По умолчанию</string>
+    <string name="map_settings_arrow_placement_bottom">Снизу</string>
     <string name="map_settings_style_reset_title">Удалить пользовательский стиль?</string>
     <string name="map_settings_style_reset_message">При возврате к системному стилю загруженный пользовательский пресет будет удалён. Переключить на системный?</string>
     <string name="map_settings_style_reset_confirm">Удалить и переключить</string>

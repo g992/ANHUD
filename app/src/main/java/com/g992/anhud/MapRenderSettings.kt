@@ -58,6 +58,7 @@ data class MapRenderSettings(
     val autoZoomAt90Kmh: Double = 10.0,
     val tilt: Double = 58.0,
     val arrowScalePercent: Int = MAP_ARROW_SCALE_MAX_PERCENT,
+    val arrowPlacementId: String = defaultMapArrowPlacement().id,
     val cacheSizeStep: Int = 2,
     val downloadRouteEnabled: Boolean = false,
     val snapRouteToRoadsEnabled: Boolean = false,
@@ -77,6 +78,11 @@ data class MapRenderSettings(
     val offlineManualLon2: Double? = null,
 )
 
+enum class MapArrowPlacement(val id: String) {
+    DEFAULT("default"),
+    BOTTOM("bottom"),
+}
+
 enum class MapStyleMode(val id: String) {
     SYSTEM("system"),
     USER("user"),
@@ -85,7 +91,7 @@ enum class MapStyleMode(val id: String) {
 const val MAP_ARROW_SCALE_MIN_PERCENT = 7
 const val MAP_ARROW_SCALE_MAX_PERCENT = 30
 const val MAP_ROUTE_SNAP_MIN_METERS = 3
-const val MAP_ROUTE_SNAP_MAX_METERS = 10
+const val MAP_ROUTE_SNAP_MAX_METERS = 50
 const val MAP_ROUTE_SNAP_DEFAULT_METERS = 5
 const val MAP_ZOOM_MIN = 10.0
 const val MAP_ZOOM_MAX = 21.0
@@ -198,6 +204,7 @@ fun MapRenderSettings.normalized(): MapRenderSettings {
             MAP_ARROW_SCALE_MIN_PERCENT,
             MAP_ARROW_SCALE_MAX_PERCENT
         ),
+        arrowPlacementId = resolveMapArrowPlacement(arrowPlacementId).id,
         cacheSizeStep = cacheSizeStep.coerceIn(0, MapCacheSizeOptionsMb.lastIndex),
         routeSnapDistanceMeters = routeSnapDistanceMeters.coerceIn(
             MAP_ROUTE_SNAP_MIN_METERS,
@@ -263,6 +270,7 @@ object MapRenderSettingsStore {
     private const val KEY_AUTO_ZOOM_AT_90 = "auto_zoom_at_90"
     private const val KEY_TILT = "tilt"
     private const val KEY_ARROW_SCALE = "arrow_scale_percent"
+    private const val KEY_ARROW_PLACEMENT_ID = "arrow_placement_id"
     private const val KEY_CACHE_SIZE_STEP = "cache_size_step"
     private const val KEY_DOWNLOAD_ROUTE = "download_route_enabled"
     private const val KEY_SNAP_ROUTE_TO_ROADS = "snap_route_to_roads_enabled"
@@ -331,6 +339,7 @@ object MapRenderSettingsStore {
             .putFloat(KEY_AUTO_ZOOM_AT_90, updated.autoZoomAt90Kmh.toFloat())
             .putFloat(KEY_TILT, updated.tilt.toFloat())
             .putInt(KEY_ARROW_SCALE, updated.arrowScalePercent)
+            .putString(KEY_ARROW_PLACEMENT_ID, updated.arrowPlacementId)
             .putInt(KEY_CACHE_SIZE_STEP, updated.cacheSizeStep)
             .putBoolean(KEY_DOWNLOAD_ROUTE, updated.downloadRouteEnabled)
             .putBoolean(KEY_SNAP_ROUTE_TO_ROADS, updated.snapRouteToRoadsEnabled)
@@ -383,6 +392,8 @@ object MapRenderSettingsStore {
             autoZoomAt90Kmh = source.getFloat(KEY_AUTO_ZOOM_AT_90, 10.0f).toDouble(),
             tilt = source.getFloat(KEY_TILT, 58.0f).toDouble(),
             arrowScalePercent = source.getInt(KEY_ARROW_SCALE, MAP_ARROW_SCALE_MAX_PERCENT),
+            arrowPlacementId = source.getString(KEY_ARROW_PLACEMENT_ID, defaultMapArrowPlacement().id)
+                ?: defaultMapArrowPlacement().id,
             cacheSizeStep = source.getInt(KEY_CACHE_SIZE_STEP, 2),
             downloadRouteEnabled = source.getBoolean(KEY_DOWNLOAD_ROUTE, false),
             snapRouteToRoadsEnabled = source.getBoolean(KEY_SNAP_ROUTE_TO_ROADS, false),
@@ -405,6 +416,12 @@ object MapRenderSettingsStore {
 }
 
 fun defaultMapStyleMode(): MapStyleMode = MapStyleMode.SYSTEM
+
+fun defaultMapArrowPlacement(): MapArrowPlacement = MapArrowPlacement.DEFAULT
+
+fun resolveMapArrowPlacement(placementId: String?): MapArrowPlacement {
+    return MapArrowPlacement.entries.firstOrNull { it.id == placementId } ?: defaultMapArrowPlacement()
+}
 
 fun resolveMapStyleMode(styleModeId: String?): MapStyleMode {
     return MapStyleMode.entries.firstOrNull { it.id == styleModeId } ?: defaultMapStyleMode()

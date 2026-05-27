@@ -412,6 +412,7 @@ object PrefsJson {
         putFloat("auto_zoom_at_90", settings.autoZoomAt90Kmh)
         putFloat("tilt", settings.tilt)
         putInt("arrow_scale_percent", settings.arrowScalePercent)
+        putString("arrow_placement_id", settings.arrowPlacementId)
         putInt("cache_size_step", settings.cacheSizeStep)
         putBoolean("download_route_enabled", settings.downloadRouteEnabled)
         putBoolean("snap_route_to_roads_enabled", settings.snapRouteToRoadsEnabled)

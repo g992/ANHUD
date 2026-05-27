@@ -17,7 +17,9 @@ import androidx.core.content.ContextCompat
 class HudBackgroundService : Service() {
     private val overlayController by lazy { HudOverlayController(applicationContext) }
     private val mapRouteListener: (MapRouteTelemetrySnapshot) -> Unit = {
-        overlayController.refresh()
+        if (overlayController.shouldRefreshForMapRouteTelemetry()) {
+            overlayController.refresh()
+        }
     }
     private val settingsReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {

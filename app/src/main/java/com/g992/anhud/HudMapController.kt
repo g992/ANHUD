@@ -21,6 +21,7 @@ import android.widget.FrameLayout
 import androidx.core.content.ContextCompat
 import org.maplibre.android.location.LocationComponent
 import org.maplibre.android.location.LocationComponentActivationOptions
+import org.maplibre.android.location.LocationComponentConstants
 import org.maplibre.android.location.LocationComponentOptions
 import org.maplibre.android.location.OnLocationCameraTransitionListener
 import org.maplibre.android.location.modes.CameraMode
@@ -62,6 +63,7 @@ private const val MAP_ROUTE_ALERT_ICON_PROP = "routeAlertIcon"
 private const val MAP_ROUTE_ALERT_ICON_PREFIX = "anhud-route-alert-"
 private const val MAP_LANE_MANEUVER_SOURCE_ID = "anhud-map-lane-maneuver-source"
 private const val MAP_LANE_MANEUVER_LAYER_ID = "anhud-map-lane-maneuver-layer"
+internal const val MAP_LOCATION_LAYER_ABOVE_ID = MAP_LANE_MANEUVER_LAYER_ID
 private const val MAP_LANE_MANEUVER_IMAGE_ID = "anhud-map-lane-maneuver-image"
 private const val MAP_MAX_FPS = 15
 private const val MAP_MAX_LAST_KNOWN_LOCATION_AGE_MS = 10_000L
@@ -74,7 +76,7 @@ private const val MAP_ROUTE_PROGRESS_RENDER_GRANULARITY_METERS = 25.0
 private const val MAP_ROUTE_TRIM_RENDER_GRANULARITY_METERS = 5.0
 private const val MAP_LOCATION_TELEPORT_AGE_MS = 4_000L
 private const val MAP_LOCATION_TELEPORT_DISTANCE_METERS = 80f
-private const val MAP_LOCATION_ROUTE_SNAP_MAX_METERS = 10.0
+private const val MAP_LOCATION_ROUTE_SNAP_MAX_METERS = 50.0
 private const val MAP_LOCATION_ROUTE_SNAP_BACKTRACK_TOLERANCE_METERS = 25.0
 private const val MAP_LOCATION_ROUTE_SNAP_FORWARD_TOLERANCE_METERS = 150.0
 private const val MAP_LOCATION_ROUTE_SNAP_PROGRESS_STALE_MS = 10_000L
@@ -131,6 +133,7 @@ class HudMapController(
     private var lastSnappedRouteToken: String? = null
     private var lastSnappedRouteProgressMeters: Double? = null
     private var lastSnappedRouteProgressUptimeMs: Long = 0L
+    private var lastTripStatusLayoutKey: String? = null
 
     private val settingsListener: (MapRenderSettings) -> Unit = { settings ->
         val tileProviderChanged = currentSettings.tileProviderId != settings.tileProviderId
@@ -140,6 +143,7 @@ class HudMapController(
             currentSettings.buildings3dEnabled != settings.buildings3dEnabled
         val vignetteChanged = currentSettings.mapVignetteEnabled != settings.mapVignetteEnabled
         val locationStyleChanged = currentSettings.arrowScalePercent != settings.arrowScalePercent
+        val arrowPlacementChanged = currentSettings.arrowPlacementId != settings.arrowPlacementId
         val roadEventSettingsChanged = currentSettings.roadEventsEnabled != settings.roadEventsEnabled ||
             currentSettings.roadEventIconSizePx != settings.roadEventIconSizePx ||
             currentSettings.hiddenRoadEventTypes != settings.hiddenRoadEventTypes
@@ -190,9 +194,11 @@ class HudMapController(
     private val navStateListener = object : NavigationHudStore.Listener {
         override fun onStateUpdated(state: NavigationHudState) {
             val newBucket = applySpeedBucketHysteresis(currentSpeedBucketKmh, state.speedKmh)
-            if (newBucket == currentSpeedBucketKmh) return
-            currentSpeedBucketKmh = newBucket
-            if (currentSettings.autoZoomEnabled) {
+            val tripStatusLayoutChanged = hasTripStatusLayoutChanged(state)
+            if (newBucket != currentSpeedBucketKmh) {
+                currentSpeedBucketKmh = newBucket
+            }
+            if (tripStatusLayoutChanged || currentSettings.autoZoomEnabled) {
                 applyTrackingConfig()
             }
         }
@@ -349,24 +355,37 @@ class HudMapController(
             style.addSource(GeoJsonSource(MAP_ROUTE_SOURCE_ID, FeatureCollection.fromFeatures(emptyArray())))
         }
         if (style.getLayer(MAP_ROUTE_OUTLINE_LAYER_ID) == null) {
-            style.addLayer(
+            addLayerUsingPreferredBelowTargets(
+                style = style,
                 LineLayer(MAP_ROUTE_OUTLINE_LAYER_ID, MAP_ROUTE_SOURCE_ID).withProperties(
                     lineColor("#000000"),
                     lineWidth(9.5f),
                     lineOpacity(0.62f),
                     lineCap("round"),
                     lineJoin("round")
+                ),
+                preferredBelowTargets = listOf(
+                    MAP_ROUTE_LAYER_ID,
+                    MAP_ROUTE_ALERT_LAYER_ID,
+                    MAP_LANE_MANEUVER_LAYER_ID,
+                    LocationComponentConstants.FOREGROUND_LAYER
                 )
             )
         }
         if (style.getLayer(MAP_ROUTE_LAYER_ID) == null) {
-            style.addLayer(
+            addLayerUsingPreferredBelowTargets(
+                style = style,
                 LineLayer(MAP_ROUTE_LAYER_ID, MAP_ROUTE_SOURCE_ID).withProperties(
                     lineColor(Expression.get(MAP_ROUTE_COLOR_PROP)),
                     lineWidth(6.5f),
                     lineOpacity(0.98f),
                     lineCap("round"),
                     lineJoin("round")
+                ),
+                preferredBelowTargets = listOf(
+                    MAP_ROUTE_ALERT_LAYER_ID,
+                    MAP_LANE_MANEUVER_LAYER_ID,
+                    LocationComponentConstants.FOREGROUND_LAYER
                 )
             )
         }
@@ -377,13 +396,18 @@ class HudMapController(
             style.addSource(GeoJsonSource(MAP_ROUTE_ALERT_SOURCE_ID, FeatureCollection.fromFeatures(emptyArray())))
         }
         if (style.getLayer(MAP_ROUTE_ALERT_LAYER_ID) == null) {
-            style.addLayer(
+            addLayerUsingPreferredBelowTargets(
+                style = style,
                 SymbolLayer(MAP_ROUTE_ALERT_LAYER_ID, MAP_ROUTE_ALERT_SOURCE_ID).withProperties(
                     iconImage(Expression.get(MAP_ROUTE_ALERT_ICON_PROP)),
                     iconSize(1.0f),
                     iconAllowOverlap(true),
                     iconIgnorePlacement(true),
                     iconAnchor(Property.ICON_ANCHOR_BOTTOM)
+                ),
+                preferredBelowTargets = listOf(
+                    MAP_LANE_MANEUVER_LAYER_ID,
+                    LocationComponentConstants.FOREGROUND_LAYER
                 )
             )
         }
@@ -394,15 +418,33 @@ class HudMapController(
             style.addSource(GeoJsonSource(MAP_LANE_MANEUVER_SOURCE_ID, FeatureCollection.fromFeatures(emptyArray())))
         }
         if (style.getLayer(MAP_LANE_MANEUVER_LAYER_ID) == null) {
-            style.addLayer(
+            addLayerUsingPreferredBelowTargets(
+                style = style,
                 SymbolLayer(MAP_LANE_MANEUVER_LAYER_ID, MAP_LANE_MANEUVER_SOURCE_ID).withProperties(
                     iconImage(MAP_LANE_MANEUVER_IMAGE_ID),
                     iconSize(1.0f),
                     iconAllowOverlap(true),
                     iconIgnorePlacement(true),
                     iconAnchor(Property.ICON_ANCHOR_CENTER)
-                )
+                ),
+                preferredBelowTargets = listOf(LocationComponentConstants.FOREGROUND_LAYER)
             )
+        }
+    }
+
+    private fun addLayerUsingPreferredBelowTargets(
+        style: Style,
+        layer: org.maplibre.android.style.layers.Layer,
+        preferredBelowTargets: List<String>,
+    ) {
+        val belowLayerId = resolveFirstAvailableLayerId(
+            style.getLayers().map { it.id }.toSet(),
+            preferredBelowTargets
+        )
+        if (belowLayerId != null) {
+            style.addLayerBelow(layer, belowLayerId)
+        } else {
+            style.addLayer(layer)
         }
     }
 
@@ -723,11 +765,15 @@ class HudMapController(
 
     private fun trackingPadding(): IntArray {
         val side = dp(18)
+        val tripStatusHeightPx = resolveActiveTripStatusHeightPx()
         val baseBottom = if (mapView.height > 0) dp(MAP_TRACKING_BOTTOM_PADDING_DP) else 0
         val baseTop = (mapView.height.coerceAtLeast(1) * MAP_TRACKING_TOP_PADDING_RATIO).roundToInt()
         val arrowScreenShiftPx = resolveArrowScreenShiftPx(currentSettings)
-        val top = (baseTop - arrowScreenShiftPx).coerceAtLeast(0)
-        val bottom = baseBottom + arrowScreenShiftPx
+        val overlayCompensationPx = tripStatusHeightPx
+        val placementOffsetPx = resolveArrowPlacementOffsetPx(currentSettings)
+        val totalVerticalOffsetPx = overlayCompensationPx + placementOffsetPx
+        val top = (baseTop - arrowScreenShiftPx + totalVerticalOffsetPx).coerceAtLeast(0)
+        val bottom = (baseBottom + arrowScreenShiftPx - totalVerticalOffsetPx).coerceAtLeast(0)
         return intArrayOf(side, top, side, bottom)
     }
 
@@ -880,6 +926,66 @@ class HudMapController(
         return (baseArrowHeightPx * arrowScale / 2f).roundToInt()
     }
 
+    private fun resolveArrowPlacementOffsetPx(settings: MapRenderSettings): Int {
+        return when (resolveMapArrowPlacement(settings.arrowPlacementId)) {
+            MapArrowPlacement.DEFAULT -> 0
+            MapArrowPlacement.BOTTOM -> (resolveArrowIconHeightPx(settings) * 1.5f).roundToInt()
+        }
+    }
+
+    private fun resolveArrowIconHeightPx(settings: MapRenderSettings): Int {
+        val arrowScale = (settings.arrowScalePercent / 100f)
+            .coerceIn(
+                MAP_ARROW_SCALE_MIN_PERCENT / 100f,
+                MAP_ARROW_SCALE_MAX_PERCENT / 100f
+            )
+        val baseArrowHeightPx = ContextCompat.getDrawable(context, R.drawable.ic_nav_arrow)
+            ?.intrinsicHeight
+            ?.takeIf { it > 0 }
+            ?: dp(MAP_ARROW_BASE_SIZE_DP)
+        return (baseArrowHeightPx * arrowScale).roundToInt()
+    }
+
+    private fun hasTripStatusLayoutChanged(state: NavigationHudState): Boolean {
+        val layoutKey = buildTripStatusLayoutKey(state)
+        if (layoutKey == lastTripStatusLayoutKey) return false
+        lastTripStatusLayoutKey = layoutKey
+        return true
+    }
+
+    private fun resolveActiveTripStatusHeightPx(): Int {
+        if (!currentSettings.tripStatusEnabled) return 0
+        val state = NavigationHudStore.snapshot()
+        if (!hasTripStatusContent(state)) return 0
+        val hasProgressBitmap = state.tripStatusBitmap?.let { bitmap ->
+            !bitmap.isRecycled && bitmap.width > 0 && bitmap.height > 0
+        } == true
+        return resolveMapTripStatusHeightPx(
+            mapHeightPx = mapView.height.coerceAtLeast(1),
+            hasProgressBitmap = hasProgressBitmap
+        )
+    }
+
+    private fun hasTripStatusContent(state: NavigationHudState): Boolean {
+        val hasBitmap = state.tripStatusBitmap?.let { bitmap ->
+            !bitmap.isRecycled && bitmap.width > 0 && bitmap.height > 0
+        } == true
+        return hasBitmap ||
+            state.distance.isNotBlank() ||
+            state.arrival.isNotBlank() ||
+            state.time.isNotBlank()
+    }
+
+    private fun buildTripStatusLayoutKey(state: NavigationHudState): String {
+        val bitmap = state.tripStatusBitmap
+        val bitmapKey = if (bitmap != null && !bitmap.isRecycled && bitmap.width > 0 && bitmap.height > 0) {
+            "${bitmap.generationId}:${bitmap.width}x${bitmap.height}"
+        } else {
+            "none"
+        }
+        return "${currentSettings.tripStatusEnabled}|${state.distance}|${state.arrival}|${state.time}|$bitmapKey"
+    }
+
     private fun renderResourceToBitmap(resourceId: Int, sizePx: Int): Bitmap? {
         val drawable: Drawable = ContextCompat.getDrawable(context, resourceId) ?: return null
         val safeSize = sizePx.coerceAtLeast(1)
@@ -907,9 +1013,17 @@ private fun buildLocationOptions(
         .backgroundDrawable(R.drawable.ic_transparent_puck)
         .backgroundDrawableStale(R.drawable.ic_transparent_puck)
         .bearingDrawable(R.drawable.ic_transparent_puck)
+        .layerAbove(MAP_LOCATION_LAYER_ABOVE_ID)
         .maxZoomIconScale(arrowScale)
         .minZoomIconScale(arrowScale)
         .build()
+}
+
+internal fun resolveFirstAvailableLayerId(
+    availableLayerIds: Set<String>,
+    preferredLayerIds: List<String>,
+): String? {
+    return preferredLayerIds.firstOrNull { it in availableLayerIds }
 }
 
 private fun resolveTargetZoom(settings: MapRenderSettings, speedBucketKmh: Int): Double {

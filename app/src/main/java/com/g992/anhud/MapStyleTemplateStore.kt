@@ -22,6 +22,7 @@ private const val MAP_STYLE_TEMPLATE_TIMEOUT_MS = 15_000
 private const val MAP_STYLE_TEMPLATE_USER_AGENT = "ANHUD-MapStyle/1.0"
 private val MAP_STYLE_TEMPLATE_RETRY_DELAYS_MS = longArrayOf(60_000L, 180_000L, 300_000L)
 private const val MAP_STYLE_TEMPLATE_MAX_ATTEMPTS = 4
+private const val BUILDING_EXTRUSION_OPACITY = 0.4
 private const val STARLINE_STYLE_TOKEN_PLACEHOLDER = "__STARLINE_ACCESS_TOKEN__"
 private const val OPEN_FREE_MAP_TILEJSON_URL = "https://tiles.openfreemap.org/planet"
 private const val OPEN_FREE_MAP_PROXY_TILEJSON_URL = "https://ofmproxy.ragdesign.ru/planet"
@@ -250,11 +251,16 @@ private fun applyBuildingVisibility(
         if (!isBuildingGeometryLayer(layer, type)) continue
         val visibility = when (type) {
             "fill-extrusion" -> if (settings.are3dBuildingsVisible()) "visible" else "none"
-            else -> if (settings.buildingsEnabled) "visible" else "none"
+            else -> if (settings.buildingsEnabled && !settings.are3dBuildingsVisible()) "visible" else "none"
         }
         val layout = layer.optJSONObject("layout") ?: JSONObject()
         layout.put("visibility", visibility)
         layer.put("layout", layout)
+        if (type == "fill-extrusion") {
+            val paint = layer.optJSONObject("paint") ?: JSONObject()
+            paint.put("fill-extrusion-opacity", BUILDING_EXTRUSION_OPACITY)
+            layer.put("paint", paint)
+        }
     }
 }
 

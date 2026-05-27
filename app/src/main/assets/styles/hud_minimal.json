@@ -2791,7 +2791,7 @@
             "render_min_height"
           ]
         ],
-        "fill-extrusion-opacity": 0.8,
+        "fill-extrusion-opacity": 0.4,
         "fill-extrusion-vertical-gradient": {
           "stops": [
             [
