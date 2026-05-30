@@ -121,6 +121,7 @@
     <string name="position_turn_signals_spacing_value">%1$d dp</string>
     <string name="position_turn_signals_spacing_value_default">32 dp</string>
     <string name="position_show_others">Отображать другие элементы на проекции</string>
+    <string name="position_hide_when_map_active">Скрывать при активной карте</string>
     <string name="position_hudspeed_show_gps_status">Отображать статус GPS</string>
     <string name="position_dialog_hint">Перетаскивайте блок в окне, изменения сохраняются сразу.</string>
     <string name="overlay_preview_label">HUD</string>
@@ -194,9 +195,8 @@
     <string name="map_settings_display_settings">Настройки отображения</string>
     <string name="map_settings_show_buildings">Отображать здания</string>
     <string name="map_settings_buildings_3d">Здания в 3D</string>
-    <string name="map_settings_arrow_placement">Положение стрелки</string>
-    <string name="map_settings_arrow_placement_default">По умолчанию</string>
-    <string name="map_settings_arrow_placement_bottom">Снизу</string>
+    <string name="map_settings_arrow_offset">Смещение стрелки</string>
+    <string name="map_settings_arrow_offset_value">%1$d dp</string>
     <string name="map_settings_style_reset_title">Удалить пользовательский стиль?</string>
     <string name="map_settings_style_reset_message">При возврате к системному стилю загруженный пользовательский пресет будет удалён. Переключить на системный?</string>
     <string name="map_settings_style_reset_confirm">Удалить и переключить</string>
@@ -274,6 +274,7 @@
     <string name="hide_turn_when_far_distance_km_value">%1$d км</string>
     <string name="hide_turn_dynamic_enabled_label">Динамически скрывать манёвр</string>
     <string name="hide_turn_dynamic_config_button">Настройка динамического скрытия</string>
+    <string name="hide_turn_dynamic_hide_map_block_label">Скрывать блок карты</string>
     <string name="hide_turn_dynamic_dialog_title">Настройка динамического скрытия</string>
     <string name="hide_turn_dynamic_dialog_hint">Укажите расстояние показа манёвра для каждого диапазона скорости, от 100 до 10000 метров.</string>
     <string name="hide_turn_dynamic_speed_column">Скорость</string>

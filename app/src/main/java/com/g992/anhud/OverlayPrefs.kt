@@ -12,6 +12,11 @@ object OverlayPrefs {
         FROM_100_PLUS,
     }
 
+    internal data class HideTurnThresholdResolution(
+        val thresholdMeters: Int,
+        val bucket: DynamicHideTurnSpeedBucket?,
+    )
+
     data class DynamicHideTurnDistances(
         val upTo40Kmh: Int = HIDE_TURN_DYNAMIC_DEFAULT_UP_TO_40_METERS,
         val from40To60Kmh: Int = HIDE_TURN_DYNAMIC_DEFAULT_40_TO_60_METERS,
@@ -106,24 +111,34 @@ object OverlayPrefs {
     private const val KEY_CONTAINER_ALPHA = "overlay_container_alpha"
     private const val KEY_MAP_ALPHA = "overlay_map_alpha"
     private const val KEY_NAV_ENABLED = "overlay_nav_enabled"
+    private const val KEY_NAV_HIDE_WHEN_MAP_ACTIVE = "overlay_nav_hide_when_map_active"
     private const val KEY_LANE_GUIDANCE_ENABLED = "overlay_lane_guidance_enabled"
+    private const val KEY_LANE_GUIDANCE_HIDE_WHEN_MAP_ACTIVE = "overlay_lane_guidance_hide_when_map_active"
     private const val KEY_ARROW_ENABLED = "overlay_arrow_enabled"
+    private const val KEY_ARROW_HIDE_WHEN_MAP_ACTIVE = "overlay_arrow_hide_when_map_active"
     private const val KEY_ARROW_ONLY_WHEN_NO_ICON = "overlay_arrow_only_when_no_icon"
     private const val KEY_SPEED_ENABLED = "overlay_speed_enabled"
+    private const val KEY_SPEED_HIDE_WHEN_MAP_ACTIVE = "overlay_speed_hide_when_map_active"
     private const val KEY_SPEED_LIMIT_FROM_HUDSPEED = "overlay_speed_limit_from_hudspeed"
     private const val KEY_HUDSPEED_ENABLED = "overlay_hudspeed_enabled"
+    private const val KEY_HUDSPEED_HIDE_WHEN_MAP_ACTIVE = "overlay_hudspeed_hide_when_map_active"
     private const val KEY_HUDSPEED_GPS_STATUS_ENABLED = "overlay_hudspeed_gps_status_enabled"
     private const val KEY_HUDSPEED_LIMIT_ENABLED = "overlay_hudspeed_limit_enabled"
     private const val KEY_HUDSPEED_LIMIT_ALERT_ENABLED = "overlay_hudspeed_limit_alert_enabled"
     private const val KEY_HUDSPEED_LIMIT_ALERT_THRESHOLD = "overlay_hudspeed_limit_alert_threshold"
     private const val KEY_ROAD_CAMERA_ENABLED = "overlay_road_camera_enabled"
+    private const val KEY_ROAD_CAMERA_HIDE_WHEN_MAP_ACTIVE = "overlay_road_camera_hide_when_map_active"
     private const val KEY_TRAFFIC_LIGHT_ENABLED = "overlay_traffic_light_enabled"
+    private const val KEY_TRAFFIC_LIGHT_HIDE_WHEN_MAP_ACTIVE = "overlay_traffic_light_hide_when_map_active"
     private const val KEY_SPEED_LIMIT_ALERT_ENABLED = "overlay_speed_limit_alert_enabled"
     private const val KEY_SPEED_LIMIT_ALERT_THRESHOLD = "overlay_speed_limit_alert_threshold"
     private const val KEY_SPEEDOMETER_ENABLED = "overlay_speedometer_enabled"
+    private const val KEY_SPEEDOMETER_HIDE_WHEN_MAP_ACTIVE = "overlay_speedometer_hide_when_map_active"
     private const val KEY_SPEEDOMETER_SHOW_UNIT_TEXT = "overlay_speedometer_show_unit_text"
     private const val KEY_TURN_SIGNALS_ENABLED = "overlay_turn_signals_enabled"
+    private const val KEY_TURN_SIGNALS_HIDE_WHEN_MAP_ACTIVE = "overlay_turn_signals_hide_when_map_active"
     private const val KEY_CLOCK_ENABLED = "overlay_clock_enabled"
+    private const val KEY_CLOCK_HIDE_WHEN_MAP_ACTIVE = "overlay_clock_hide_when_map_active"
     private const val KEY_TRAFFIC_LIGHT_MAX_ACTIVE = "overlay_traffic_light_max_active"
     private const val KEY_NATIVE_NAV_ENABLED = "native_nav_enabled"
     private const val KEY_MAP_ENABLED = "overlay_map_enabled"
@@ -145,6 +160,7 @@ object OverlayPrefs {
     private const val KEY_HIDE_TURN_DYNAMIC_40_TO_60_METERS = "hide_turn_dynamic_40_to_60_meters"
     private const val KEY_HIDE_TURN_DYNAMIC_60_TO_100_METERS = "hide_turn_dynamic_60_to_100_meters"
     private const val KEY_HIDE_TURN_DYNAMIC_100_PLUS_METERS = "hide_turn_dynamic_100_plus_meters"
+    private const val KEY_HIDE_TURN_DYNAMIC_HIDE_MAP_BLOCK = "hide_turn_dynamic_hide_map_block"
     private const val KEY_GUIDE_SHOWN = "guide_shown"
     private const val KEY_NAV_WIDTH_DP = "overlay_nav_width_dp"
 
@@ -819,6 +835,16 @@ object OverlayPrefs {
             .apply()
     }
 
+    fun navHideWhenMapActive(context: Context): Boolean {
+        return prefs(context).getBoolean(KEY_NAV_HIDE_WHEN_MAP_ACTIVE, false)
+    }
+
+    fun setNavHideWhenMapActive(context: Context, enabled: Boolean) {
+        prefs(context).edit()
+            .putBoolean(KEY_NAV_HIDE_WHEN_MAP_ACTIVE, enabled)
+            .apply()
+    }
+
     fun laneGuidanceEnabled(context: Context): Boolean {
         return prefs(context).getBoolean(KEY_LANE_GUIDANCE_ENABLED, true)
     }
@@ -826,6 +852,16 @@ object OverlayPrefs {
     fun setLaneGuidanceEnabled(context: Context, enabled: Boolean) {
         prefs(context).edit()
             .putBoolean(KEY_LANE_GUIDANCE_ENABLED, enabled)
+            .apply()
+    }
+
+    fun laneGuidanceHideWhenMapActive(context: Context): Boolean {
+        return prefs(context).getBoolean(KEY_LANE_GUIDANCE_HIDE_WHEN_MAP_ACTIVE, false)
+    }
+
+    fun setLaneGuidanceHideWhenMapActive(context: Context, enabled: Boolean) {
+        prefs(context).edit()
+            .putBoolean(KEY_LANE_GUIDANCE_HIDE_WHEN_MAP_ACTIVE, enabled)
             .apply()
     }
 
@@ -846,6 +882,16 @@ object OverlayPrefs {
     fun setArrowEnabled(context: Context, enabled: Boolean) {
         prefs(context).edit()
             .putBoolean(KEY_ARROW_ENABLED, enabled)
+            .apply()
+    }
+
+    fun arrowHideWhenMapActive(context: Context): Boolean {
+        return prefs(context).getBoolean(KEY_ARROW_HIDE_WHEN_MAP_ACTIVE, false)
+    }
+
+    fun setArrowHideWhenMapActive(context: Context, enabled: Boolean) {
+        prefs(context).edit()
+            .putBoolean(KEY_ARROW_HIDE_WHEN_MAP_ACTIVE, enabled)
             .apply()
     }
 
@@ -870,6 +916,16 @@ object OverlayPrefs {
             .apply()
     }
 
+    fun speedHideWhenMapActive(context: Context): Boolean {
+        return prefs(context).getBoolean(KEY_SPEED_HIDE_WHEN_MAP_ACTIVE, false)
+    }
+
+    fun setSpeedHideWhenMapActive(context: Context, enabled: Boolean) {
+        prefs(context).edit()
+            .putBoolean(KEY_SPEED_HIDE_WHEN_MAP_ACTIVE, enabled)
+            .apply()
+    }
+
     fun speedLimitFromHudSpeed(context: Context): Boolean {
         return prefs(context).getBoolean(KEY_SPEED_LIMIT_FROM_HUDSPEED, false)
     }
@@ -887,6 +943,16 @@ object OverlayPrefs {
     fun setHudSpeedEnabled(context: Context, enabled: Boolean) {
         prefs(context).edit()
             .putBoolean(KEY_HUDSPEED_ENABLED, enabled)
+            .apply()
+    }
+
+    fun hudSpeedHideWhenMapActive(context: Context): Boolean {
+        return prefs(context).getBoolean(KEY_HUDSPEED_HIDE_WHEN_MAP_ACTIVE, false)
+    }
+
+    fun setHudSpeedHideWhenMapActive(context: Context, enabled: Boolean) {
+        prefs(context).edit()
+            .putBoolean(KEY_HUDSPEED_HIDE_WHEN_MAP_ACTIVE, enabled)
             .apply()
     }
 
@@ -910,6 +976,16 @@ object OverlayPrefs {
             .apply()
     }
 
+    fun roadCameraHideWhenMapActive(context: Context): Boolean {
+        return prefs(context).getBoolean(KEY_ROAD_CAMERA_HIDE_WHEN_MAP_ACTIVE, false)
+    }
+
+    fun setRoadCameraHideWhenMapActive(context: Context, enabled: Boolean) {
+        prefs(context).edit()
+            .putBoolean(KEY_ROAD_CAMERA_HIDE_WHEN_MAP_ACTIVE, enabled)
+            .apply()
+    }
+
     fun trafficLightEnabled(context: Context): Boolean {
         return prefs(context).getBoolean(KEY_TRAFFIC_LIGHT_ENABLED, true)
     }
@@ -917,6 +993,16 @@ object OverlayPrefs {
     fun setTrafficLightEnabled(context: Context, enabled: Boolean) {
         prefs(context).edit()
             .putBoolean(KEY_TRAFFIC_LIGHT_ENABLED, enabled)
+            .apply()
+    }
+
+    fun trafficLightHideWhenMapActive(context: Context): Boolean {
+        return prefs(context).getBoolean(KEY_TRAFFIC_LIGHT_HIDE_WHEN_MAP_ACTIVE, false)
+    }
+
+    fun setTrafficLightHideWhenMapActive(context: Context, enabled: Boolean) {
+        prefs(context).edit()
+            .putBoolean(KEY_TRAFFIC_LIGHT_HIDE_WHEN_MAP_ACTIVE, enabled)
             .apply()
     }
 
@@ -993,6 +1079,16 @@ object OverlayPrefs {
             .apply()
     }
 
+    fun speedometerHideWhenMapActive(context: Context): Boolean {
+        return prefs(context).getBoolean(KEY_SPEEDOMETER_HIDE_WHEN_MAP_ACTIVE, false)
+    }
+
+    fun setSpeedometerHideWhenMapActive(context: Context, enabled: Boolean) {
+        prefs(context).edit()
+            .putBoolean(KEY_SPEEDOMETER_HIDE_WHEN_MAP_ACTIVE, enabled)
+            .apply()
+    }
+
     fun speedometerShowUnitText(context: Context): Boolean {
         return prefs(context).getBoolean(KEY_SPEEDOMETER_SHOW_UNIT_TEXT, false)
     }
@@ -1013,6 +1109,16 @@ object OverlayPrefs {
             .apply()
     }
 
+    fun turnSignalsHideWhenMapActive(context: Context): Boolean {
+        return prefs(context).getBoolean(KEY_TURN_SIGNALS_HIDE_WHEN_MAP_ACTIVE, false)
+    }
+
+    fun setTurnSignalsHideWhenMapActive(context: Context, enabled: Boolean) {
+        prefs(context).edit()
+            .putBoolean(KEY_TURN_SIGNALS_HIDE_WHEN_MAP_ACTIVE, enabled)
+            .apply()
+    }
+
     fun clockEnabled(context: Context): Boolean {
         return prefs(context).getBoolean(KEY_CLOCK_ENABLED, true)
     }
@@ -1020,6 +1126,16 @@ object OverlayPrefs {
     fun setClockEnabled(context: Context, enabled: Boolean) {
         prefs(context).edit()
             .putBoolean(KEY_CLOCK_ENABLED, enabled)
+            .apply()
+    }
+
+    fun clockHideWhenMapActive(context: Context): Boolean {
+        return prefs(context).getBoolean(KEY_CLOCK_HIDE_WHEN_MAP_ACTIVE, false)
+    }
+
+    fun setClockHideWhenMapActive(context: Context, enabled: Boolean) {
+        prefs(context).edit()
+            .putBoolean(KEY_CLOCK_HIDE_WHEN_MAP_ACTIVE, enabled)
             .apply()
     }
 
@@ -1232,12 +1348,43 @@ object OverlayPrefs {
             .apply()
     }
 
+    fun hideTurnDynamicHideMapBlock(context: Context): Boolean {
+        return prefs(context).getBoolean(KEY_HIDE_TURN_DYNAMIC_HIDE_MAP_BLOCK, false)
+    }
+
+    fun setHideTurnDynamicHideMapBlock(context: Context, enabled: Boolean) {
+        prefs(context).edit()
+            .putBoolean(KEY_HIDE_TURN_DYNAMIC_HIDE_MAP_BLOCK, enabled)
+            .apply()
+    }
+
     fun resolveHideTurnThresholdMeters(context: Context, speedKmh: Int?): Int {
         return if (hideTurnDynamicEnabled(context)) {
             hideTurnDynamicDistances(context).resolveForSpeed(speedKmh)
         } else {
             hideTurnWhenFarDistanceMeters(context)
         }
+    }
+
+    internal fun resolveHideTurnThreshold(
+        context: Context,
+        speedKmh: Int?,
+        currentBucket: DynamicHideTurnSpeedBucket?,
+    ): HideTurnThresholdResolution {
+        if (!hideTurnDynamicEnabled(context)) {
+            return HideTurnThresholdResolution(
+                thresholdMeters = hideTurnWhenFarDistanceMeters(context),
+                bucket = null,
+            )
+        }
+        val nextBucket = applyDynamicHideTurnSpeedBucketHysteresis(
+            currentBucket = currentBucket,
+            speedKmh = speedKmh
+        )
+        return HideTurnThresholdResolution(
+            thresholdMeters = hideTurnDynamicDistances(context).resolveForBucket(nextBucket),
+            bucket = nextBucket,
+        )
     }
 
     internal fun resolveDynamicHideTurnSpeedBucket(speedKmh: Int?): DynamicHideTurnSpeedBucket {

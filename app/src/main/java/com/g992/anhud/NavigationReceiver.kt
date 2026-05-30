@@ -410,7 +410,7 @@ class NavigationReceiver : BroadcastReceiver() {
     companion object {
         private const val TAG = "NavigationReceiver"
         private const val NATIVE_NAV_DEBOUNCE_MS = 100L
-        private const val STREET_RESET_DELAY_MS = 2000L
+        private const val STREET_RESET_DELAY_MS = 15000L
         private const val YANDEX_DUPLICATE_SUPPRESSION_MS = 400L
 
         private val nativeNavHandler = android.os.Handler(android.os.Looper.getMainLooper())
@@ -858,16 +858,13 @@ class NavigationReceiver : BroadcastReceiver() {
         }
 
         private fun resolveDynamicHideTurnThresholdMeters(context: Context, speedKmh: Int?): Int {
-            if (!OverlayPrefs.hideTurnDynamicEnabled(context)) {
-                dynamicHideTurnSpeedBucket = null
-                return OverlayPrefs.hideTurnWhenFarDistanceMeters(context)
-            }
-            val nextBucket = OverlayPrefs.applyDynamicHideTurnSpeedBucketHysteresis(
-                currentBucket = dynamicHideTurnSpeedBucket,
-                speedKmh = speedKmh
+            val resolution = OverlayPrefs.resolveHideTurnThreshold(
+                context = context,
+                speedKmh = speedKmh,
+                currentBucket = dynamicHideTurnSpeedBucket
             )
-            dynamicHideTurnSpeedBucket = nextBucket
-            return OverlayPrefs.hideTurnDynamicDistances(context).resolveForBucket(nextBucket)
+            dynamicHideTurnSpeedBucket = resolution.bucket
+            return resolution.thresholdMeters
         }
 
         private fun resolveManeuverDistanceMeters(state: NavigationHudState): Int? {

@@ -110,6 +110,7 @@ class SettingsActivity : ScaledActivity() {
     private lateinit var hideTurnWhenFarDistanceValue: TextView
     private lateinit var hideTurnDynamicSwitch: SwitchCompat
     private lateinit var hideTurnDynamicConfigButton: Button
+    private lateinit var hideTurnDynamicHideMapSwitch: SwitchCompat
     private lateinit var maneuverRowContainer: LinearLayout
     private lateinit var helpListContainer: LinearLayout
     private lateinit var helpStartGuideButton: View
@@ -324,6 +325,7 @@ class SettingsActivity : ScaledActivity() {
         hideTurnWhenFarDistanceValue = findViewById(R.id.hideTurnWhenFarDistanceValue)
         hideTurnDynamicSwitch = findViewById(R.id.hideTurnDynamicSwitch)
         hideTurnDynamicConfigButton = findViewById(R.id.hideTurnDynamicConfigButton)
+        hideTurnDynamicHideMapSwitch = findViewById(R.id.hideTurnDynamicHideMapSwitch)
         styleSettingsButton(hideTurnDynamicConfigButton, SETTINGS_BUTTON_SECONDARY)
         maneuverRowContainer = findViewById(R.id.maneuverRowContainer)
         helpListContainer = findViewById(R.id.helpListContainer)
@@ -655,6 +657,10 @@ class SettingsActivity : ScaledActivity() {
                 hideTurnEnabled = OverlayPrefs.hideTurnWhenFarEnabled(this),
                 dynamicEnabled = isChecked
             )
+        }
+        hideTurnDynamicHideMapSwitch.setOnCheckedChangeListener { _, isChecked ->
+            if (isSyncingUi) return@setOnCheckedChangeListener
+            OverlayPrefs.setHideTurnDynamicHideMapBlock(this, isChecked)
         }
         hideTurnDynamicConfigButton.setOnClickListener {
             showHideTurnDynamicSettingsDialog()
@@ -3413,6 +3419,7 @@ class SettingsActivity : ScaledActivity() {
             hideTurnWhenFarDistanceValue.text = formatManeuverHideDistance(hideDistance)
             val hideTurnDynamicEnabled = OverlayPrefs.hideTurnDynamicEnabled(this)
             hideTurnDynamicSwitch.isChecked = hideTurnDynamicEnabled
+            hideTurnDynamicHideMapSwitch.isChecked = OverlayPrefs.hideTurnDynamicHideMapBlock(this)
             updateHideTurnSwitchLabel(hideDistance)
             updateHideTurnDistanceControls(hideTurnWhenFarEnabled)
             updateHideTurnDynamicControls(hideTurnWhenFarEnabled, hideTurnDynamicEnabled)
@@ -3442,6 +3449,8 @@ class SettingsActivity : ScaledActivity() {
     private fun updateHideTurnDynamicControls(hideTurnEnabled: Boolean, dynamicEnabled: Boolean) {
         hideTurnDynamicSwitch.isEnabled = hideTurnEnabled
         hideTurnDynamicSwitch.alpha = if (hideTurnEnabled) 1f else 0.5f
+        hideTurnDynamicHideMapSwitch.isEnabled = hideTurnEnabled && dynamicEnabled
+        hideTurnDynamicHideMapSwitch.alpha = if (hideTurnEnabled && dynamicEnabled) 1f else 0.5f
         hideTurnDynamicConfigButton.isEnabled = hideTurnEnabled && dynamicEnabled
         hideTurnDynamicConfigButton.alpha = if (hideTurnEnabled && dynamicEnabled) 1f else 0.5f
     }

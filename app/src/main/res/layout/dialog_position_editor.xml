@@ -620,23 +620,38 @@
     </LinearLayout>
 
     <LinearLayout
-        android:id="@+id/dialogMapArrowPlacementRow"
+        android:id="@+id/dialogMapArrowOffsetRow"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="10dp"
         android:orientation="vertical"
         android:visibility="gone">
 
-        <TextView
-            android:id="@+id/dialogMapArrowPlacementLabel"
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="@string/map_settings_arrow_placement"
-            android:textColor="@color/white"
-            android:textSize="16sp" />
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
 
-        <Spinner
-            android:id="@+id/dialogMapArrowPlacementSpinner"
+            <TextView
+                android:id="@+id/dialogMapArrowOffsetLabel"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/map_settings_arrow_offset"
+                android:textColor="@color/white"
+                android:textSize="16sp" />
+
+            <TextView
+                android:id="@+id/dialogMapArrowOffsetValue"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textColor="@color/white"
+                android:textSize="14sp" />
+        </LinearLayout>
+
+        <SeekBar
+            android:id="@+id/dialogMapArrowOffsetSeek"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="6dp" />
@@ -650,6 +665,16 @@
         android:text="@string/position_show_others"
         android:textColor="@color/white"
         android:textSize="16sp" />
+
+    <CheckBox
+        android:id="@+id/dialogHideWhenMapActive"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:text="@string/position_hide_when_map_active"
+        android:textColor="@color/white"
+        android:textSize="16sp"
+        android:visibility="gone" />
 
     <CheckBox
         android:id="@+id/dialogHudSpeedShowGpsStatus"

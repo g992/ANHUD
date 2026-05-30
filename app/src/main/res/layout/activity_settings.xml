@@ -383,6 +383,15 @@
                     android:minHeight="40dp"
                     android:text="@string/hide_turn_dynamic_config_button" />
 
+                <androidx.appcompat.widget.SwitchCompat
+                    android:id="@+id/hideTurnDynamicHideMapSwitch"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:text="@string/hide_turn_dynamic_hide_map_block_label"
+                    android:textColor="@color/white"
+                    android:textSize="14sp" />
+
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"

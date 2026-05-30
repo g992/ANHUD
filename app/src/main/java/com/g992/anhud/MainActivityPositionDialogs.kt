@@ -13,8 +13,6 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.SeekBar
 import android.widget.Button
-import android.widget.ArrayAdapter
-import android.widget.Spinner
 import android.widget.TextView
 import android.graphics.Color
 import androidx.appcompat.app.AlertDialog
@@ -69,6 +67,7 @@ internal fun MainActivity.openPositionDialog(
     val previewTurnSignalsRight = dialogView.findViewById<ImageView>(R.id.dialogPreviewTurnSignalsRight)
     val previewClock = dialogView.findViewById<TextView>(R.id.dialogPreviewClock)
     val showOthersCheck = dialogView.findViewById<CheckBox>(R.id.dialogShowOthers)
+    val hideWhenMapActiveCheck = dialogView.findViewById<CheckBox>(R.id.dialogHideWhenMapActive)
     val hudSpeedGpsStatusCheck = dialogView.findViewById<CheckBox>(R.id.dialogHudSpeedShowGpsStatus)
     val laneGuidanceShowDistanceCheck = dialogView.findViewById<CheckBox>(R.id.dialogLaneGuidanceShowDistance)
     val containerWidthLabel = dialogView.findViewById<TextView>(R.id.dialogContainerWidthLabel)
@@ -82,8 +81,9 @@ internal fun MainActivity.openPositionDialog(
     val roadEventsButton = dialogView.findViewById<Button>(R.id.dialogRoadEventsButton)
     val tripStatusRow = dialogView.findViewById<View>(R.id.dialogTripStatusRow)
     val tripStatusCheck = dialogView.findViewById<CheckBox>(R.id.dialogTripStatusCheck)
-    val mapArrowPlacementRow = dialogView.findViewById<View>(R.id.dialogMapArrowPlacementRow)
-    val mapArrowPlacementSpinner = dialogView.findViewById<Spinner>(R.id.dialogMapArrowPlacementSpinner)
+    val mapArrowOffsetRow = dialogView.findViewById<View>(R.id.dialogMapArrowOffsetRow)
+    val mapArrowOffsetSeek = dialogView.findViewById<SeekBar>(R.id.dialogMapArrowOffsetSeek)
+    val mapArrowOffsetValue = dialogView.findViewById<TextView>(R.id.dialogMapArrowOffsetValue)
     val laneGuidanceRow = dialogView.findViewById<View>(R.id.dialogLaneGuidanceRow)
     val laneGuidanceCheck = dialogView.findViewById<CheckBox>(R.id.dialogLaneGuidanceCheck)
     val laneGuidanceButton = dialogView.findViewById<Button>(R.id.dialogLaneGuidanceButton)
@@ -137,22 +137,6 @@ internal fun MainActivity.openPositionDialog(
     var mapHeightDp = mapSize.y
     var navWidthDp = OverlayPrefs.navWidthDp(this)
     var turnSignalsSpacingDp = OverlayPrefs.turnSignalsSpacingDp(this)
-    val mapArrowPlacementOptions = listOf(
-        defaultMapArrowPlacement(),
-        MapArrowPlacement.BOTTOM,
-    )
-    mapArrowPlacementSpinner.adapter = ArrayAdapter(
-        this,
-        R.layout.spinner_item,
-        mapArrowPlacementOptions.map { placement ->
-            when (placement) {
-                MapArrowPlacement.DEFAULT -> getString(R.string.map_settings_arrow_placement_default)
-                MapArrowPlacement.BOTTOM -> getString(R.string.map_settings_arrow_placement_bottom)
-            }
-        }
-    ).also { spinnerAdapter ->
-        spinnerAdapter.setDropDownViewResource(R.layout.spinner_dropdown_item)
-    }
     var currentScale = 1f
     val density = displayDensity.takeIf { it > 0f } ?: resources.displayMetrics.density
     TurnSignalIcons.applyPair(this, previewTurnSignalsLeft, previewTurnSignalsRight, turnSignalsIconStyle)
@@ -225,6 +209,10 @@ internal fun MainActivity.openPositionDialog(
         return getString(R.string.position_turn_signals_spacing_value, spacingDp.roundToInt())
     }
 
+    fun syncMapArrowOffsetValue(offsetDp: Int) {
+        mapArrowOffsetValue.text = getString(R.string.map_settings_arrow_offset_value, offsetDp)
+    }
+
     fun resolveTurnSignalsMaxSpacingDp(scale: Float = currentScale): Float {
         val safeScale = scale.coerceAtLeast(0.01f)
         return ((containerWidthDp / safeScale) - OverlayPrefs.TURN_SIGNALS_ICON_SIZE_DP)
@@ -278,6 +266,21 @@ internal fun MainActivity.openPositionDialog(
     val showLaneGuidanceDistanceSetting = target == OverlayTarget.LANE_GUIDANCE
     laneGuidanceShowDistanceCheck.visibility = if (showLaneGuidanceDistanceSetting) View.VISIBLE else View.GONE
     laneGuidanceShowDistanceCheck.isChecked = OverlayPrefs.laneGuidanceShowDistance(activity)
+    val showHideWhenMapActiveSetting = target != OverlayTarget.MAP && target != OverlayTarget.CONTAINER
+    hideWhenMapActiveCheck.visibility = if (showHideWhenMapActiveSetting) View.VISIBLE else View.GONE
+    hideWhenMapActiveCheck.isChecked = when (target) {
+        OverlayTarget.NAVIGATION -> OverlayPrefs.navHideWhenMapActive(activity)
+        OverlayTarget.LANE_GUIDANCE -> OverlayPrefs.laneGuidanceHideWhenMapActive(activity)
+        OverlayTarget.ARROW -> OverlayPrefs.arrowHideWhenMapActive(activity)
+        OverlayTarget.SPEED -> OverlayPrefs.speedHideWhenMapActive(activity)
+        OverlayTarget.HUDSPEED -> OverlayPrefs.hudSpeedHideWhenMapActive(activity)
+        OverlayTarget.ROAD_CAMERA -> OverlayPrefs.roadCameraHideWhenMapActive(activity)
+        OverlayTarget.TRAFFIC_LIGHT -> OverlayPrefs.trafficLightHideWhenMapActive(activity)
+        OverlayTarget.SPEEDOMETER -> OverlayPrefs.speedometerHideWhenMapActive(activity)
+        OverlayTarget.TURN_SIGNALS -> OverlayPrefs.turnSignalsHideWhenMapActive(activity)
+        OverlayTarget.CLOCK -> OverlayPrefs.clockHideWhenMapActive(activity)
+        OverlayTarget.MAP, OverlayTarget.CONTAINER -> false
+    }
 
     if (target == OverlayTarget.CONTAINER || target == OverlayTarget.MAP) {
         scaleLabel.visibility = View.GONE
@@ -297,16 +300,15 @@ internal fun MainActivity.openPositionDialog(
     if (target == OverlayTarget.MAP) {
         roadEventsRow.visibility = View.VISIBLE
         tripStatusRow.visibility = View.VISIBLE
-        mapArrowPlacementRow.visibility = View.VISIBLE
+        mapArrowOffsetRow.visibility = View.VISIBLE
         laneGuidanceRow.visibility = View.VISIBLE
         roadEventsCheck.isChecked = MapRenderSettingsStore.current().roadEventsEnabled
         tripStatusCheck.isChecked = MapRenderSettingsStore.current().tripStatusEnabled
-        mapArrowPlacementSpinner.setSelection(
-            mapArrowPlacementOptions.indexOf(
-                resolveMapArrowPlacement(MapRenderSettingsStore.current().arrowPlacementId)
-            ).coerceAtLeast(0),
-            false
-        )
+        mapArrowOffsetSeek.max = MAP_ARROW_OFFSET_MAX_DP - MAP_ARROW_OFFSET_MIN_DP
+        val currentArrowOffsetDp = MapRenderSettingsStore.current().arrowOffsetDp
+            .coerceIn(MAP_ARROW_OFFSET_MIN_DP, MAP_ARROW_OFFSET_MAX_DP)
+        mapArrowOffsetSeek.progress = currentArrowOffsetDp - MAP_ARROW_OFFSET_MIN_DP
+        syncMapArrowOffsetValue(currentArrowOffsetDp)
         laneGuidanceCheck.isChecked = MapRenderSettingsStore.current().laneGuidanceEnabled
         roadEventsCheck.setOnCheckedChangeListener { _, isChecked ->
             if (isChecked == MapRenderSettingsStore.current().roadEventsEnabled) return@setOnCheckedChangeListener
@@ -330,11 +332,12 @@ internal fun MainActivity.openPositionDialog(
                 previewShowOthers = showOthersCheck.isChecked
             )
         }
-        mapArrowPlacementSpinner.onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
-            override fun onItemSelected(parent: android.widget.AdapterView<*>?, view: View?, position: Int, id: Long) {
-                val placement = mapArrowPlacementOptions.getOrNull(position) ?: defaultMapArrowPlacement()
-                if (placement.id == MapRenderSettingsStore.current().arrowPlacementId) return
-                MapRenderSettingsStore.update { it.copy(arrowPlacementId = placement.id) }
+        mapArrowOffsetSeek.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                val offsetDp = MAP_ARROW_OFFSET_MIN_DP + progress
+                syncMapArrowOffsetValue(offsetDp)
+                if (!fromUser || offsetDp == MapRenderSettingsStore.current().arrowOffsetDp) return
+                MapRenderSettingsStore.update { it.copy(arrowOffsetDp = offsetDp) }
                 notifyOverlaySettingsChanged(
                     preview = true,
                     previewTarget = target,
@@ -342,8 +345,10 @@ internal fun MainActivity.openPositionDialog(
                 )
             }
 
-            override fun onNothingSelected(parent: android.widget.AdapterView<*>?) = Unit
-        }
+            override fun onStartTrackingTouch(seekBar: SeekBar?) = Unit
+
+            override fun onStopTrackingTouch(seekBar: SeekBar?) = Unit
+        })
         laneGuidanceCheck.setOnCheckedChangeListener { _, isChecked ->
             if (isChecked == MapRenderSettingsStore.current().laneGuidanceEnabled) return@setOnCheckedChangeListener
             MapRenderSettingsStore.update { it.copy(laneGuidanceEnabled = isChecked) }
@@ -359,7 +364,7 @@ internal fun MainActivity.openPositionDialog(
     } else {
         roadEventsRow.visibility = View.GONE
         tripStatusRow.visibility = View.GONE
-        mapArrowPlacementRow.visibility = View.GONE
+        mapArrowOffsetRow.visibility = View.GONE
         laneGuidanceRow.visibility = View.GONE
     }
 
@@ -1662,6 +1667,23 @@ internal fun MainActivity.openPositionDialog(
     showOthersCheck.setOnCheckedChangeListener { _, isChecked ->
         notifyOverlaySettingsChanged(preview = true, previewTarget = target, previewShowOthers = isChecked)
         updateDialogVisibility()
+    }
+
+    hideWhenMapActiveCheck.setOnCheckedChangeListener { _, isChecked ->
+        when (target) {
+            OverlayTarget.NAVIGATION -> OverlayPrefs.setNavHideWhenMapActive(activity, isChecked)
+            OverlayTarget.LANE_GUIDANCE -> OverlayPrefs.setLaneGuidanceHideWhenMapActive(activity, isChecked)
+            OverlayTarget.ARROW -> OverlayPrefs.setArrowHideWhenMapActive(activity, isChecked)
+            OverlayTarget.SPEED -> OverlayPrefs.setSpeedHideWhenMapActive(activity, isChecked)
+            OverlayTarget.HUDSPEED -> OverlayPrefs.setHudSpeedHideWhenMapActive(activity, isChecked)
+            OverlayTarget.ROAD_CAMERA -> OverlayPrefs.setRoadCameraHideWhenMapActive(activity, isChecked)
+            OverlayTarget.TRAFFIC_LIGHT -> OverlayPrefs.setTrafficLightHideWhenMapActive(activity, isChecked)
+            OverlayTarget.SPEEDOMETER -> OverlayPrefs.setSpeedometerHideWhenMapActive(activity, isChecked)
+            OverlayTarget.TURN_SIGNALS -> OverlayPrefs.setTurnSignalsHideWhenMapActive(activity, isChecked)
+            OverlayTarget.CLOCK -> OverlayPrefs.setClockHideWhenMapActive(activity, isChecked)
+            OverlayTarget.MAP, OverlayTarget.CONTAINER -> Unit
+        }
+        notifyOverlaySettingsChanged(preview = true, previewTarget = target, previewShowOthers = showOthersCheck.isChecked)
     }
 
     hudSpeedGpsStatusCheck.setOnCheckedChangeListener { _, isChecked ->

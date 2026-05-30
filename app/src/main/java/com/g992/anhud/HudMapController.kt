@@ -143,7 +143,7 @@ class HudMapController(
             currentSettings.buildings3dEnabled != settings.buildings3dEnabled
         val vignetteChanged = currentSettings.mapVignetteEnabled != settings.mapVignetteEnabled
         val locationStyleChanged = currentSettings.arrowScalePercent != settings.arrowScalePercent
-        val arrowPlacementChanged = currentSettings.arrowPlacementId != settings.arrowPlacementId
+        val arrowPlacementChanged = currentSettings.arrowOffsetDp != settings.arrowOffsetDp
         val roadEventSettingsChanged = currentSettings.roadEventsEnabled != settings.roadEventsEnabled ||
             currentSettings.roadEventIconSizePx != settings.roadEventIconSizePx ||
             currentSettings.hiddenRoadEventTypes != settings.hiddenRoadEventTypes
@@ -927,23 +927,7 @@ class HudMapController(
     }
 
     private fun resolveArrowPlacementOffsetPx(settings: MapRenderSettings): Int {
-        return when (resolveMapArrowPlacement(settings.arrowPlacementId)) {
-            MapArrowPlacement.DEFAULT -> 0
-            MapArrowPlacement.BOTTOM -> (resolveArrowIconHeightPx(settings) * 1.5f).roundToInt()
-        }
-    }
-
-    private fun resolveArrowIconHeightPx(settings: MapRenderSettings): Int {
-        val arrowScale = (settings.arrowScalePercent / 100f)
-            .coerceIn(
-                MAP_ARROW_SCALE_MIN_PERCENT / 100f,
-                MAP_ARROW_SCALE_MAX_PERCENT / 100f
-            )
-        val baseArrowHeightPx = ContextCompat.getDrawable(context, R.drawable.ic_nav_arrow)
-            ?.intrinsicHeight
-            ?.takeIf { it > 0 }
-            ?: dp(MAP_ARROW_BASE_SIZE_DP)
-        return (baseArrowHeightPx * arrowScale).roundToInt()
+        return dp(settings.arrowOffsetDp)
     }
 
     private fun hasTripStatusLayoutChanged(state: NavigationHudState): Boolean {

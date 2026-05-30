@@ -225,6 +225,8 @@ class HudOverlayController(private val context: Context) {
     private var turnSignalsPreviewMode: Boolean = false
     private var laneGuidanceHadVisibleContent: Boolean = false
     private var mapHadVisibleContent: Boolean = false
+    private var dynamicHideTurnSpeedBucket: OverlayPrefs.DynamicHideTurnSpeedBucket? = null
+    private var hideMapByManeuverActive: Boolean = false
     private var mapTransparentFillPending: Boolean = false
     private val clockTicker = object : Runnable {
         override fun run() {
@@ -554,6 +556,8 @@ class HudOverlayController(private val context: Context) {
             if (!hudSpeedEnabled) {
                 hudSpeedContainer?.visibility = View.GONE
             }
+            dynamicHideTurnSpeedBucket = null
+            hideMapByManeuverActive = false
             // Fill with transparent to clear any remnants
             container.setBackgroundColor(android.graphics.Color.TRANSPARENT)
             container.visibility = View.VISIBLE
@@ -1946,19 +1950,73 @@ class HudOverlayController(private val context: Context) {
             state.trafficLights
         }
         val laneGuidanceManeuver = routeSnapshot.laneManeuver
-        val laneGuidanceVisible = laneGuidanceAllowed && if (showPreview) {
-            previewLaneGuidance
-        } else {
-            laneGuidanceManeuver != null
-        }
-        val laneGuidanceTransparentFillVisible = !laneGuidanceVisible && laneGuidanceHadVisibleContent
+        val hideMapByManeuver = shouldHideMapByManeuver(showPreview, hideNavigationByDistance)
+        hideMapByManeuverActive = hideMapByManeuver
         val mapVisible = mapAllowed && if (showPreview) {
             previewMap
         } else {
-            hasMapRoute
+            hasMapRoute && !hideMapByManeuver
         }
         val mapTransparentFillVisible = !mapVisible && mapHadVisibleContent
         mapTransparentFillPending = mapTransparentFillVisible
+        val navHiddenByMap = shouldHideBlockWhenMapVisible(
+            showPreview = showPreview,
+            mapVisible = mapVisible,
+            hideWhenMapActive = OverlayPrefs.navHideWhenMapActive(context)
+        )
+        val laneGuidanceHiddenByMap = shouldHideBlockWhenMapVisible(
+            showPreview = showPreview,
+            mapVisible = mapVisible,
+            hideWhenMapActive = OverlayPrefs.laneGuidanceHideWhenMapActive(context)
+        )
+        val arrowHiddenByMap = shouldHideBlockWhenMapVisible(
+            showPreview = showPreview,
+            mapVisible = mapVisible,
+            hideWhenMapActive = OverlayPrefs.arrowHideWhenMapActive(context)
+        )
+        val speedHiddenByMap = shouldHideBlockWhenMapVisible(
+            showPreview = showPreview,
+            mapVisible = mapVisible,
+            hideWhenMapActive = OverlayPrefs.speedHideWhenMapActive(context)
+        )
+        val hudSpeedHiddenByMap = shouldHideBlockWhenMapVisible(
+            showPreview = showPreview,
+            mapVisible = mapVisible,
+            hideWhenMapActive = OverlayPrefs.hudSpeedHideWhenMapActive(context)
+        )
+        val roadCameraHiddenByMap = shouldHideBlockWhenMapVisible(
+            showPreview = showPreview,
+            mapVisible = mapVisible,
+            hideWhenMapActive = OverlayPrefs.roadCameraHideWhenMapActive(context)
+        )
+        val trafficLightHiddenByMap = shouldHideBlockWhenMapVisible(
+            showPreview = showPreview,
+            mapVisible = mapVisible,
+            hideWhenMapActive = OverlayPrefs.trafficLightHideWhenMapActive(context)
+        )
+        val speedometerHiddenByMap = shouldHideBlockWhenMapVisible(
+            showPreview = showPreview,
+            mapVisible = mapVisible,
+            hideWhenMapActive = OverlayPrefs.speedometerHideWhenMapActive(context)
+        )
+        val turnSignalsHiddenByMap = shouldHideBlockWhenMapVisible(
+            showPreview = showPreview,
+            mapVisible = mapVisible,
+            hideWhenMapActive = OverlayPrefs.turnSignalsHideWhenMapActive(context)
+        )
+        val clockHiddenByMap = shouldHideBlockWhenMapVisible(
+            showPreview = showPreview,
+            mapVisible = mapVisible,
+            hideWhenMapActive = OverlayPrefs.clockHideWhenMapActive(context)
+        )
+        val laneGuidanceVisible = laneGuidanceAllowed && if (showPreview) {
+            previewLaneGuidance
+        } else {
+            laneGuidanceManeuver != null && !laneGuidanceHiddenByMap
+        }
+        val laneGuidanceTransparentFillVisible = !laneGuidanceHiddenByMap &&
+            !laneGuidanceVisible &&
+            laneGuidanceHadVisibleContent
 
         setTextOrHide(primary, primaryText)
         setTextOrHide(secondary, secondaryText)
@@ -1975,9 +2033,12 @@ class HudOverlayController(private val context: Context) {
         } else {
             state.turnSignalRight || state.turnSignalHazard
         }
-        val turnSignalsTransparentFillVisible = !previewTurnSignals && !turnSignalLeft && !turnSignalRight
+        val turnSignalsTransparentFillVisible = !turnSignalsHiddenByMap &&
+            !previewTurnSignals &&
+            !turnSignalLeft &&
+            !turnSignalRight
         updateTurnSignals(
-            allowed = turnSignalsAllowed,
+            allowed = turnSignalsAllowed && !turnSignalsHiddenByMap,
             preview = previewTurnSignals,
             leftActive = turnSignalLeft,
             rightActive = turnSignalRight,
@@ -2016,7 +2077,7 @@ class HudOverlayController(private val context: Context) {
         val navVisible = if (showPreview) {
             previewNav
         } else {
-            navHasContent && !hideNavigationByDistance
+            navHasContent && !hideNavigationByDistance && !navHiddenByMap
         }
         val arrowEligible = if (arrowOnlyWhenNoIcon) {
             NativeNavigationController.isActive() &&
@@ -2027,9 +2088,9 @@ class HudOverlayController(private val context: Context) {
         val arrowVisible = if (showPreview) {
             previewArrow
         } else {
-            state.maneuverBitmap != null && arrowEligible && !hideNavigationByDistance
+            state.maneuverBitmap != null && arrowEligible && !hideNavigationByDistance && !arrowHiddenByMap
         }
-        val speedVisible = if (showPreview) previewSpeed else state.speedLimit.isNotBlank()
+        val speedVisible = if (showPreview) previewSpeed else state.speedLimit.isNotBlank() && !speedHiddenByMap
         if (!showPreview && (!state.hudSpeedHasCamera || state.hudSpeedDistanceMeters == null)) {
             cancelHudSpeedHide()
         }
@@ -2039,25 +2100,26 @@ class HudOverlayController(private val context: Context) {
             val hasCameraData = state.hudSpeedHasCamera &&
                 state.hudSpeedDistanceMeters != null &&
                 !shouldHideHudSpeed(state, showPreview)
-            hasCameraData || hudSpeedGpsStatusVisible || hudSpeedTransparentFillVisible
+            (hasCameraData || hudSpeedGpsStatusVisible || hudSpeedTransparentFillVisible) && !hudSpeedHiddenByMap
         }
-        val speedometerVisible = if (showPreview) previewSpeedometer else state.speedKmh != null
+        val speedometerVisible = if (showPreview) previewSpeedometer else state.speedKmh != null && !speedometerHiddenByMap
         val turnSignalsVisible = if (showPreview) {
             turnSignalsAllowed && previewTurnSignals
         } else {
             turnSignalsAllowed &&
-                (turnSignalLeft || turnSignalRight || turnSignalsTransparentFillVisible)
+                (turnSignalLeft || turnSignalRight || turnSignalsTransparentFillVisible) &&
+                !turnSignalsHiddenByMap
         }
-        val clockVisible = if (showPreview) previewClock else true
+        val clockVisible = if (showPreview) previewClock else !clockHiddenByMap
         val roadCameraVisible = if (showPreview) {
             roadCameraAllowed && previewRoadCamera
         } else {
-            roadCameraAllowed && roadCameraHasData
+            roadCameraAllowed && roadCameraHasData && !roadCameraHiddenByMap
         }
         val trafficLightVisible = if (showPreview) {
             trafficLightAllowed && previewTrafficLight
         } else {
-            trafficLightAllowed && trafficLights.isNotEmpty()
+            trafficLightAllowed && trafficLights.isNotEmpty() && !trafficLightHiddenByMap
         }
         navContainer?.visibility = if (navAllowed && navVisible) View.VISIBLE else View.GONE
         laneGuidanceContainer?.visibility = if (laneGuidanceVisible || laneGuidanceTransparentFillVisible) {
@@ -2133,6 +2195,14 @@ class HudOverlayController(private val context: Context) {
         }
         scheduleHudSpeedHide(remaining)
         return false
+    }
+
+    private fun shouldHideBlockWhenMapVisible(
+        showPreview: Boolean,
+        mapVisible: Boolean,
+        hideWhenMapActive: Boolean,
+    ): Boolean {
+        return !showPreview && mapVisible && hideWhenMapActive
     }
 
     private fun resolveHudSpeedTimeoutMs(distanceMeters: Int): Long? {
@@ -3071,14 +3141,33 @@ class HudOverlayController(private val context: Context) {
 
     private fun shouldHideManeuverByDistance(state: NavigationHudState, showPreview: Boolean): Boolean {
         if (showPreview) {
+            dynamicHideTurnSpeedBucket = null
             return false
         }
         if (!OverlayPrefs.hideTurnWhenFarEnabled(context)) {
+            dynamicHideTurnSpeedBucket = null
             return false
         }
-        val distanceMeters = resolveManeuverDistanceMeters(state) ?: return false
-        val thresholdMeters = OverlayPrefs.hideTurnWhenFarDistanceMeters(context)
+        val distanceMeters = resolveManeuverDistanceMeters(state) ?: run {
+            dynamicHideTurnSpeedBucket = null
+            return false
+        }
+        val resolution = OverlayPrefs.resolveHideTurnThreshold(
+            context = context,
+            speedKmh = state.speedKmh,
+            currentBucket = dynamicHideTurnSpeedBucket
+        )
+        dynamicHideTurnSpeedBucket = resolution.bucket
+        val thresholdMeters = resolution.thresholdMeters
         return distanceMeters > thresholdMeters
+    }
+
+    private fun shouldHideMapByManeuver(showPreview: Boolean, hideNavigationByDistance: Boolean): Boolean {
+        if (showPreview || !hideNavigationByDistance) {
+            return false
+        }
+        return OverlayPrefs.hideTurnDynamicEnabled(context) &&
+            OverlayPrefs.hideTurnDynamicHideMapBlock(context)
     }
 
     private fun resolveManeuverDistanceMeters(state: NavigationHudState): Int? {
@@ -3270,7 +3359,7 @@ class HudOverlayController(private val context: Context) {
             )
         val routeSnapshot = MapRouteTelemetryStore.current()
         val hasMapRoute = routeSnapshot.hasRoute
-        val runtimeMapVisible = !previewMode && mapEnabled && hasMapRoute
+        val runtimeMapVisible = !previewMode && mapEnabled && hasMapRoute && !hideMapByManeuverActive
         logMapState(
             stage = "update",
             previewMap = previewMap,
