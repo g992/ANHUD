@@ -139,6 +139,10 @@ class HudOverlayController(private val context: Context) {
     private var mapPlaceholderView: FrameLayout? = null
     private var mapPlaceholderIconView: ImageView? = null
     private var mapPlaceholderLabelView: TextView? = null
+    private var customBlocksLayer: FrameLayout? = null
+    private val customBlockViewHolders = linkedMapOf<String, CustomBlockViewFactory.ViewHolder>()
+    private var customBlocksDocument: CustomBlocksDocument = CustomBlocksDocument()
+    private var customBlockRenderStates: Map<String, CustomBlockRenderState> = emptyMap()
     private var currentDisplayId: Int? = null
     private var lastState: NavigationHudState = NavigationHudState()
     private var lastRenderSignature: RenderSignature? = null
@@ -300,6 +304,19 @@ class HudOverlayController(private val context: Context) {
             }
             lastRenderSignature = signature
             applyState(state)
+        }
+    }
+
+    fun updateCustomBlocks(
+        document: CustomBlocksDocument,
+        states: Map<String, CustomBlockRenderState>
+    ) {
+        handler.post {
+            customBlocksDocument = document
+            customBlockRenderStates = states
+            syncCustomBlockViews()
+            applyCustomBlockStates()
+            applyState(lastState)
         }
     }
 
@@ -1539,6 +1556,15 @@ class HudOverlayController(private val context: Context) {
         root.addView(speedometerText)
         root.addView(turnSignalsBlock)
         root.addView(clockText)
+        val customLayer = FrameLayout(displayContext).apply {
+            layoutParams = FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT
+            )
+            clipChildren = false
+            clipToPadding = false
+        }
+        root.addView(customLayer)
 
         val layoutParams = WindowManager.LayoutParams(
             containerWidthPx,
@@ -1606,7 +1632,10 @@ class HudOverlayController(private val context: Context) {
             mapPlaceholderView = mapPlaceholder
             mapPlaceholderIconView = mapPlaceholderIcon
             mapPlaceholderLabelView = mapPlaceholderLabel
+            customBlocksLayer = customLayer
             currentDisplayId = display.displayId
+            syncCustomBlockViews()
+            applyCustomBlockStates()
             applyTurnSignalsSpacing(metrics.density)
             applyNavTextScale()
             UiLogStore.append(LogCategory.SYSTEM, "Оверлей: показан на экране ${display.displayId}")
@@ -1664,6 +1693,8 @@ class HudOverlayController(private val context: Context) {
             mapPlaceholderView = null
             mapPlaceholderIconView = null
             mapPlaceholderLabelView = null
+            customBlocksLayer = null
+            customBlockViewHolders.clear()
             currentDisplayId = null
             stopTurnSignalBlinking()
             stopClockTicker()
@@ -1741,6 +1772,8 @@ class HudOverlayController(private val context: Context) {
         mapPlaceholderView = null
         mapPlaceholderIconView = null
         mapPlaceholderLabelView = null
+        customBlocksLayer = null
+        customBlockViewHolders.clear()
         currentDisplayId = null
         stopClockTicker()
     }
@@ -2201,6 +2234,7 @@ class HudOverlayController(private val context: Context) {
         clock?.visibility = if (clockAllowed && clockVisible) View.VISIBLE else View.GONE
 
         // Hide main container if nothing is visible
+        val customVisible = applyCustomBlockStates()
         val anyVisible = (navAllowed && navVisible) ||
             laneGuidanceVisible ||
             laneGuidanceTransparentFillVisible ||
@@ -2213,7 +2247,8 @@ class HudOverlayController(private val context: Context) {
             trafficLightVisible ||
             (speedometerAllowed && speedometerVisible) ||
             turnSignalsVisible ||
-            (clockAllowed && clockVisible)
+            (clockAllowed && clockVisible) ||
+            customVisible
         container?.visibility = if (showPreview || anyVisible) View.VISIBLE else View.GONE
         laneGuidanceHadVisibleContent = laneGuidanceVisible
         mapHadVisibleContent = mapVisible
@@ -3262,7 +3297,49 @@ class HudOverlayController(private val context: Context) {
         clockView?.let {
             positionView(it, clockPositionDp, clockScale, clockAlpha, metrics.density, containerWidth, containerHeight)
         }
+        customBlocksDocument.blocks.forEach { block ->
+            customBlockViewHolders[block.id]?.root?.let { view ->
+                positionView(
+                    view,
+                    PointF(block.xDp, block.yDp),
+                    block.scale,
+                    block.alpha,
+                    metrics.density,
+                    containerWidth,
+                    containerHeight
+                )
+            }
+        }
         updateMapView(displayContext, containerWidthPx, containerHeightPx)
+    }
+
+    private fun syncCustomBlockViews() {
+        val layer = customBlocksLayer ?: return
+        val enabledIds = customBlocksDocument.blocks.filter { it.enabled }.mapTo(linkedSetOf()) { it.id }
+        customBlockViewHolders.keys.filterNot(enabledIds::contains).forEach { blockId ->
+            customBlockViewHolders.remove(blockId)?.root?.let(layer::removeView)
+        }
+        customBlocksDocument.blocks.filter { it.enabled }.forEach { block ->
+            if (customBlockViewHolders[block.id] == null) {
+                customBlockViewHolders[block.id] = CustomBlockViewFactory.create(layer.context, layer)
+            }
+        }
+    }
+
+    private fun applyCustomBlockStates(): Boolean {
+        val layer = customBlocksLayer ?: return false
+        var anyVisible = false
+        customBlocksDocument.blocks.forEach { block ->
+            val holder = customBlockViewHolders[block.id] ?: return@forEach
+            val state = customBlockRenderStates[block.id]
+                ?: CustomBlockRenderState(blockId = block.id, visible = false)
+            holder.bind(block, state)
+            if (customBlocksDocument.enabled && block.enabled && state.visible && state.error == null) {
+                anyVisible = true
+            }
+        }
+        layer.visibility = if (customBlocksDocument.enabled && anyVisible) View.VISIBLE else View.GONE
+        return customBlocksDocument.enabled && anyVisible
     }
 
     private fun applyTurnSignalsSpacing(density: Float) {

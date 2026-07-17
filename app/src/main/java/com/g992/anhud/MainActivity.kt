@@ -99,6 +99,14 @@ class MainActivity : ScaledActivity() {
         turnSignalCustomIconPickerCallback = null
         callback?.invoke(uri)
     }
+    private var customBlockIconPickerCallback: ((Uri?) -> Unit)? = null
+    private val customBlockIconPickerLauncher = registerForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        val callback = customBlockIconPickerCallback
+        customBlockIconPickerCallback = null
+        callback?.invoke(uri)
+    }
     internal lateinit var permissionStatus: TextView
     internal lateinit var requestPermissionButton: Button
     internal lateinit var locationPermissionStatus: TextView
@@ -137,6 +145,10 @@ class MainActivity : ScaledActivity() {
     internal lateinit var turnSignalsCardPreviewRight: ImageView
     internal lateinit var turnSignalsIconValue: TextView
     private lateinit var positionClockCard: View
+    internal lateinit var customBlocksCard: View
+    internal lateinit var customBlocksGlobalSwitch: SwitchCompat
+    internal lateinit var customBlocksAddButton: Button
+    internal lateinit var customBlocksList: LinearLayout
     internal lateinit var navProjectionSwitch: SwitchCompat
     internal lateinit var laneGuidanceProjectionSwitch: SwitchCompat
     internal lateinit var mapProjectionSwitch: SwitchCompat
@@ -179,6 +191,10 @@ class MainActivity : ScaledActivity() {
     private var guideController: GuideOverlayController? = null
     private var editorGuideController: GuideOverlayController? = null
     private var pendingGuideAfterDialog: List<GuideContent.GuideItem>? = null
+    internal val customBlockRepository by lazy { CustomBlockRepository(applicationContext) }
+    internal val customBlockStatusListener = CustomBlockStatusStore.Listener {
+        runOnUiThread { refreshCustomBlocksUi() }
+    }
     internal var presetOptions: List<PresetManager.Preset> = emptyList()
     internal var presetAdapter: PresetAdapter? = null
     internal var activePresetId: String? = null
@@ -194,6 +210,11 @@ class MainActivity : ScaledActivity() {
     internal fun pickTurnSignalCustomIcon(onResult: (Uri?) -> Unit) {
         turnSignalCustomIconPickerCallback = onResult
         turnSignalCustomIconPickerLauncher.launch(arrayOf("image/png", "image/svg+xml"))
+    }
+
+    internal fun pickCustomBlockIcon(onResult: (Uri?) -> Unit) {
+        customBlockIconPickerCallback = onResult
+        customBlockIconPickerLauncher.launch(arrayOf("image/png"))
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -243,6 +264,10 @@ class MainActivity : ScaledActivity() {
         turnSignalsCardPreviewRight = findViewById(R.id.turnSignalsCardPreviewRight)
         turnSignalsIconValue = findViewById(R.id.turnSignalsIconValue)
         positionClockCard = findViewById(R.id.positionClockCard)
+        customBlocksCard = findViewById(R.id.customBlocksCard)
+        customBlocksGlobalSwitch = findViewById(R.id.customBlocksGlobalSwitch)
+        customBlocksAddButton = findViewById(R.id.customBlocksAddButton)
+        customBlocksList = findViewById(R.id.customBlocksList)
         navProjectionSwitch = findViewById(R.id.navProjectionSwitch)
         laneGuidanceProjectionSwitch = findViewById(R.id.laneGuidanceProjectionSwitch)
         mapProjectionSwitch = findViewById(R.id.mapProjectionSwitch)
@@ -286,6 +311,7 @@ class MainActivity : ScaledActivity() {
             startActivity(Intent(this, SettingsActivity::class.java))
         }
         updateSettingsBadge()
+        setupCustomBlocksUi()
 
         requestPermissionButton.setOnClickListener {
             openOverlaySettings()
@@ -697,6 +723,7 @@ class MainActivity : ScaledActivity() {
     }
 
     override fun onDestroy() {
+        CustomBlockStatusStore.unregister(customBlockStatusListener)
         guideController?.stop()
         guideController = null
         editorGuideController?.stop()
@@ -708,6 +735,7 @@ class MainActivity : ScaledActivity() {
         super.onResume()
         updatePermissionStatus()
         refreshPresets(keepSelection = true)
+        refreshCustomBlocksUi()
     }
 
     internal fun syncLegacyExperimentalBlockVisibility() {
@@ -717,6 +745,11 @@ class MainActivity : ScaledActivity() {
             View.GONE
         }
         positionTrafficLightCard.visibility = if (OverlayPrefs.mainMenuTrafficLightVisible(this)) {
+            View.VISIBLE
+        } else {
+            View.GONE
+        }
+        customBlocksCard.visibility = if (customBlockRepository.load().menuVisible) {
             View.VISIBLE
         } else {
             View.GONE

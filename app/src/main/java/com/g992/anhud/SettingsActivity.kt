@@ -99,6 +99,7 @@ class SettingsActivity : ScaledActivity() {
     private lateinit var legacyExperimentalVisibilityToggleLabel: TextView
     private lateinit var mainMenuTrafficLightVisibleSwitch: SwitchCompat
     private lateinit var mainMenuRoadCameraVisibleSwitch: SwitchCompat
+    private lateinit var mainMenuCustomBlocksVisibleSwitch: SwitchCompat
     private lateinit var useStrelkaSwitch: SwitchCompat
     private lateinit var cameraTimeoutNearInput: EditText
     private lateinit var cameraTimeoutFarInput: EditText
@@ -322,6 +323,7 @@ class SettingsActivity : ScaledActivity() {
         legacyExperimentalVisibilityToggleLabel = findViewById(R.id.legacyExperimentalVisibilityToggleLabel)
         mainMenuTrafficLightVisibleSwitch = findViewById(R.id.mainMenuTrafficLightVisibleSwitch)
         mainMenuRoadCameraVisibleSwitch = findViewById(R.id.mainMenuRoadCameraVisibleSwitch)
+        mainMenuCustomBlocksVisibleSwitch = findViewById(R.id.mainMenuCustomBlocksVisibleSwitch)
         useStrelkaSwitch = findViewById(R.id.useStrelkaSwitch)
         cameraTimeoutNearInput = findViewById(R.id.cameraTimeoutNearInput)
         cameraTimeoutFarInput = findViewById(R.id.cameraTimeoutFarInput)
@@ -533,6 +535,11 @@ class SettingsActivity : ScaledActivity() {
         mainMenuRoadCameraVisibleSwitch.setOnCheckedChangeListener { _, isChecked ->
             if (isSyncingUi) return@setOnCheckedChangeListener
             OverlayPrefs.setMainMenuRoadCameraVisible(this, isChecked)
+        }
+
+        mainMenuCustomBlocksVisibleSwitch.setOnCheckedChangeListener { _, isChecked ->
+            if (isSyncingUi) return@setOnCheckedChangeListener
+            CustomBlockRepository(this).update { it.copy(menuVisible = isChecked) }
         }
 
         exportSettingsButton.setOnClickListener {
@@ -2717,7 +2724,7 @@ class SettingsActivity : ScaledActivity() {
     private fun exportSettingsToDownloads() {
         try {
             val fileName = generateExportFileName()
-            val payload = PrefsJson.buildPayload(this)
+            val payload = PrefsJson.buildTransferPayload(this)
             val json = payload.toString(2)
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -2817,7 +2824,7 @@ class SettingsActivity : ScaledActivity() {
 
     private fun exportSettings(uri: Uri) {
         try {
-            val payload = PrefsJson.buildPayload(this)
+            val payload = PrefsJson.buildTransferPayload(this)
             val json = payload.toString(2)
             contentResolver.openOutputStream(uri)?.use { output ->
                 output.write(json.toByteArray(Charsets.UTF_8))
@@ -3499,6 +3506,7 @@ class SettingsActivity : ScaledActivity() {
             useStrelkaSwitch.isChecked = OverlayPrefs.hudAlertSource(this) == OverlayPrefs.HudAlertSource.STRELKA
             mainMenuTrafficLightVisibleSwitch.isChecked = OverlayPrefs.mainMenuTrafficLightVisible(this)
             mainMenuRoadCameraVisibleSwitch.isChecked = OverlayPrefs.mainMenuRoadCameraVisible(this)
+            mainMenuCustomBlocksVisibleSwitch.isChecked = CustomBlockRepository(this).load().menuVisible
             cameraTimeoutNearInput.setText(OverlayPrefs.cameraTimeoutNear(this).toString())
             cameraTimeoutFarInput.setText(OverlayPrefs.cameraTimeoutFar(this).toString())
             trafficLightTimeoutInput.setText(OverlayPrefs.trafficLightTimeout(this).toString())

@@ -381,6 +381,15 @@
                             android:text="@string/main_menu_road_camera_visible_label"
                             android:textColor="@color/white"
                             android:textSize="14sp" />
+
+                        <androidx.appcompat.widget.SwitchCompat
+                            android:id="@+id/mainMenuCustomBlocksVisibleSwitch"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="8dp"
+                            android:text="@string/main_menu_custom_blocks_visible_label"
+                            android:textColor="@color/white"
+                            android:textSize="14sp" />
                     </LinearLayout>
                 </LinearLayout>
 
