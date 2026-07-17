@@ -98,6 +98,13 @@
             android:enabled="true"
             android:exported="false"
             android:foregroundServiceType="dataSync|location" />
+        <service
+            android:name=".CustomScriptSandboxService"
+            android:enabled="true"
+            android:exported="false"
+            android:isolatedProcess="true"
+            android:process=":custom_script_sandbox"
+            android:stopWithTask="true" />
         <receiver
             android:name=".BootReceiver"
             android:enabled="true"

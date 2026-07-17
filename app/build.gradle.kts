@@ -107,7 +107,10 @@ dependencies {
     implementation(libs.tananaev.adblib)
     implementation(libs.androidsvg)
     implementation(libs.maplibre.android.sdk)
+    implementation(libs.quickjs.wrapper.android)
     testImplementation(libs.junit)
+    testImplementation(libs.json)
+    testImplementation(libs.rhino)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
 }

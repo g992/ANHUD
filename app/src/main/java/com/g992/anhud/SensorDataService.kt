@@ -29,7 +29,7 @@ class SensorDataService : Service() {
     private var carProxyBinder: IBinder? = null
     private var carProxyConnection: ServiceConnection? = null
     private var lastTurnSignalRaw: Int? = null
-    private var speedSensorClient: EcarxSpeedSensorClient? = null
+    private var speedSensorSubscription: AutoCloseable? = null
 
     private val staleSpeedHandler = Handler(Looper.getMainLooper())
     private val staleSpeedRunnable = object : Runnable {
@@ -54,19 +54,18 @@ class SensorDataService : Service() {
     override fun onCreate() {
         super.onCreate()
         UiLogStore.append(LogCategory.SENSORS, "Сервис создан")
-        speedSensorClient = EcarxSpeedSensorClient(
-            context = applicationContext,
-            sensorId = SENSOR_ID_CAR_SPEED,
-            onSpeedMetersPerSecond = ::handleVehicleSpeed,
-            onLog = { message -> UiLogStore.append(LogCategory.SENSORS, message) }
-        )
         staleSpeedHandler.postDelayed(staleSpeedRunnable, GPS_STALE_CHECK_INTERVAL_MS)
         initTurnSignalIntegration()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         UiLogStore.append(LogCategory.SENSORS, "Сервис запущен")
-        speedSensorClient?.start()
+        if (speedSensorSubscription == null) {
+            speedSensorSubscription = CarSensorHub.subscribe(
+                context = applicationContext,
+                sensorId = CustomBlocksContract.SPEED_SENSOR_ID
+            ) { snapshot -> handleVehicleSpeed(snapshot.value) }
+        }
         subscribeToTurnSignalSensors()
         ensureLocationUpdates()
         return START_STICKY
@@ -77,8 +76,8 @@ class SensorDataService : Service() {
         staleSpeedHandler.removeCallbacks(staleSpeedRunnable)
         staleSpeedHandler.removeCallbacks(turnSignalPollRunnable)
         staleSpeedHandler.removeCallbacks(carProxyReconnectRunnable)
-        speedSensorClient?.stop()
-        speedSensorClient = null
+        speedSensorSubscription?.close()
+        speedSensorSubscription = null
         unbindTurnSignalCarProxy()
         clearTurnSignalState()
         resetVehicleSpeedWatchdog()
@@ -121,7 +120,9 @@ class SensorDataService : Service() {
         val correction = OverlayPrefs.speedCorrection(this)
         val speedKmh = (rawSpeed + correction).coerceAtLeast(0)
         markVehicleSpeedObserved(speedKmh)
-        NavigationHudStore.update { current -> current.copy(speedKmh = speedKmh) }
+        NavigationHudStore.update { current ->
+            current.copy(speedKmh = speedKmh, speedKmhUpdatedAt = System.currentTimeMillis())
+        }
         UiLogStore.append(
             LogCategory.SENSORS,
             "Скорость: $speedKmh км/ч (ecarx, raw=$rawSpeed, коррекция=$correction)"
@@ -329,7 +330,9 @@ class SensorDataService : Service() {
         val stats = calculateGpsWindowStats() ?: return
         val normalizedSpeedKmh = if (stats.speedKmh <= GPS_STOP_SPEED_KMH) 0f else stats.speedKmh
         val speedKmh = normalizedSpeedKmh.roundToInt().coerceAtLeast(0)
-        NavigationHudStore.update { current -> current.copy(speedKmh = speedKmh) }
+        NavigationHudStore.update { current ->
+            current.copy(speedKmh = speedKmh, speedKmhUpdatedAt = System.currentTimeMillis())
+        }
         lastGpsSpeedUpdateElapsedMs = SystemClock.elapsedRealtime()
         UiLogStore.append(
             LogCategory.SENSORS,
@@ -399,7 +402,7 @@ class SensorDataService : Service() {
                 current
             } else {
                 cleared = true
-                current.copy(speedKmh = null)
+                current.copy(speedKmh = null, speedKmhUpdatedAt = System.currentTimeMillis())
             }
         }
         if (cleared) UiLogStore.append(LogCategory.SENSORS, "GPS-скорость: сброс ($reason)")
@@ -438,7 +441,7 @@ class SensorDataService : Service() {
             LogCategory.SENSORS,
             "Скорость не менялась $timeoutSeconds c (ecarx=$speedKmh), переподписка на датчик"
         )
-        speedSensorClient?.resubscribe()
+        CarSensorHub.resubscribe(CustomBlocksContract.SPEED_SENSOR_ID)
         lastVehicleSpeedChangedElapsedMs = SystemClock.elapsedRealtime()
     }
 
@@ -497,7 +500,6 @@ class SensorDataService : Service() {
     )
 
     companion object {
-        private const val SENSOR_ID_CAR_SPEED = 1055232
         private const val CAR_PROXY_PACKAGE = "com.autolink.carproxyservice"
         private const val CAR_PROXY_SERVICE = "com.autolink.carproxyservice.CarProxyService"
         private const val CAR_PROXY_DESCRIPTOR = "com.autolink.adapterbinder.ICarProxyService"

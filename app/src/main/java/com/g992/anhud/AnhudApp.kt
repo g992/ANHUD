@@ -11,6 +11,9 @@ class AnhudApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        if (getProcessName().endsWith(":custom_script_sandbox")) {
+            return
+        }
         PerformanceDebugMonitor.start(this)
         MapLibre.getInstance(applicationContext, null, WellKnownTileServer.MapLibre)
         initializeMapTileProviderFallbacks(applicationContext)

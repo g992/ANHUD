@@ -14,10 +14,25 @@ object PrefsJson {
     private const val MAX_SUPPORTED_MANEUVER_ICON_ID = 150
     private const val DEFAULT_PREFS_SUFFIX = "_preset_defaults"
 
-    fun buildPayload(context: Context): JSONObject = buildPayloadInternal(context)
+    fun buildPayload(context: Context): JSONObject = buildPayloadInternal(context, includeCustomBlocks = false)
+
+    fun buildTransferPayload(context: Context): JSONObject =
+        buildPayloadInternal(context, includeCustomBlocks = true)
 
     fun applyPayload(context: Context, payload: JSONObject): Boolean {
         val sourcePrefs = payload.optJSONObject("prefs") ?: return false
+        val importedCustomBlocks = payload.optJSONObject("customBlocks")?.let { customBlocksJson ->
+            runCatching { CustomBlockJsonCodec.decode(customBlocksJson.toString()) }.getOrNull()
+                ?: return false
+        }
+        if (importedCustomBlocks != null) {
+            val iconsValid = runCatching {
+                importedCustomBlocks.blocks.forEach { block ->
+                    CustomBlockIconStore.decode(block).recycle()
+                }
+            }.isSuccess
+            if (!iconsValid) return false
+        }
         val prefsObject = normalizePayload(context, payload, sourcePrefs).optJSONObject("prefs") ?: return false
         val overlayApplied = applyPrefsFromJson(
             context,
@@ -34,7 +49,17 @@ object PrefsJson {
             MAP_RENDER_PREFS_NAME,
             prefsObject.optJSONArray(MAP_RENDER_PREFS_NAME)
         )
-        return overlayApplied || maneuverApplied || mapRenderApplied
+        val customBlocksApplied = if (importedCustomBlocks != null) {
+            val repository = CustomBlockRepository(context)
+            repository.update { importedCustomBlocks }
+            importedCustomBlocks.blocks.forEach { block ->
+                runCatching { CustomBlockIconStore.materialize(repository, block) }
+            }
+            true
+        } else {
+            false
+        }
+        return overlayApplied || maneuverApplied || mapRenderApplied || customBlocksApplied
     }
 
     fun payloadEquals(context: Context, first: JSONObject, second: JSONObject): Boolean {
@@ -69,7 +94,7 @@ object PrefsJson {
             super.getSharedPreferences(name + DEFAULT_PREFS_SUFFIX, mode)
     }
 
-    private fun buildPayloadInternal(context: Context): JSONObject {
+    private fun buildPayloadInternal(context: Context, includeCustomBlocks: Boolean): JSONObject {
         val payload = JSONObject()
         payload.put("version", 1)
         val prefsObject = JSONObject()
@@ -77,13 +102,19 @@ object PrefsJson {
         prefsObject.put(MANEUVER_PREFS_NAME, serializeManeuverPrefs(context))
         prefsObject.put(MAP_RENDER_PREFS_NAME, serializeMapRenderPrefs(context))
         payload.put("prefs", prefsObject)
+        if (includeCustomBlocks) {
+            payload.put(
+                "customBlocks",
+                JSONObject(CustomBlockJsonCodec.encode(CustomBlockRepository(context).load()))
+            )
+        }
         return payload
     }
 
     private fun buildDefaultPayload(context: Context): JSONObject {
         val defaultsContext = DefaultsContext(context.applicationContext)
         clearDefaultsPrefs(defaultsContext)
-        return buildPayloadInternal(defaultsContext)
+        return buildPayloadInternal(defaultsContext, includeCustomBlocks = false)
     }
 
     private fun clearDefaultsPrefs(context: Context) {
