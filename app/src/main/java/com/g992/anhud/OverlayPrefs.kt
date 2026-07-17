@@ -170,6 +170,7 @@ object OverlayPrefs {
     private const val KEY_SPEEDOMETER_FREEZE_TIMEOUT = "speedometer_freeze_timeout"
     private const val KEY_SPEED_FROM_GPS = "speed_from_gps"
     private const val KEY_INFO_MIRROR_STARSHEEP7 = "info_mirror_starsheep7"
+    private const val KEY_INFO_MIRROR_GALAXY = "info_mirror_galaxy"
     private const val KEY_HIDE_TURN_WHEN_FAR_ENABLED = "hide_turn_when_far_enabled"
     private const val KEY_HIDE_TURN_WHEN_FAR_DISTANCE_METERS = "hide_turn_when_far_distance_meters"
     private const val KEY_HIDE_TURN_DYNAMIC_ENABLED = "hide_turn_dynamic_enabled"
@@ -1337,6 +1338,16 @@ object OverlayPrefs {
     fun setInfoMirrorStarsheep7Enabled(context: Context, enabled: Boolean) {
         prefs(context).edit()
             .putBoolean(KEY_INFO_MIRROR_STARSHEEP7, enabled)
+            .apply()
+    }
+
+    fun infoMirrorGalaxyEnabled(context: Context): Boolean {
+        return prefs(context).getBoolean(KEY_INFO_MIRROR_GALAXY, false)
+    }
+
+    fun setInfoMirrorGalaxyEnabled(context: Context, enabled: Boolean) {
+        prefs(context).edit()
+            .putBoolean(KEY_INFO_MIRROR_GALAXY, enabled)
             .apply()
     }
 

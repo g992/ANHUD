@@ -1170,6 +1170,10 @@ class MainActivity : ScaledActivity() {
             OverlayBroadcasts.EXTRA_INFO_MIRROR_STARSHEEP7,
             OverlayPrefs.infoMirrorStarsheep7Enabled(this)
         )
+        intent.putExtra(
+            OverlayBroadcasts.EXTRA_INFO_MIRROR_GALAXY,
+            OverlayPrefs.infoMirrorGalaxyEnabled(this)
+        )
         intent.putExtra(OverlayBroadcasts.EXTRA_PREVIEW, preview)
         if (previewTarget != null) {
             intent.putExtra(OverlayBroadcasts.EXTRA_PREVIEW_TARGET, previewTarget.previewKey)

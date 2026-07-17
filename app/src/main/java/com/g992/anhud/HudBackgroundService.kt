@@ -198,6 +198,11 @@ class HudBackgroundService : Service() {
                 } else {
                     null
                 }
+                val infoMirrorGalaxy = if (intent.hasExtra(OverlayBroadcasts.EXTRA_INFO_MIRROR_GALAXY)) {
+                    intent.getBooleanExtra(OverlayBroadcasts.EXTRA_INFO_MIRROR_GALAXY, false)
+                } else {
+                    null
+                }
                 val preview = intent.getBooleanExtra(OverlayBroadcasts.EXTRA_PREVIEW, false)
                 val previewTarget = intent.getStringExtra(OverlayBroadcasts.EXTRA_PREVIEW_TARGET)
                 val previewShowOthers = if (intent.hasExtra(OverlayBroadcasts.EXTRA_PREVIEW_SHOW_OTHERS)) {
@@ -373,7 +378,8 @@ class HudBackgroundService : Service() {
                     preview,
                     previewTarget,
                     previewShowOthers,
-                    infoMirrorStarsheep7
+                    infoMirrorStarsheep7,
+                    infoMirrorGalaxy
                 )
                 overlayController.refresh()
                 overlayController.updateNavigation(NavigationHudStore.snapshot())

@@ -243,6 +243,10 @@ class HudStatusReceiver : BroadcastReceiver() {
             OverlayBroadcasts.EXTRA_INFO_MIRROR_STARSHEEP7,
             OverlayPrefs.infoMirrorStarsheep7Enabled(context)
         )
+        updateIntent.putExtra(
+            OverlayBroadcasts.EXTRA_INFO_MIRROR_GALAXY,
+            OverlayPrefs.infoMirrorGalaxyEnabled(context)
+        )
         context.sendBroadcast(updateIntent)
     }
 
@@ -360,6 +364,10 @@ class HudStatusReceiver : BroadcastReceiver() {
             .putExtra(
                 OverlayBroadcasts.EXTRA_INFO_MIRROR_STARSHEEP7,
                 OverlayPrefs.infoMirrorStarsheep7Enabled(context)
+            )
+            .putExtra(
+                OverlayBroadcasts.EXTRA_INFO_MIRROR_GALAXY,
+                OverlayPrefs.infoMirrorGalaxyEnabled(context)
             )
             .putExtra(OverlayBroadcasts.EXTRA_PREVIEW, false)
         context.sendBroadcast(updateIntent)

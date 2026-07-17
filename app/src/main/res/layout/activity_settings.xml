@@ -510,6 +510,15 @@
                     android:textColor="@color/white"
                     android:textSize="14sp" />
 
+                <androidx.appcompat.widget.SwitchCompat
+                    android:id="@+id/infoMirrorGalaxySwitch"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:text="@string/info_mirror_galaxy_label"
+                    android:textColor="@color/white"
+                    android:textSize="14sp" />
+
                 <Button
                     android:id="@+id/exportSettingsButton"
                     android:layout_width="match_parent"

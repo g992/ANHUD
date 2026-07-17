@@ -353,6 +353,7 @@ object PrefsJson {
         putInt("speedometer_freeze_timeout", OverlayPrefs.speedometerFreezeTimeout(context))
         putBoolean("speed_from_gps", OverlayPrefs.speedFromGps(context))
         putBoolean("info_mirror_starsheep7", OverlayPrefs.infoMirrorStarsheep7Enabled(context))
+        putBoolean("info_mirror_galaxy", OverlayPrefs.infoMirrorGalaxyEnabled(context))
         putBoolean("hide_turn_when_far_enabled", OverlayPrefs.hideTurnWhenFarEnabled(context))
         putInt("hide_turn_when_far_distance_meters", OverlayPrefs.hideTurnWhenFarDistanceMeters(context))
         putBoolean("hide_turn_dynamic_enabled", OverlayPrefs.hideTurnDynamicEnabled(context))

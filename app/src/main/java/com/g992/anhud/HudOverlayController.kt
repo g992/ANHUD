@@ -216,6 +216,7 @@ class HudOverlayController(private val context: Context) {
     private var clockEnabled: Boolean = OverlayPrefs.clockEnabled(context)
     private var mapEnabled: Boolean = OverlayPrefs.mapEnabled(context)
     private var infoMirrorStarsheep7Enabled: Boolean = OverlayPrefs.infoMirrorStarsheep7Enabled(context)
+    private var infoMirrorGalaxyEnabled: Boolean = OverlayPrefs.infoMirrorGalaxyEnabled(context)
     private var previewMode: Boolean = false
     private var previewTarget: String? = null
     private var previewShowOthers: Boolean = false
@@ -663,7 +664,8 @@ class HudOverlayController(private val context: Context) {
         preview: Boolean? = null,
         previewTarget: String? = null,
         previewShowOthers: Boolean? = null,
-        infoMirrorStarsheep7Enabled: Boolean? = null
+        infoMirrorStarsheep7Enabled: Boolean? = null,
+        infoMirrorGalaxyEnabled: Boolean? = null
     ) {
         handler.post {
             val shouldClearForPreviewTransition = (preview != null && previewMode != preview) ||
@@ -879,6 +881,9 @@ class HudOverlayController(private val context: Context) {
             }
             if (infoMirrorStarsheep7Enabled != null) {
                 this.infoMirrorStarsheep7Enabled = infoMirrorStarsheep7Enabled
+            }
+            if (infoMirrorGalaxyEnabled != null) {
+                this.infoMirrorGalaxyEnabled = infoMirrorGalaxyEnabled
             }
             if (preview != null) {
                 previewMode = preview
@@ -3311,7 +3316,7 @@ class HudOverlayController(private val context: Context) {
     private fun applyInfoMirrorMode(container: FrameLayout, containerWidthPx: Int, containerHeightPx: Int) {
         container.pivotX = containerWidthPx / 2f
         container.pivotY = containerHeightPx / 2f
-        container.scaleX = 1f
+        container.scaleX = if (infoMirrorGalaxyEnabled) -1f else 1f
         container.scaleY = if (infoMirrorStarsheep7Enabled) -1f else 1f
     }
 
