@@ -340,6 +340,8 @@ object PrefsJson {
         putBoolean("overlay_clock_enabled", OverlayPrefs.clockEnabled(context))
         putBoolean("overlay_clock_hide_when_map_active", OverlayPrefs.clockHideWhenMapActive(context))
         putInt("overlay_traffic_light_max_active", OverlayPrefs.trafficLightMaxActive(context))
+        putBoolean("main_menu_road_camera_visible", OverlayPrefs.mainMenuRoadCameraVisible(context))
+        putBoolean("main_menu_traffic_light_visible", OverlayPrefs.mainMenuTrafficLightVisible(context))
         putBoolean("native_nav_enabled", OverlayPrefs.nativeNavEnabled(context))
         putBoolean("overlay_map_enabled", OverlayPrefs.mapEnabled(context))
         putBoolean("overlay_lane_guidance_show_distance", OverlayPrefs.laneGuidanceShowDistance(context))

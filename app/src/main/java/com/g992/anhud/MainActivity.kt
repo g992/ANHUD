@@ -710,6 +710,19 @@ class MainActivity : ScaledActivity() {
         refreshPresets(keepSelection = true)
     }
 
+    internal fun syncLegacyExperimentalBlockVisibility() {
+        positionRoadCameraCard.visibility = if (OverlayPrefs.mainMenuRoadCameraVisible(this)) {
+            View.VISIBLE
+        } else {
+            View.GONE
+        }
+        positionTrafficLightCard.visibility = if (OverlayPrefs.mainMenuTrafficLightVisible(this)) {
+            View.VISIBLE
+        } else {
+            View.GONE
+        }
+    }
+
     private fun updateSettingsBadge() {
         settingsBadge.visibility = if (UpdatePrefs.isUpdateAvailable(this)) {
             View.VISIBLE

@@ -157,6 +157,8 @@ object OverlayPrefs {
     private const val KEY_CLOCK_ENABLED = "overlay_clock_enabled"
     private const val KEY_CLOCK_HIDE_WHEN_MAP_ACTIVE = "overlay_clock_hide_when_map_active"
     private const val KEY_TRAFFIC_LIGHT_MAX_ACTIVE = "overlay_traffic_light_max_active"
+    private const val KEY_MAIN_MENU_ROAD_CAMERA_VISIBLE = "main_menu_road_camera_visible"
+    private const val KEY_MAIN_MENU_TRAFFIC_LIGHT_VISIBLE = "main_menu_traffic_light_visible"
     private const val KEY_NATIVE_NAV_ENABLED = "native_nav_enabled"
     private const val KEY_MAP_ENABLED = "overlay_map_enabled"
     private const val KEY_LANE_GUIDANCE_SHOW_DISTANCE = "overlay_lane_guidance_show_distance"
@@ -1067,6 +1069,26 @@ object OverlayPrefs {
     fun setTrafficLightEnabled(context: Context, enabled: Boolean) {
         prefs(context).edit()
             .putBoolean(KEY_TRAFFIC_LIGHT_ENABLED, enabled)
+            .apply()
+    }
+
+    fun mainMenuRoadCameraVisible(context: Context): Boolean {
+        return prefs(context).getBoolean(KEY_MAIN_MENU_ROAD_CAMERA_VISIBLE, false)
+    }
+
+    fun setMainMenuRoadCameraVisible(context: Context, visible: Boolean) {
+        prefs(context).edit()
+            .putBoolean(KEY_MAIN_MENU_ROAD_CAMERA_VISIBLE, visible)
+            .apply()
+    }
+
+    fun mainMenuTrafficLightVisible(context: Context): Boolean {
+        return prefs(context).getBoolean(KEY_MAIN_MENU_TRAFFIC_LIGHT_VISIBLE, false)
+    }
+
+    fun setMainMenuTrafficLightVisible(context: Context, visible: Boolean) {
+        prefs(context).edit()
+            .putBoolean(KEY_MAIN_MENU_TRAFFIC_LIGHT_VISIBLE, visible)
             .apply()
     }
 

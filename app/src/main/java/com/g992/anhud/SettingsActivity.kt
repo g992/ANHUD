@@ -94,6 +94,11 @@ class SettingsActivity : ScaledActivity() {
     private lateinit var timeoutSettingsToggle: View
     private lateinit var timeoutSettingsContent: View
     private lateinit var timeoutSettingsToggleLabel: TextView
+    private lateinit var legacyExperimentalVisibilityToggle: View
+    private lateinit var legacyExperimentalVisibilityContent: View
+    private lateinit var legacyExperimentalVisibilityToggleLabel: TextView
+    private lateinit var mainMenuTrafficLightVisibleSwitch: SwitchCompat
+    private lateinit var mainMenuRoadCameraVisibleSwitch: SwitchCompat
     private lateinit var useStrelkaSwitch: SwitchCompat
     private lateinit var cameraTimeoutNearInput: EditText
     private lateinit var cameraTimeoutFarInput: EditText
@@ -167,6 +172,7 @@ class SettingsActivity : ScaledActivity() {
 
     private var isSyncingUi = false
     private var areTimeoutSettingsExpanded = false
+    private var isLegacyExperimentalVisibilityExpanded = false
     private var pendingSpeedFromGpsAfterBackgroundPermission = false
 
     private val storagePermissionLauncher = registerForActivityResult(
@@ -311,6 +317,11 @@ class SettingsActivity : ScaledActivity() {
         timeoutSettingsToggle = findViewById(R.id.timeoutSettingsToggle)
         timeoutSettingsContent = findViewById(R.id.timeoutSettingsContent)
         timeoutSettingsToggleLabel = findViewById(R.id.timeoutSettingsToggleLabel)
+        legacyExperimentalVisibilityToggle = findViewById(R.id.legacyExperimentalVisibilityToggle)
+        legacyExperimentalVisibilityContent = findViewById(R.id.legacyExperimentalVisibilityContent)
+        legacyExperimentalVisibilityToggleLabel = findViewById(R.id.legacyExperimentalVisibilityToggleLabel)
+        mainMenuTrafficLightVisibleSwitch = findViewById(R.id.mainMenuTrafficLightVisibleSwitch)
+        mainMenuRoadCameraVisibleSwitch = findViewById(R.id.mainMenuRoadCameraVisibleSwitch)
         useStrelkaSwitch = findViewById(R.id.useStrelkaSwitch)
         cameraTimeoutNearInput = findViewById(R.id.cameraTimeoutNearInput)
         cameraTimeoutFarInput = findViewById(R.id.cameraTimeoutFarInput)
@@ -359,12 +370,19 @@ class SettingsActivity : ScaledActivity() {
         setupDebugTab()
         setupHelpTab()
         areTimeoutSettingsExpanded = savedInstanceState?.getBoolean(STATE_TIMEOUTS_EXPANDED, false) ?: false
+        isLegacyExperimentalVisibilityExpanded =
+            savedInstanceState?.getBoolean(STATE_LEGACY_EXPERIMENTAL_VISIBILITY_EXPANDED, false) ?: false
         updateTimeoutSettingsSection()
+        updateLegacyExperimentalVisibilitySection()
         syncUiFromPrefs()
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
         outState.putBoolean(STATE_TIMEOUTS_EXPANDED, areTimeoutSettingsExpanded)
+        outState.putBoolean(
+            STATE_LEGACY_EXPERIMENTAL_VISIBILITY_EXPANDED,
+            isLegacyExperimentalVisibilityExpanded
+        )
         super.onSaveInstanceState(outState)
     }
 
@@ -500,6 +518,21 @@ class SettingsActivity : ScaledActivity() {
         timeoutSettingsToggle.setOnClickListener {
             areTimeoutSettingsExpanded = !areTimeoutSettingsExpanded
             updateTimeoutSettingsSection()
+        }
+
+        legacyExperimentalVisibilityToggle.setOnClickListener {
+            isLegacyExperimentalVisibilityExpanded = !isLegacyExperimentalVisibilityExpanded
+            updateLegacyExperimentalVisibilitySection()
+        }
+
+        mainMenuTrafficLightVisibleSwitch.setOnCheckedChangeListener { _, isChecked ->
+            if (isSyncingUi) return@setOnCheckedChangeListener
+            OverlayPrefs.setMainMenuTrafficLightVisible(this, isChecked)
+        }
+
+        mainMenuRoadCameraVisibleSwitch.setOnCheckedChangeListener { _, isChecked ->
+            if (isSyncingUi) return@setOnCheckedChangeListener
+            OverlayPrefs.setMainMenuRoadCameraVisible(this, isChecked)
         }
 
         exportSettingsButton.setOnClickListener {
@@ -3464,6 +3497,8 @@ class SettingsActivity : ScaledActivity() {
         isSyncingUi = true
         try {
             useStrelkaSwitch.isChecked = OverlayPrefs.hudAlertSource(this) == OverlayPrefs.HudAlertSource.STRELKA
+            mainMenuTrafficLightVisibleSwitch.isChecked = OverlayPrefs.mainMenuTrafficLightVisible(this)
+            mainMenuRoadCameraVisibleSwitch.isChecked = OverlayPrefs.mainMenuRoadCameraVisible(this)
             cameraTimeoutNearInput.setText(OverlayPrefs.cameraTimeoutNear(this).toString())
             cameraTimeoutFarInput.setText(OverlayPrefs.cameraTimeoutFar(this).toString())
             trafficLightTimeoutInput.setText(OverlayPrefs.trafficLightTimeout(this).toString())
@@ -3498,6 +3533,21 @@ class SettingsActivity : ScaledActivity() {
         timeoutSettingsContent.visibility = if (areTimeoutSettingsExpanded) View.VISIBLE else View.GONE
         timeoutSettingsToggleLabel.setText(
             if (areTimeoutSettingsExpanded) {
+                R.string.settings_section_collapse
+            } else {
+                R.string.settings_section_expand
+            }
+        )
+    }
+
+    private fun updateLegacyExperimentalVisibilitySection() {
+        legacyExperimentalVisibilityContent.visibility = if (isLegacyExperimentalVisibilityExpanded) {
+            View.VISIBLE
+        } else {
+            View.GONE
+        }
+        legacyExperimentalVisibilityToggleLabel.setText(
+            if (isLegacyExperimentalVisibilityExpanded) {
                 R.string.settings_section_collapse
             } else {
                 R.string.settings_section_expand
@@ -3853,6 +3903,8 @@ class SettingsActivity : ScaledActivity() {
 
     companion object {
         private const val STATE_TIMEOUTS_EXPANDED = "state_timeouts_expanded"
+        private const val STATE_LEGACY_EXPERIMENTAL_VISIBILITY_EXPANDED =
+            "state_legacy_experimental_visibility_expanded"
         private const val DEFAULT_BASIC_ICON_ID = "101"
         private const val MAX_BASIC_ICON_INDEX = 150
         private const val MANEUVER_PREFS_NAME = "maneuver_match_prefs"

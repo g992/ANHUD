@@ -246,6 +246,9 @@
 
     <string name="settings_timeouts_section_title">Таймауты</string>
     <string name="settings_timeouts_section_hint">Камеры, светофоры и завершение поездки</string>
+    <string name="settings_legacy_experimental_visibility_title">Видимость устаревших и экспериментальных блоков</string>
+    <string name="main_menu_traffic_light_visible_label">Блок светофоров</string>
+    <string name="main_menu_road_camera_visible_label">Блок камер Яндекс Навигатора</string>
     <string name="settings_hud_alert_source_title">Источник общего блока предупреждений</string>
     <string name="settings_hud_alert_source_hint">Определяет, что показывать в общем слоте на главном экране и в проекции.</string>
     <string name="use_strelka_label">Использовать Strelka</string>
