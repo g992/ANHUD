@@ -50,8 +50,6 @@ import android.widget.TableLayout
 import android.widget.TableRow
 import android.widget.TextView
 import android.widget.Toast
-import android.widget.RadioGroup
-import android.widget.RadioButton
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
@@ -96,9 +94,7 @@ class SettingsActivity : ScaledActivity() {
     private lateinit var timeoutSettingsToggle: View
     private lateinit var timeoutSettingsContent: View
     private lateinit var timeoutSettingsToggleLabel: TextView
-    private lateinit var hudAlertSourceGroup: RadioGroup
-    private lateinit var hudAlertSourceHudSpeed: RadioButton
-    private lateinit var hudAlertSourceStrelka: RadioButton
+    private lateinit var useStrelkaSwitch: SwitchCompat
     private lateinit var cameraTimeoutNearInput: EditText
     private lateinit var cameraTimeoutFarInput: EditText
     private lateinit var trafficLightTimeoutInput: EditText
@@ -315,9 +311,7 @@ class SettingsActivity : ScaledActivity() {
         timeoutSettingsToggle = findViewById(R.id.timeoutSettingsToggle)
         timeoutSettingsContent = findViewById(R.id.timeoutSettingsContent)
         timeoutSettingsToggleLabel = findViewById(R.id.timeoutSettingsToggleLabel)
-        hudAlertSourceGroup = findViewById(R.id.hudAlertSourceGroup)
-        hudAlertSourceHudSpeed = findViewById(R.id.hudAlertSourceHudSpeed)
-        hudAlertSourceStrelka = findViewById(R.id.hudAlertSourceStrelka)
+        useStrelkaSwitch = findViewById(R.id.useStrelkaSwitch)
         cameraTimeoutNearInput = findViewById(R.id.cameraTimeoutNearInput)
         cameraTimeoutFarInput = findViewById(R.id.cameraTimeoutFarInput)
         trafficLightTimeoutInput = findViewById(R.id.trafficLightTimeoutInput)
@@ -496,12 +490,9 @@ class SettingsActivity : ScaledActivity() {
     }
 
     private fun setupGeneralSettings() {
-        hudAlertSourceGroup.setOnCheckedChangeListener { _, checkedId ->
+        useStrelkaSwitch.setOnCheckedChangeListener { _, isChecked ->
             if (isSyncingUi) return@setOnCheckedChangeListener
-            val source = when (checkedId) {
-                R.id.hudAlertSourceStrelka -> OverlayPrefs.HudAlertSource.STRELKA
-                else -> OverlayPrefs.HudAlertSource.HUDSPEED
-            }
+            val source = if (isChecked) OverlayPrefs.HudAlertSource.STRELKA else OverlayPrefs.HudAlertSource.HUDSPEED
             OverlayPrefs.setHudAlertSource(this, source)
             broadcastHudAlertSource(source)
         }
@@ -3472,10 +3463,7 @@ class SettingsActivity : ScaledActivity() {
     private fun syncUiFromPrefs() {
         isSyncingUi = true
         try {
-            when (OverlayPrefs.hudAlertSource(this)) {
-                OverlayPrefs.HudAlertSource.HUDSPEED -> hudAlertSourceGroup.check(R.id.hudAlertSourceHudSpeed)
-                OverlayPrefs.HudAlertSource.STRELKA -> hudAlertSourceGroup.check(R.id.hudAlertSourceStrelka)
-            }
+            useStrelkaSwitch.isChecked = OverlayPrefs.hudAlertSource(this) == OverlayPrefs.HudAlertSource.STRELKA
             cameraTimeoutNearInput.setText(OverlayPrefs.cameraTimeoutNear(this).toString())
             cameraTimeoutFarInput.setText(OverlayPrefs.cameraTimeoutFar(this).toString())
             trafficLightTimeoutInput.setText(OverlayPrefs.trafficLightTimeout(this).toString())

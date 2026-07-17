@@ -248,6 +248,8 @@
     <string name="settings_timeouts_section_hint">Камеры, светофоры и завершение поездки</string>
     <string name="settings_hud_alert_source_title">Источник общего блока предупреждений</string>
     <string name="settings_hud_alert_source_hint">Определяет, что показывать в общем слоте на главном экране и в проекции.</string>
+    <string name="use_strelka_label">Использовать Strelka</string>
+    <string name="use_strelka_hint">При активации информация HUD Speed будет заменена стрелкой.</string>
     <string name="shared_alert_source_summary">Источник: %1$s</string>
     <string name="shared_alert_source_hudspeed">HUD Speed</string>
     <string name="shared_alert_source_strelka">Strelka</string>
