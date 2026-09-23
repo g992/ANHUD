@@ -76,6 +76,7 @@ internal fun MainActivity.openPositionDialog(
     val hideWhenMapActiveCheck = dialogView.findViewById<CheckBox>(R.id.dialogHideWhenMapActive)
     val hudSpeedGpsStatusCheck = dialogView.findViewById<CheckBox>(R.id.dialogHudSpeedShowGpsStatus)
     val laneGuidanceShowDistanceCheck = dialogView.findViewById<CheckBox>(R.id.dialogLaneGuidanceShowDistance)
+    val navShowDistanceCheck = dialogView.findViewById<CheckBox>(R.id.dialogNavShowDistance)
     val containerWidthLabel = dialogView.findViewById<TextView>(R.id.dialogContainerWidthLabel)
     val containerWidthRow = dialogView.findViewById<View>(R.id.dialogContainerWidthRow)
     val containerWidthSeek = dialogView.findViewById<SeekBar>(R.id.dialogContainerWidthSeek)
@@ -343,6 +344,11 @@ internal fun MainActivity.openPositionDialog(
     val showLaneGuidanceDistanceSetting = target == OverlayTarget.LANE_GUIDANCE
     laneGuidanceShowDistanceCheck.visibility = if (showLaneGuidanceDistanceSetting) View.VISIBLE else View.GONE
     laneGuidanceShowDistanceCheck.isChecked = OverlayPrefs.laneGuidanceShowDistance(activity)
+    navShowDistanceCheck.visibility = if (target == OverlayTarget.NAVIGATION) View.VISIBLE else View.GONE
+    navShowDistanceCheck.isChecked = OverlayPrefs.navShowDistance(activity)
+    previewNavTime.setText(
+        if (navShowDistanceCheck.isChecked) R.string.preview_time_text else R.string.preview_time_text_no_distance
+    )
     val showHideWhenMapActiveSetting = target != OverlayTarget.MAP && target != OverlayTarget.CONTAINER
     hideWhenMapActiveCheck.visibility = if (showHideWhenMapActiveSetting) View.VISIBLE else View.GONE
     hideWhenMapActiveCheck.isChecked = when (target) {
@@ -1848,6 +1854,14 @@ internal fun MainActivity.openPositionDialog(
         OverlayPrefs.setHudSpeedGpsStatusEnabled(activity, isChecked)
         notifyOverlaySettingsChanged(preview = true, previewTarget = target, previewShowOthers = showOthersCheck.isChecked)
         updateDialogVisibility()
+    }
+
+    navShowDistanceCheck.setOnCheckedChangeListener { _, isChecked ->
+        OverlayPrefs.setNavShowDistance(activity, isChecked)
+        previewNavTime.setText(
+            if (isChecked) R.string.preview_time_text else R.string.preview_time_text_no_distance
+        )
+        notifyOverlaySettingsChanged(preview = true, previewTarget = target, previewShowOthers = showOthersCheck.isChecked)
     }
 
     laneGuidanceShowDistanceCheck.setOnCheckedChangeListener { _, isChecked ->

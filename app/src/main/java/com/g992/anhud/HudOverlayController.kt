@@ -27,6 +27,8 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.core.content.ContextCompat
+import com.g992.anhud.hudbridge.HudBridgeFrameSink
+import com.g992.anhud.hudbridge.HudBridgeManager
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -74,14 +76,17 @@ class HudOverlayController(private val context: Context) {
     private var displayRetryRunnable: Runnable? = null
     private val displayListener = object : DisplayManager.DisplayListener {
         override fun onDisplayAdded(displayId: Int) {
+            if (isBridgeDisplay(displayId)) return
             requestDisplayChangeRefresh()
         }
 
         override fun onDisplayRemoved(displayId: Int) {
+            if (isBridgeDisplay(displayId)) return
             requestDisplayChangeRefresh()
         }
 
         override fun onDisplayChanged(displayId: Int) {
+            if (isBridgeDisplay(displayId)) return
             requestDisplayChangeRefresh()
         }
     }
@@ -256,13 +261,15 @@ class HudOverlayController(private val context: Context) {
 
     fun refresh() {
         handler.post {
-            if (!OverlayPrefs.isEnabled(context) || !Settings.canDrawOverlays(context)) {
+            val bridgeDisplay = HudBridgeManager.renderDisplay()
+            if (!OverlayPrefs.isEnabled(context) || (bridgeDisplay == null && !Settings.canDrawOverlays(context))) {
                 clearDisplayRetry()
                 clearOverlayForDisable()
                 return@post
             }
             val targetDisplayId = OverlayPrefs.displayId(context)
-            val display = HudDisplayUtils.resolveDisplay(context, targetDisplayId, allowFallback = false)
+            val display = bridgeDisplay
+                ?: HudDisplayUtils.resolveDisplay(context, targetDisplayId, allowFallback = false)
             if (display == null) {
                 removeOverlay()
                 scheduleDisplayRetry(targetDisplayId)
@@ -406,7 +413,9 @@ class HudOverlayController(private val context: Context) {
             state.rawNextStreet.ifBlank { state.secondaryText }
         }
         val timeText = if (previewNav) {
-            context.getString(R.string.preview_time_text)
+            context.getString(
+                if (OverlayPrefs.navShowDistance(context)) R.string.preview_time_text else R.string.preview_time_text_no_distance
+            )
         } else {
             buildTimeLine(state)
         }
@@ -459,6 +468,8 @@ class HudOverlayController(private val context: Context) {
                 id = light.id,
                 color = light.color,
                 countdownText = light.countdownText,
+                arrowDirection = light.arrowDirection,
+                position = light.position,
                 arrowGenId = light.arrowBitmap?.generationId ?: -1,
                 arrowWidth = light.arrowBitmap?.width ?: 0,
                 arrowHeight = light.arrowBitmap?.height ?: 0
@@ -579,6 +590,8 @@ class HudOverlayController(private val context: Context) {
         val id: Int,
         val color: String,
         val countdownText: String,
+        val arrowDirection: String,
+        val position: Int,
         val arrowGenId: Int,
         val arrowWidth: Int,
         val arrowHeight: Int
@@ -929,6 +942,10 @@ class HudOverlayController(private val context: Context) {
             displayManager?.unregisterDisplayListener(displayListener)
             removeOverlay()
         }
+    }
+
+    private fun isBridgeDisplay(displayId: Int): Boolean {
+        return displayManager?.getDisplay(displayId)?.name == HudBridgeFrameSink.VIRTUAL_DISPLAY_NAME
     }
 
     private fun requestDisplayChangeRefresh() {
@@ -1566,10 +1583,16 @@ class HudOverlayController(private val context: Context) {
         }
         root.addView(customLayer)
 
+        val windowType = if (display.displayId == HudBridgeManager.renderDisplay()?.displayId) {
+            // Our own private virtual display for the QNX HUD bridge.
+            WindowManager.LayoutParams.TYPE_PRIVATE_PRESENTATION
+        } else {
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+        }
         val layoutParams = WindowManager.LayoutParams(
             containerWidthPx,
             containerHeightPx,
-            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+            windowType,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
                 WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE,
             PixelFormat.TRANSLUCENT
@@ -1933,7 +1956,9 @@ class HudOverlayController(private val context: Context) {
         }
 
         val timeText = if (previewNav) {
-            context.getString(R.string.preview_time_text)
+            context.getString(
+                if (OverlayPrefs.navShowDistance(context)) R.string.preview_time_text else R.string.preview_time_text_no_distance
+            )
         } else {
             buildTimeLine(state)
         }
@@ -2597,18 +2622,12 @@ class HudOverlayController(private val context: Context) {
     }
 
     private fun buildTimeLine(state: NavigationHudState): String {
-        val time = state.time.trim()
-        val arrival = resolveArrivalText(state)
-        if (time.isNotBlank() && arrival.isNotBlank()) {
-            return "$time ($arrival)"
+        val distance = if (OverlayPrefs.navShowDistance(context)) {
+            state.rawDistance.ifBlank { state.distance }
+        } else {
+            ""
         }
-        if (time.isNotBlank()) {
-            return time
-        }
-        if (arrival.isNotBlank()) {
-            return "($arrival)"
-        }
-        return ""
+        return NavTimeLine.format(state.time, distance, resolveArrivalText(state))
     }
 
     private fun resolveArrivalText(state: NavigationHudState): String {
@@ -3024,14 +3043,19 @@ class HudOverlayController(private val context: Context) {
             val backgroundRes = resolveTrafficLightBackground(light.color)
             val countdownText = light.countdownText
 
-            val useExpanded = light.arrowBitmap != null
+            val arrowRes = if (light.arrowBitmap == null) resolveTrafficLightArrowRes(light.arrowDirection) else null
+            val useExpanded = light.arrowBitmap != null || arrowRes != null
             if (useExpanded) {
                 compactView.visibility = View.GONE
                 expandedView.visibility = View.VISIBLE
                 expandedCircle.setBackgroundResource(backgroundRes)
                 expandedText.text = countdownText
                 expandedText.visibility = if (countdownText.isBlank()) View.INVISIBLE else View.VISIBLE
-                expandedIcon.setImageBitmap(light.arrowBitmap)
+                if (light.arrowBitmap != null) {
+                    expandedIcon.setImageBitmap(light.arrowBitmap)
+                } else if (arrowRes != null) {
+                    expandedIcon.setImageResource(arrowRes)
+                }
                 expandedIcon.visibility = View.VISIBLE
             } else {
                 compactView.visibility = View.VISIBLE
@@ -3056,6 +3080,17 @@ class HudOverlayController(private val context: Context) {
             container.addView(item)
         }
         container.visibility = View.VISIBLE
+    }
+
+    private fun resolveTrafficLightArrowRes(direction: String): Int? {
+        // Windshield RouteDirectionArrow names.
+        return when (direction.trim().uppercase(Locale.US)) {
+            "FORWARD" -> R.drawable.context_lane_straightahead_small_24
+            "LEFT" -> R.drawable.context_lane_left90_small_24
+            "RIGHT" -> R.drawable.context_lane_right90_small_24
+            "UTURN_LEFT" -> R.drawable.context_lane_left180_small_24
+            else -> null
+        }
     }
 
     private fun resolveTrafficLightBackground(color: String): Int {

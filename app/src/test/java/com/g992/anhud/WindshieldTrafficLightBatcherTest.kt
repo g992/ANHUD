@@ -1,0 +1,93 @@
+package com.g992.anhud
+
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+class WindshieldTrafficLightBatcherTest {
+    private fun light(id: String, position: Int, color: String = "RED", countdown: String = "", arrow: String = "") =
+        WindshieldTrafficLight(WindshieldTrafficLight.keyFor(id, position), position, color, countdown, arrow)
+
+    @Test
+    fun burstIsCollectedInOrder() {
+        val batcher = WindshieldTrafficLightBatcher()
+        assertNull(batcher.accept(light("a", 0), 1000))
+        assertNull(batcher.accept(light("b", 1), 1005))
+        assertNull(batcher.accept(light("c", 3), 1010))
+        val batch = batcher.takeBatch()!!
+        assertEquals(listOf(0, 1, 3), batch.map { it.position })
+        assertNull(batcher.takeBatch())
+    }
+
+    @Test
+    fun lowerPositionStartsNewBatch() {
+        val batcher = WindshieldTrafficLightBatcher()
+        batcher.accept(light("a", 0), 1000)
+        batcher.accept(light("b", 1), 1001)
+        val previous = batcher.accept(light("a", 0), 1002)
+        assertEquals(listOf("ws:a", "ws:b"), previous!!.map { it.key })
+        assertEquals(listOf("ws:a"), batcher.takeBatch()!!.map { it.key })
+    }
+
+    @Test
+    fun lateTailExtendsCommittedBurst() {
+        val batcher = WindshieldTrafficLightBatcher(batchGapMs = 150)
+        batcher.accept(light("a", 0), 1000)
+        assertEquals(listOf("ws:a"), batcher.takeBatch()!!.map { it.key })
+        assertNull(batcher.accept(light("b", 1), 1100))
+        assertEquals(listOf("ws:a", "ws:b"), batcher.takeBatch()!!.map { it.key })
+        assertNull(batcher.takeBatch())
+    }
+
+    @Test
+    fun gapStartsNewBatch() {
+        val batcher = WindshieldTrafficLightBatcher(batchGapMs = 150)
+        batcher.accept(light("a", 0), 1000)
+        val previous = batcher.accept(light("b", 1), 1200)
+        assertEquals(listOf("ws:a"), previous!!.map { it.key })
+    }
+
+    @Test
+    fun mergeReplacesWindshieldEntriesAndKeepsLegacy() {
+        val legacy = TrafficLightInfo(7, "GREEN", "5", null, "", 0, Long.MAX_VALUE)
+        val current = mapOf(
+            "7" to legacy,
+            "ws:a" to TrafficLightInfo("ws:a".hashCode(), "RED", "10", null, "", 0, 0, 0),
+            "ws:gone" to TrafficLightInfo("ws:gone".hashCode(), "RED", "", null, "", 0, 0, 1)
+        )
+        val merged = WindshieldTrafficLightBatcher.merge(
+            current,
+            listOf(light("a", 0, countdown = ""), light("b", 1, color = "GREEN", countdown = "3", arrow = "LEFT")),
+            now = 100,
+            ttlMs = 1000
+        )
+        assertEquals(setOf("7", "ws:a", "ws:b"), merged.keys)
+        assertEquals("10", merged["ws:a"]!!.countdownText)
+        assertEquals(0, merged["ws:a"]!!.position)
+        assertEquals("LEFT", merged["ws:b"]!!.arrowDirection)
+        assertEquals(1100, merged["ws:b"]!!.expiresAt)
+    }
+
+    @Test
+    fun countdownDroppedWhenColorChanges() {
+        val current = mapOf("ws:a" to TrafficLightInfo("ws:a".hashCode(), "RED", "2", null, "", 0, 0, 0))
+        val merged = WindshieldTrafficLightBatcher.merge(current, listOf(light("a", 0, color = "GREEN")), now = 1)
+        assertEquals("", merged["ws:a"]!!.countdownText)
+    }
+
+    @Test
+    fun emptyBatchClearsWindshieldOnly() {
+        val current = mapOf(
+            "1" to TrafficLightInfo(1, "RED", "", null, "", 0, Long.MAX_VALUE),
+            "ws:a" to TrafficLightInfo(2, "RED", "", null, "", 0, 0, 0)
+        )
+        assertEquals(setOf("1"), WindshieldTrafficLightBatcher.merge(current, emptyList(), now = 1).keys)
+        assertTrue(WindshieldTrafficLightBatcher.isClearSignal("", "", "", ""))
+    }
+
+    @Test
+    fun keyFallsBackToPosition() {
+        assertEquals("ws:#pos2", WindshieldTrafficLight.keyFor("", 2))
+    }
+}

@@ -41,6 +41,39 @@ val starlineMapsAccessToken = System.getenv("STARLINE_MAPS_ACCESS_TOKEN")
     ?: System.getenv("STARLINE_MAPS_API_KEY")
     ?: localProperties.getProperty("STARLINE_MAPS_ACCESS_TOKEN")
     ?: localProperties.getProperty("STARLINE_MAPS_API_KEY")
+val qnxRootPassword = System.getenv("QNX_ROOT_PASSWORD")
+    ?: localProperties.getProperty("qnxRootPassword")
+val qnxHost = System.getenv("QNX_HOST")
+    ?: localProperties.getProperty("qnxHost")
+    ?: "192.168.118.2"
+// Prebuilt QNX daemon lives in the repo; GHUDBRIDGELITED_PATH / ghudbridgelitedPath override it for local testing.
+val hudBridgeDaemonPath = System.getenv("GHUDBRIDGELITED_PATH")
+    ?: localProperties.getProperty("ghudbridgelitedPath")
+val hudBridgeDaemonFile = hudBridgeDaemonPath?.takeIf { it.isNotBlank() }?.let { file(it) }
+    ?: rootProject.file("third_party/ghudbridgelited/ghudbridgelited")
+val hudBridgeDaemonPresent = hudBridgeDaemonFile.isFile
+val hudBridgeBuildId = if (hudBridgeDaemonPresent) {
+    Regex("ghbl-[A-Za-z0-9-]+")
+        .find(String(hudBridgeDaemonFile.readBytes(), Charsets.ISO_8859_1))
+        ?.value
+        .orEmpty()
+} else {
+    ""
+}
+val hudBridgeBundled = hudBridgeDaemonPresent && !qnxRootPassword.isNullOrBlank()
+if (!hudBridgeBundled) {
+    val reason = if (!hudBridgeDaemonPresent) {
+        "ghudbridgelited not found: ${hudBridgeDaemonFile.path}"
+    } else {
+        "QNX root password is empty (QNX_ROOT_PASSWORD / qnxRootPassword in local.properties)"
+    }
+    if (System.getenv("CI") == "true") {
+        throw GradleException("HUD bridge: $reason")
+    }
+    logger.warn("HUD bridge disabled in this build: $reason")
+}
+val hudBridgeAssetsDir = layout.buildDirectory.dir("generated/hudBridgeAssets")
+
 val hasSigning = !signingStoreFilePath.isNullOrBlank() &&
     !signingStorePassword.isNullOrBlank() &&
     !signingKeyAlias.isNullOrBlank() &&
@@ -60,6 +93,15 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "STARLINE_MAP_STYLE_ID", buildConfigString(starlineMapStyleId))
         buildConfigField("String", "STARLINE_MAPS_ACCESS_TOKEN", buildConfigString(starlineMapsAccessToken))
+        buildConfigField("String", "QNX_ROOT_PASSWORD", buildConfigString(qnxRootPassword))
+        buildConfigField("String", "QNX_HOST", buildConfigString(qnxHost))
+        buildConfigField("String", "HUD_BRIDGE_BUILD_ID", buildConfigString(hudBridgeBuildId))
+        buildConfigField("boolean", "HUD_BRIDGE_BUNDLED", hudBridgeBundled.toString())
+    }
+    sourceSets {
+        getByName("main") {
+            assets.srcDir(hudBridgeAssetsDir)
+        }
     }
 
     val releaseSigning = if (hasSigning) {
@@ -95,6 +137,19 @@ android {
     kotlinOptions {
         jvmTarget = "11"
     }
+}
+
+val copyHudBridgeDaemon by tasks.registering(Sync::class) {
+    into(hudBridgeAssetsDir)
+    if (hudBridgeDaemonPresent) {
+        from(hudBridgeDaemonFile) {
+            rename { "ghudbridgelited" }
+        }
+    }
+}
+
+tasks.named("preBuild") {
+    dependsOn(copyHudBridgeDaemon)
 }
 
 dependencies {

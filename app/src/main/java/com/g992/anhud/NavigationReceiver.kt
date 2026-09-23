@@ -297,6 +297,28 @@ class NavigationReceiver : BroadcastReceiver() {
                     timestamp = timestamp
                 )
             }
+            ACTION_WINDSHIELD_TRAFFIC_LIGHT -> {
+                val color = normalizeText(intent.getStringExtra(EXTRA_TL_COLOR).orEmpty()).uppercase(Locale.US)
+                val countdown = normalizeText(intent.getStringExtra(EXTRA_TL_COUNTDOWN).orEmpty())
+                val arrow = normalizeText(intent.getStringExtra(EXTRA_TL_ARROW).orEmpty()).uppercase(Locale.US)
+                val id = readStringOrIntExtra(intent, EXTRA_TL_ID)
+                val position = intent.getIntExtra(EXTRA_TL_POSITION, 0)
+                val source = intent.getStringExtra(EXTRA_TL_SOURCE).orEmpty()
+                Log.d(
+                    TAG,
+                    "Windshield traffic light: color=\"$color\" countdown=\"$countdown\" arrow=\"$arrow\" " +
+                        "id=\"$id\" position=$position source=\"$source\""
+                )
+                handleWindshieldTrafficLight(
+                    context = context,
+                    action = action,
+                    color = color,
+                    countdown = countdown,
+                    arrow = arrow,
+                    id = id,
+                    position = position
+                )
+            }
             ACTION_YANDEX_ROUTE_POLYLINE -> {
                 val routeActive = intent.getBooleanExtra(EXTRA_ROUTE_ACTIVE_FLAG, false)
                 val routeId = normalizeText(intent.getStringExtra(EXTRA_ROUTE_ID).orEmpty())
@@ -485,7 +507,9 @@ class NavigationReceiver : BroadcastReceiver() {
         private var pendingNativeNavUpdate: Runnable? = null
         private val trafficLightHandler = android.os.Handler(android.os.Looper.getMainLooper())
         private var pendingTrafficLightCleanup: Runnable? = null
-        private val activeTrafficLights = LinkedHashMap<Int, TrafficLightInfo>()
+        private val activeTrafficLights = LinkedHashMap<String, TrafficLightInfo>()
+        private val windshieldBatcher = WindshieldTrafficLightBatcher()
+        private var pendingWindshieldCommit: Runnable? = null
         private val roadCameraHandler = android.os.Handler(android.os.Looper.getMainLooper())
         private var pendingRoadCameraHide: Runnable? = null
         private val navigatorIntentTimeoutHandler = android.os.Handler(android.os.Looper.getMainLooper())
@@ -527,6 +551,7 @@ class NavigationReceiver : BroadcastReceiver() {
         const val ACTION_YANDEX_ROADCAMERA = "com.yandex.ROADCAMERA"
         const val ACTION_YANDEX_TRAFFICLIGHT = "com.yandex.TRAFFICLIGHT"
         const val ACTION_YANDEX_ROUTE_POLYLINE = "com.yandex.ROUTE_POLYLINE"
+        const val ACTION_WINDSHIELD_TRAFFIC_LIGHT = "plus.monjaro.TRAFFIC_LIGHT_UPDATE"
         const val ACTION_NATIVE_NAV_STOP = "com.g992.anhud.NATIVE_NAV_STOP"
         const val ACTION_HUDSPEED_UPDATE = "air.strelkasd.CAMERA_INFO_CHANGED"
         const val ACTION_STRELKA_EVENT_START = "com.aleksan.button.STRELKA_EVENT_START"
@@ -554,6 +579,12 @@ class NavigationReceiver : BroadcastReceiver() {
         const val EXTRA_TRAFFIC_ARROW_DIRECTION = "arrow_direction"
         const val EXTRA_TRAFFIC_LIGHT_ID = "traffic_light_id"
         const val EXTRA_TRAFFIC_IS_VISIBLE = "is_visible"
+        const val EXTRA_TL_COLOR = "tl_color"
+        const val EXTRA_TL_COUNTDOWN = "tl_countdown"
+        const val EXTRA_TL_ARROW = "tl_arrow"
+        const val EXTRA_TL_ID = "tl_id"
+        const val EXTRA_TL_POSITION = "tl_position"
+        const val EXTRA_TL_SOURCE = "tl_source"
         const val EXTRA_ROUTE_ACTIVE_FLAG = "route_active"
         const val EXTRA_ROUTE_ID = "route_id"
         const val EXTRA_POLYLINE_LATS = "polyline_lats"
@@ -610,6 +641,7 @@ class NavigationReceiver : BroadcastReceiver() {
                 action == ACTION_YANDEX_NAV_ACTIVE ||
                 action == ACTION_YANDEX_ROADCAMERA ||
                 action == ACTION_YANDEX_TRAFFICLIGHT ||
+                action == ACTION_WINDSHIELD_TRAFFIC_LIGHT ||
                 action == ACTION_YANDEX_ROUTE_POLYLINE
         }
 
@@ -1046,7 +1078,7 @@ class NavigationReceiver : BroadcastReceiver() {
             trafficLightContext = context.applicationContext
             if (!isVisible) {
                 if (id != 0) {
-                    activeTrafficLights.remove(id)
+                    activeTrafficLights.remove(id.toString())
                 }
                 updateTrafficLightState(context, action, now)
                 return
@@ -1064,7 +1096,7 @@ class NavigationReceiver : BroadcastReceiver() {
                 val base = timestamp.takeIf { it > 0L } ?: now
                 ((base % Int.MAX_VALUE).toInt().coerceAtLeast(1))
             }
-            val existing = activeTrafficLights[resolvedId]
+            val existing = activeTrafficLights[resolvedId.toString()]
             val incomingCountdown = countdown
             val incomingColor = signalColor
             val shouldIgnoreCountdown = existing != null &&
@@ -1091,7 +1123,7 @@ class NavigationReceiver : BroadcastReceiver() {
             } else {
                 arrowDirection
             }
-            activeTrafficLights[resolvedId] = TrafficLightInfo(
+            activeTrafficLights[resolvedId.toString()] = TrafficLightInfo(
                 id = resolvedId,
                 color = resolvedColor,
                 countdownText = resolvedCountdown,
@@ -1103,10 +1135,87 @@ class NavigationReceiver : BroadcastReceiver() {
             updateTrafficLightState(context, action, now)
         }
 
+        private fun handleWindshieldTrafficLight(
+            context: Context,
+            action: String,
+            color: String,
+            countdown: String,
+            arrow: String,
+            id: String,
+            position: Int
+        ) {
+            val now = System.currentTimeMillis()
+            trafficLightContext = context.applicationContext
+            if (WindshieldTrafficLightBatcher.isClearSignal(color, id, countdown, arrow)) {
+                cancelWindshieldCommit()
+                windshieldBatcher.reset()
+                commitWindshieldBatch(context, action, emptyList(), now)
+                return
+            }
+            if (color.isBlank()) {
+                return
+            }
+            val light = WindshieldTrafficLight(
+                key = WindshieldTrafficLight.keyFor(id, position),
+                position = position,
+                color = color,
+                countdown = countdown,
+                arrow = arrow
+            )
+            windshieldBatcher.accept(light, now)?.let { previous ->
+                commitWindshieldBatch(context, action, previous, now)
+            }
+            cancelWindshieldCommit()
+            val appContext = context.applicationContext
+            val runnable = Runnable {
+                pendingWindshieldCommit = null
+                val batch = windshieldBatcher.takeBatch() ?: return@Runnable
+                commitWindshieldBatch(appContext, action, batch, System.currentTimeMillis())
+            }
+            pendingWindshieldCommit = runnable
+            trafficLightHandler.postDelayed(runnable, WindshieldTrafficLightBatcher.COMMIT_DELAY_MS)
+        }
+
+        private fun commitWindshieldBatch(
+            context: Context,
+            action: String,
+            batch: List<WindshieldTrafficLight>,
+            now: Long
+        ) {
+            val merged = WindshieldTrafficLightBatcher.merge(activeTrafficLights, batch, now)
+            activeTrafficLights.clear()
+            activeTrafficLights.putAll(merged)
+            updateTrafficLightState(context, action, now)
+        }
+
+        private fun cancelWindshieldCommit() {
+            pendingWindshieldCommit?.let { trafficLightHandler.removeCallbacks(it) }
+            pendingWindshieldCommit = null
+        }
+
+        fun clearTrafficLightCache() {
+            trafficLightHandler.post {
+                cancelWindshieldCommit()
+                windshieldBatcher.reset()
+                activeTrafficLights.clear()
+                pendingTrafficLightCleanup?.let { trafficLightHandler.removeCallbacks(it) }
+                pendingTrafficLightCleanup = null
+            }
+        }
+
+        private fun readStringOrIntExtra(intent: Intent, key: String): String {
+            @Suppress("DEPRECATION")
+            return when (val value = intent.extras?.get(key)) {
+                null -> ""
+                is String -> normalizeText(value)
+                else -> value.toString()
+            }
+        }
+
         private fun updateTrafficLightState(context: Context, action: String, now: Long) {
             val maxActive = OverlayPrefs.trafficLightMaxActive(context).coerceAtLeast(1)
             val resolved = activeTrafficLights.values
-                .sortedBy { it.id }
+                .sortedWith(compareBy<TrafficLightInfo>({ it.position }, { it.id }))
                 .take(maxActive)
             NavigationHudStore.update { state ->
                 state.copy(

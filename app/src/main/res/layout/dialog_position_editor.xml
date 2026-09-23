@@ -722,6 +722,16 @@
         android:visibility="gone" />
 
     <CheckBox
+        android:id="@+id/dialogNavShowDistance"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:text="@string/position_nav_show_distance"
+        android:textColor="@color/white"
+        android:textSize="16sp"
+        android:visibility="gone" />
+
+    <CheckBox
         android:id="@+id/dialogLaneGuidanceShowDistance"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"

@@ -9,7 +9,8 @@ data class TrafficLightInfo(
     val arrowBitmap: Bitmap?,
     val arrowDirection: String,
     val lastUpdated: Long,
-    val expiresAt: Long
+    val expiresAt: Long,
+    val position: Int = Int.MAX_VALUE
 )
 
 data class NavigationHudState(
@@ -120,6 +121,7 @@ object NavigationHudStore {
         preserveStrelka: Boolean = false
     ) {
         android.util.Log.d("NavigationHudStore", "reset() called: action=$lastAction")
+        NavigationReceiver.clearTrafficLightCache()
         update { current ->
             android.util.Log.d("NavigationHudStore", "Clearing all navigation data")
             current.copy(

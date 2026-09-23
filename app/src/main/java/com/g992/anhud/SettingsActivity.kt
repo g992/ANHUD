@@ -58,6 +58,9 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.appcompat.widget.AppCompatImageButton
 import androidx.appcompat.widget.SwitchCompat
+import com.g992.anhud.hudbridge.HudBridgeManager
+import com.g992.anhud.hudbridge.HudBridgePrefs
+import com.g992.anhud.hudbridge.HudBridgeState
 import com.google.android.material.tabs.TabLayout
 import org.maplibre.android.camera.CameraUpdateFactory
 import org.maplibre.android.geometry.LatLng
@@ -113,6 +116,11 @@ class SettingsActivity : ScaledActivity() {
     private lateinit var speedFromGpsCheck: SwitchCompat
     private lateinit var infoMirrorStarsheep7Switch: SwitchCompat
     private lateinit var infoMirrorGalaxySwitch: SwitchCompat
+    private lateinit var backgroundRenderSwitch: SwitchCompat
+    private lateinit var backgroundRenderProgress: ProgressBar
+    private lateinit var backgroundRenderStatus: TextView
+    private var isSyncingBackgroundRender = false
+    private val hudBridgeListener: (HudBridgeState) -> Unit = { renderBackgroundRenderState(it) }
     private lateinit var hideTurnWhenFarSwitch: SwitchCompat
     private lateinit var hideTurnWhenFarDistanceSeek: SeekBar
     private lateinit var hideTurnWhenFarDistanceValue: TextView
@@ -337,6 +345,9 @@ class SettingsActivity : ScaledActivity() {
         speedFromGpsCheck = findViewById(R.id.speedFromGpsCheck)
         infoMirrorStarsheep7Switch = findViewById(R.id.infoMirrorStarsheep7Switch)
         infoMirrorGalaxySwitch = findViewById(R.id.infoMirrorGalaxySwitch)
+        backgroundRenderSwitch = findViewById(R.id.backgroundRenderSwitch)
+        backgroundRenderProgress = findViewById(R.id.backgroundRenderProgress)
+        backgroundRenderStatus = findViewById(R.id.backgroundRenderStatus)
         hideTurnWhenFarSwitch = findViewById(R.id.hideTurnWhenFarSwitch)
         hideTurnWhenFarDistanceSeek = findViewById(R.id.hideTurnWhenFarDistanceSeek)
         hideTurnWhenFarDistanceValue = findViewById(R.id.hideTurnWhenFarDistanceValue)
@@ -410,6 +421,8 @@ class SettingsActivity : ScaledActivity() {
         )
         MapCacheController.addListener(mapCacheListener)
         syncMapCacheUi(MapCacheController.current())
+        HudBridgeManager.addListener(hudBridgeListener)
+        renderBackgroundRenderState(HudBridgeManager.state)
         refreshUpdateUi()
         if (pendingSpeedFromGpsAfterBackgroundPermission) {
             pendingSpeedFromGpsAfterBackgroundPermission = false
@@ -423,6 +436,7 @@ class SettingsActivity : ScaledActivity() {
     override fun onStop() {
         offlineCachePreviewSession?.dismiss()
         MapCacheController.removeListener(mapCacheListener)
+        HudBridgeManager.removeListener(hudBridgeListener)
         try {
             unregisterReceiver(updateReceiver)
         } catch (_: Exception) {
@@ -667,6 +681,13 @@ class SettingsActivity : ScaledActivity() {
             if (isSyncingUi) return@setOnCheckedChangeListener
             OverlayPrefs.setInfoMirrorStarsheep7Enabled(this, isChecked)
             broadcastInfoMirrorStarsheep7(isChecked)
+        }
+
+        backgroundRenderSwitch.setOnCheckedChangeListener { _, isChecked ->
+            if (isSyncingBackgroundRender) return@setOnCheckedChangeListener
+            HudBridgePrefs.setEnabled(this, isChecked)
+            HudBridgeManager.sync(this)
+            renderBackgroundRenderState(HudBridgeManager.state)
         }
 
         infoMirrorGalaxySwitch.setOnCheckedChangeListener { _, isChecked ->
@@ -3498,6 +3519,42 @@ class SettingsActivity : ScaledActivity() {
 
     private fun dp(value: Int): Int {
         return (value * resources.displayMetrics.density).roundToInt()
+    }
+
+    private fun renderBackgroundRenderState(state: HudBridgeState) {
+        isSyncingBackgroundRender = true
+        try {
+            val busy = state is HudBridgeState.Starting || state is HudBridgeState.Reconnecting
+            backgroundRenderSwitch.visibility = if (busy) View.GONE else View.VISIBLE
+            backgroundRenderProgress.visibility = if (busy) View.VISIBLE else View.GONE
+            var statusColor = Color.parseColor("#808080")
+            val status = when (state) {
+                is HudBridgeState.Starting -> state.step
+                is HudBridgeState.Reconnecting -> getString(R.string.background_render_reconnecting, state.reason)
+                is HudBridgeState.Running -> {
+                    backgroundRenderSwitch.isEnabled = true
+                    backgroundRenderSwitch.isChecked = true
+                    getString(R.string.background_render_running, state.buildId ?: "?")
+                }
+                is HudBridgeState.Error -> {
+                    backgroundRenderSwitch.isChecked = false
+                    backgroundRenderSwitch.isEnabled = false
+                    statusColor = Color.parseColor("#FF5252")
+                    getString(R.string.background_render_error, state.message)
+                }
+                HudBridgeState.Disabled -> {
+                    val wanted = HudBridgePrefs.enabled(this)
+                    backgroundRenderSwitch.isEnabled = !HudBridgeManager.failedThisSession
+                    backgroundRenderSwitch.isChecked = wanted && !HudBridgeManager.failedThisSession
+                    if (wanted && !OverlayPrefs.isEnabled(this)) getString(R.string.background_render_waiting_hud) else ""
+                }
+            }
+            backgroundRenderStatus.text = status
+            backgroundRenderStatus.setTextColor(statusColor)
+            backgroundRenderStatus.visibility = if (status.isBlank()) View.GONE else View.VISIBLE
+        } finally {
+            isSyncingBackgroundRender = false
+        }
     }
 
     private fun syncUiFromPrefs() {

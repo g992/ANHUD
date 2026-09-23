@@ -74,6 +74,13 @@
     <string name="map_trip_status_button">Статус поездки</string>
     <string name="map_lane_guidance_button">Подсказки перестроения</string>
     <string name="position_lane_guidance_show_distance">Показывать расстояние</string>
+    <string name="background_render_label">Отрисовка на заднем плане</string>
+    <string name="background_render_hint">HUD рисуется через демон ghudbridgelited на QNX под штатной картинкой, а не поверх дисплея Android. При ошибке HUD возвращается на дисплей Android, повторная попытка — при следующем запуске приложения.</string>
+    <string name="background_render_running">Работает (%1$s)</string>
+    <string name="background_render_reconnecting">Переподключение: %1$s</string>
+    <string name="background_render_error">Ошибка: %1$s</string>
+    <string name="background_render_waiting_hud">Включится вместе с проекцией HUD</string>
+    <string name="position_nav_show_distance">Показывать расстояние до финиша</string>
     <string name="common_configure">Настроить</string>
     <string name="position_nav_block_label">Блок навигации</string>
     <string name="position_lane_guidance_block_label">Блок подсказок перестроения</string>
@@ -144,7 +151,8 @@
     <string name="preview_direction_label">Стрелка</string>
     <string name="preview_distance_text">1 км</string>
     <string name="preview_street_text">Пушкина</string>
-    <string name="preview_time_text">1 ч 10 мин (12:00)</string>
+    <string name="preview_time_text">1 ч 10 мин · 84 км (12:00)</string>
+    <string name="preview_time_text_no_distance">1 ч 10 мин (12:00)</string>
     <string name="preview_trip_status_arrival_text">12:00</string>
     <string name="preview_trip_status_eta_text">1 ч 10 мин</string>
     <string name="preview_speed_limit_text">100</string>

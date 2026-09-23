@@ -13,6 +13,7 @@ import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
+import com.g992.anhud.hudbridge.HudBridgeManager
 
 class HudBackgroundService : Service() {
     private val overlayController by lazy { HudOverlayController(applicationContext) }
@@ -388,6 +389,7 @@ class HudBackgroundService : Service() {
                 )
                 overlayController.refresh()
                 overlayController.updateNavigation(NavigationHudStore.snapshot())
+                HudBridgeManager.sync(context)
                 }
             }
         }
@@ -406,6 +408,7 @@ class HudBackgroundService : Service() {
         NavigationHudStore.registerListener(navListener)
         MapRouteTelemetryStore.addListener(mapRouteListener)
         customBlockCoordinator.start()
+        HudBridgeManager.setRenderTargetListener { overlayController.refresh() }
         val filter = android.content.IntentFilter().apply {
             addAction(OverlayBroadcasts.ACTION_OVERLAY_SETTINGS_CHANGED)
             addAction(OverlayBroadcasts.ACTION_CLEAR_NAVIGATION)
@@ -436,6 +439,7 @@ class HudBackgroundService : Service() {
         startService(Intent(this, SensorDataService::class.java))
         overlayController.refresh()
         overlayController.updateNavigation(NavigationHudStore.snapshot())
+        HudBridgeManager.sync(this)
         val activityIntent = Intent(this, MainActivity::class.java).apply {
             this.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
         }
@@ -475,6 +479,8 @@ class HudBackgroundService : Service() {
         NavigationHudStore.unregisterListener(navListener)
         MapRouteTelemetryStore.removeListener(mapRouteListener)
         customBlockCoordinator.close()
+        HudBridgeManager.setRenderTargetListener(null)
+        HudBridgeManager.stop()
         try {
             unregisterReceiver(settingsReceiver)
         } catch (_: Exception) {
