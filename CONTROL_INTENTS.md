@@ -16,9 +16,10 @@ adb shell am broadcast -n com.g992.anhud/.HudStatusReceiver -a ACTION_NAME ...
 
 - `ENABLE` (`bool|0/1|"true"/"false"`): включает или выключает HUD.
 - `STOP_NAVIGATION` (`bool|0/1|"true"/"false"`): завершает активную навигацию.
+- `NATIVE_NAV` (`bool|0/1|"true"/"false"`): включает или выключает штатную навигацию машины через car API.
 - `NAV` (`bool|0/1|"true"/"false"`): показывает или скрывает навигационный блок.
 - `LANE_GUIDANCE` (`bool|0/1|"true"/"false"`): показывает или скрывает блок полос.
-- `ARROW` (`bool|0/1|"true"/"false"`): показывает или скрывает штатную стрелку.
+- `ARROW` (`bool|0/1|"true"/"false"`): показывает или скрывает отдельный overlay-блок стрелки. Это не штатная навигация машины.
 - `SPEED_LIMIT` (`bool|0/1|"true"/"false"`): показывает или скрывает блок лимита скорости.
 - `HUDSPEED` (`bool|0/1|"true"/"false"`): показывает или скрывает общий слот `HUD Speed / Strelka`.
 - `HUD_ALERT_SOURCE` (`"HUDSPEED"|"STRELKA"`): выбирает, какой источник отображать в общем слоте и на проекции.
@@ -36,6 +37,9 @@ adb shell am broadcast -n com.g992.anhud/.HudStatusReceiver -a ACTION_NAME ...
 - `ENABLE=true` сработает только если у приложения есть permission на overlay.
 - `ENABLE=false` выключает HUD и дополнительно останавливает активную навигацию.
 - `STOP_NAVIGATION=true` останавливает маршрут, не выключая сам HUD.
+- `STOP_NAVIGATION=true` не отключает сам механизм штатной навигации насовсем: если `NATIVE_NAV=true` и продолжат приходить route updates, штатная навигация сможет стартовать снова.
+- `NATIVE_NAV=false` записывает постоянное состояние `native_nav_enabled=false` и сразу останавливает текущую штатную навигацию.
+- `NATIVE_NAV=true` только разрешает штатную навигацию; фактический старт произойдет, когда придут данные активного маршрута.
 - Можно передавать только те extras, которые нужно изменить.
 - `HUDSPEED` и `HUD_ALERT_SOURCE` работают вместе: `HUDSPEED` управляет общим `enable`-статусом слота, а `HUD_ALERT_SOURCE` выбирает содержимое этого слота.
 - Если выбран `HUD_ALERT_SOURCE=STRELKA`, входящие данные `HUD Speed` не отображаются, пока источник не переключён обратно.
@@ -52,6 +56,14 @@ adb shell am broadcast -n com.g992.anhud/.HudStatusReceiver -a G992.ANHUD.STATUS
 
 ```bash
 adb shell am broadcast -n com.g992.anhud/.HudStatusReceiver -a G992.ANHUD.STATUS --ez STOP_NAVIGATION true
+```
+
+```bash
+adb shell am broadcast -n com.g992.anhud/.HudStatusReceiver -a G992.ANHUD.STATUS --ez NATIVE_NAV false
+```
+
+```bash
+adb shell am broadcast -n com.g992.anhud/.HudStatusReceiver -a G992.ANHUD.STATUS --ez NATIVE_NAV true
 ```
 
 ```bash
@@ -81,6 +93,7 @@ adb shell am broadcast -n com.g992.anhud/.HudStatusReceiver -a G992.ANHUD.STATUS
 Ограничения текущего контракта `G992.ANHUD.STATUS`:
 
 - Управляет `ENABLE`, `STOP_NAVIGATION` и видимостью основных HUD-блоков.
+- `NATIVE_NAV` управляет штатной навигацией машины отдельно от overlay-блока `ARROW`.
 - Пока не умеет менять связанные опции вроде `HUDSPEED_LIMIT`, `HUDSPEED_LIMIT_ALERT`, `HUDSPEED_LIMIT_ALERT_THRESHOLD`, `SPEEDOMETER_SHOW_UNIT_TEXT`, `ARROW_ONLY_WHEN_NO_ICON`, `TRAFFIC_LIGHT_MAX_ACTIVE`.
 - Не умеет менять layout/scale/alpha/position/preview-настройки.
 - Для полного набора overlay-настроек сейчас используйте пресеты через `ANHUD_SET_PRESET`.

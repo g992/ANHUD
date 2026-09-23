@@ -11,7 +11,7 @@ class AnhudApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
-        if (getProcessName().endsWith(":custom_script_sandbox")) {
+        if (isCustomScriptSandboxProcess(getProcessName())) {
             return
         }
         PerformanceDebugMonitor.start(this)
@@ -36,3 +36,6 @@ class AnhudApp : Application() {
         }
     }
 }
+
+internal fun isCustomScriptSandboxProcess(processName: String): Boolean =
+    processName.contains(":custom_script_sandbox")

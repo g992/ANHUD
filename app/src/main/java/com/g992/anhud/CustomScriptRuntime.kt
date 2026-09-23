@@ -50,6 +50,7 @@ class CustomScriptRuntime(context: Context) : Closeable {
 
         override fun onServiceDisconnected(name: ComponentName?) {
             service = null
+            bound = false
             failPending("Превышен лимит выполнения скрипта")
             if (!closed) bind()
         }
@@ -65,6 +66,7 @@ class CustomScriptRuntime(context: Context) : Closeable {
             service = null
             bound = false
             failPending("Не удалось запустить изолированный JS-runtime")
+            failQueued("Не удалось запустить изолированный JS-runtime")
         }
     }
 
@@ -86,7 +88,9 @@ class CustomScriptRuntime(context: Context) : Closeable {
                 return@post
             }
             val requestId = nextRequestId.getAndIncrement()
-            outgoingQueue.addLast(OutgoingRequest(requestId, program, callback))
+            val timeout = Runnable { timeoutRequest(requestId) }
+            outgoingQueue.addLast(OutgoingRequest(requestId, program, callback, timeout))
+            mainHandler.postDelayed(timeout, CLIENT_TIMEOUT_MS)
             flushQueue()
         }
     }
@@ -96,6 +100,7 @@ class CustomScriptRuntime(context: Context) : Closeable {
             if (closed) return@post
             closed = true
             outgoingQueue.forEach { request ->
+                mainHandler.removeCallbacks(request.timeout)
                 request.callback(Result.failure(IllegalStateException("JS-runtime закрыт")))
             }
             outgoingQueue.clear()
@@ -124,13 +129,7 @@ class CustomScriptRuntime(context: Context) : Closeable {
         }
         if (outgoingQueue.isNotEmpty()) {
             val outgoing = outgoingQueue.removeFirst()
-            val timeout = Runnable {
-                pending.remove(outgoing.requestId)?.callback?.invoke(
-                    Result.failure(IllegalStateException("Превышен лимит выполнения скрипта"))
-                )
-            }
-            pending[outgoing.requestId] = PendingRequest(outgoing.callback, timeout)
-            mainHandler.postDelayed(timeout, CLIENT_TIMEOUT_MS)
+            pending[outgoing.requestId] = PendingRequest(outgoing.callback, outgoing.timeout)
             val message = Message.obtain(null, CustomScriptSandboxProtocol.MSG_EVALUATE).apply {
                 arg1 = outgoing.requestId
                 replyTo = replies
@@ -140,12 +139,25 @@ class CustomScriptRuntime(context: Context) : Closeable {
             }
             runCatching { target.send(message) }.onFailure {
                 pending.remove(outgoing.requestId)
-                mainHandler.removeCallbacks(timeout)
+                mainHandler.removeCallbacks(outgoing.timeout)
                 outgoing.callback(Result.failure(IllegalStateException("JS-runtime недоступен")))
                 service = null
                 bound = false
                 bind()
             }
+        }
+    }
+
+    private fun timeoutRequest(requestId: Int) {
+        val queued = outgoingQueue.firstOrNull { it.requestId == requestId }
+        if (queued != null) {
+            outgoingQueue.remove(queued)
+            queued.callback(Result.failure(IllegalStateException("Не удалось запустить изолированный JS-runtime")))
+            return
+        }
+        pending.remove(requestId)?.let { request ->
+            request.callback(Result.failure(IllegalStateException("Превышен лимит выполнения скрипта")))
+            flushQueue()
         }
     }
 
@@ -160,14 +172,17 @@ class CustomScriptRuntime(context: Context) : Closeable {
 
     private fun failQueued(message: String) {
         while (outgoingQueue.isNotEmpty()) {
-            outgoingQueue.removeFirst().callback(Result.failure(IllegalStateException(message)))
+            val request = outgoingQueue.removeFirst()
+            mainHandler.removeCallbacks(request.timeout)
+            request.callback(Result.failure(IllegalStateException(message)))
         }
     }
 
     private data class OutgoingRequest(
         val requestId: Int,
         val program: String,
-        val callback: (Result<CustomScriptEvaluation>) -> Unit
+        val callback: (Result<CustomScriptEvaluation>) -> Unit,
+        val timeout: Runnable
     )
 
     private data class PendingRequest(

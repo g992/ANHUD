@@ -3,8 +3,10 @@ package com.g992.anhud
 import android.graphics.Color
 import android.graphics.PointF
 import android.view.View
+import android.view.WindowManager
 import android.widget.FrameLayout
 import android.widget.LinearLayout
+import android.widget.ScrollView
 import android.widget.SeekBar
 import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
@@ -33,7 +35,6 @@ fun MainActivity.showDynamicHudBlockPositionEditor(
     config: DynamicHudBlockPositionConfig,
     onSave: (DynamicHudBlockPositionResult) -> Unit
 ) {
-    val previewWidthDp = 320
     val previewHeightDp = 180
     val root = LinearLayout(this).apply {
         orientation = LinearLayout.VERTICAL
@@ -41,7 +42,10 @@ fun MainActivity.showDynamicHudBlockPositionEditor(
     }
     val preview = FrameLayout(this).apply {
         setBackgroundColor(Color.BLACK)
-        layoutParams = LinearLayout.LayoutParams(dynamicDp(previewWidthDp), dynamicDp(previewHeightDp))
+        layoutParams = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            dynamicDp(previewHeightDp)
+        )
     }
     val previewView = config.previewFactory(preview)
     val xLabel = TextView(this).apply { setTextColor(Color.WHITE) }
@@ -74,8 +78,8 @@ fun MainActivity.showDynamicHudBlockPositionEditor(
         previewView.scaleX = scale
         previewView.scaleY = scale
         previewView.alpha = alphaSeek.progress / 100f
-        previewView.x = (xSeek.progress / config.containerSizeDp.x.coerceAtLeast(1f)) * dynamicDp(previewWidthDp)
-        previewView.y = (ySeek.progress / config.containerSizeDp.y.coerceAtLeast(1f)) * dynamicDp(previewHeightDp)
+        previewView.x = (xSeek.progress / config.containerSizeDp.x.coerceAtLeast(1f)) * preview.width
+        previewView.y = (ySeek.progress / config.containerSizeDp.y.coerceAtLeast(1f)) * preview.height
     }
 
     val listener = object : SeekBar.OnSeekBarChangeListener {
@@ -94,12 +98,17 @@ fun MainActivity.showDynamicHudBlockPositionEditor(
     root.addView(alphaLabel)
     root.addView(alphaSeek)
     updatePreview()
+    preview.post { updatePreview() }
 
-    AlertDialog.Builder(this)
+    val scroll = ScrollView(this).apply {
+        isFillViewport = false
+        addView(root)
+    }
+    val dialog = AlertDialog.Builder(this, R.style.ThemeOverlay_ANHUD_Dialog)
         .setTitle(config.title)
-        .setView(root)
-        .setNegativeButton(android.R.string.cancel, null)
-        .setPositiveButton(android.R.string.ok) { _, _ ->
+        .setView(scroll)
+        .setNegativeButton(R.string.custom_block_cancel, null)
+        .setPositiveButton(R.string.custom_block_done) { _, _ ->
             onSave(
                 DynamicHudBlockPositionResult(
                     blockId = config.blockId,
@@ -110,7 +119,31 @@ fun MainActivity.showDynamicHudBlockPositionEditor(
                 )
             )
         }
-        .show()
+        .create()
+    dialog.setOnShowListener {
+        fitAnhudDialogToScreen(dialog)
+        preview.post { updatePreview() }
+    }
+    dialog.show()
+}
+
+internal fun MainActivity.fitAnhudDialogToScreen(
+    dialog: AlertDialog,
+    widthFraction: Float = 0.92f,
+    maxHeightFraction: Float = 0.90f
+) {
+    val window = dialog.window ?: return
+    val metrics = resources.displayMetrics
+    val widthPx = (metrics.widthPixels * widthFraction).roundToInt().coerceAtLeast(1)
+    val maxHeightPx = (metrics.heightPixels * maxHeightFraction).roundToInt().coerceAtLeast(1)
+    window.setLayout(widthPx, WindowManager.LayoutParams.WRAP_CONTENT)
+    window.decorView.post {
+        val height = window.decorView.height
+        window.setLayout(
+            widthPx,
+            if (height > maxHeightPx) maxHeightPx else WindowManager.LayoutParams.WRAP_CONTENT
+        )
+    }
 }
 
 private fun MainActivity.dynamicDp(value: Int): Int =

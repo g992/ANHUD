@@ -5,6 +5,7 @@ import android.graphics.drawable.GradientDrawable
 import android.text.InputType
 import android.view.Gravity
 import android.view.View
+import android.view.ViewGroup
 import android.widget.AdapterView
 import android.widget.ArrayAdapter
 import android.widget.Button
@@ -139,9 +140,9 @@ private fun MainActivity.createCustomBlockRow(block: CustomBlockDefinition): Vie
             addView(compactButton(getString(R.string.custom_block_edit)) { showCustomBlockEditor(block) })
             addView(compactButton(getString(R.string.custom_block_position)) { showCustomBlockPositionEditor(block) })
             addView(compactButton(getString(R.string.custom_block_delete)) {
-                AlertDialog.Builder(this@createCustomBlockRow)
+                AlertDialog.Builder(this@createCustomBlockRow, R.style.ThemeOverlay_ANHUD_Dialog)
                     .setMessage(getString(R.string.custom_block_delete_confirm, block.name))
-                    .setNegativeButton(android.R.string.cancel, null)
+                    .setNegativeButton(R.string.custom_block_cancel, null)
                     .setPositiveButton(R.string.custom_block_delete) { _, _ ->
                         customBlockRepository.delete(block.id)
                         refreshCustomBlocksUi()
@@ -181,6 +182,8 @@ private fun MainActivity.showCustomBlockEditor(existing: CustomBlockDefinition?)
         hint = getString(R.string.custom_block_name)
         setSingleLine(true)
         setText(existing?.name.orEmpty())
+        setTextColor(Color.WHITE)
+        setHintTextColor(Color.GRAY)
     }
     val iconButton = Button(this).apply { text = getString(R.string.custom_block_choose_png) }
     val iconStatus = TextView(this).apply {
@@ -192,6 +195,8 @@ private fun MainActivity.showCustomBlockEditor(existing: CustomBlockDefinition?)
         setSingleLine(true)
         inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
         setText(existing?.script ?: CUSTOM_BLOCK_EXAMPLES.first())
+        setTextColor(Color.WHITE)
+        setHintTextColor(Color.GRAY)
     }
     val examples = SpinnerWithLabel(this, getString(R.string.custom_block_examples), CUSTOM_BLOCK_EXAMPLES)
     val checkButton = Button(this).apply { text = getString(R.string.custom_block_check) }
@@ -211,10 +216,12 @@ private fun MainActivity.showCustomBlockEditor(existing: CustomBlockDefinition?)
     val enabledSwitch = SwitchCompat(this).apply {
         text = getString(R.string.custom_block_enabled)
         isChecked = existing?.enabled ?: false
+        setTextColor(Color.WHITE)
     }
     val positionButton = Button(this).apply {
         text = getString(R.string.custom_block_position)
     }
+    var saveButton: Button? = null
 
     content.addView(nameInput)
     content.addView(iconButton)
@@ -254,8 +261,12 @@ private fun MainActivity.showCustomBlockEditor(existing: CustomBlockDefinition?)
             return
         }
         checkButton.isEnabled = false
+        saveButton?.isEnabled = false
+        resultText.setTextColor(Color.LTGRAY)
+        resultText.text = getString(R.string.custom_block_checking)
         runtime.evaluate(script, previewEnvironment(script)) { result ->
             checkButton.isEnabled = true
+            saveButton?.isEnabled = true
             result.onSuccess { evaluation ->
                 resultText.setTextColor(Color.rgb(120, 255, 150))
                 val rendered = evaluation.text.ifBlank { "скрыт" }
@@ -310,15 +321,20 @@ private fun MainActivity.showCustomBlockEditor(existing: CustomBlockDefinition?)
         }
     }
 
-    val scroll = ScrollView(this).apply { addView(content) }
-    val dialog = AlertDialog.Builder(this)
+    val scroll = ScrollView(this).apply {
+        isFillViewport = false
+        addView(content)
+    }
+    val dialog = AlertDialog.Builder(this, R.style.ThemeOverlay_ANHUD_Dialog)
         .setTitle(if (existing == null) R.string.custom_block_editor_new else R.string.custom_block_editor_edit)
         .setView(scroll)
-        .setNegativeButton(android.R.string.cancel, null)
+        .setNegativeButton(R.string.custom_block_cancel, null)
         .setPositiveButton(R.string.custom_block_save, null)
         .create()
     dialog.setOnShowListener {
-        dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+        fitAnhudDialogToScreen(dialog)
+        saveButton = dialog.getButton(AlertDialog.BUTTON_POSITIVE)
+        saveButton?.setOnClickListener {
             runCheck { definition ->
                 runCatching {
                     customBlockRepository.upsert(definition)
@@ -434,11 +450,34 @@ private data class SpinnerWithLabel(
             setPadding(0, activity.customDp(8), 0, 0)
         },
         android.widget.Spinner(activity).apply {
-            adapter = ArrayAdapter(
+            val values = listOf(activity.getString(R.string.custom_block_choose_example)) + examples
+            adapter = object : ArrayAdapter<String>(
                 activity,
-                android.R.layout.simple_spinner_dropdown_item,
-                listOf("Выберите пример") + examples
-            )
+                android.R.layout.simple_spinner_item,
+                values
+            ) {
+                override fun getView(position: Int, convertView: View?, parent: ViewGroup): View =
+                    styleSpinnerText(super.getView(position, convertView, parent), dropdown = false)
+
+                override fun getDropDownView(position: Int, convertView: View?, parent: ViewGroup): View =
+                    styleSpinnerText(super.getDropDownView(position, convertView, parent), dropdown = true)
+
+                private fun styleSpinnerText(view: View, dropdown: Boolean): View =
+                    (view as TextView).apply {
+                        setTextColor(if (dropdown) Color.WHITE else Color.LTGRAY)
+                        setPadding(
+                            activity.customDp(12),
+                            activity.customDp(10),
+                            activity.customDp(12),
+                            activity.customDp(10)
+                        )
+                        if (dropdown) {
+                            setBackgroundColor(ContextCompat.getColor(activity, R.color.dialog_background))
+                        }
+                    }
+            }.apply {
+                setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+            }
         }
     )
 }

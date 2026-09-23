@@ -19,6 +19,7 @@ class HudStatusReceiver : BroadcastReceiver() {
     private fun handleStatusIntent(context: Context, intent: Intent) {
         val enabled = parseBooleanExtra(intent, EXTRA_ENABLE)
         val stopNavigation = parseBooleanExtra(intent, EXTRA_STOP_NAVIGATION)
+        val nativeNavEnabled = parseBooleanExtra(intent, EXTRA_NATIVE_NAV_ENABLED)
         val navEnabled = parseBooleanExtra(intent, EXTRA_NAV_ENABLED)
         val laneGuidanceEnabled = parseBooleanExtra(intent, EXTRA_LANE_GUIDANCE_ENABLED)
         val arrowEnabled = parseBooleanExtra(intent, EXTRA_ARROW_ENABLED)
@@ -56,6 +57,16 @@ class HudStatusReceiver : BroadcastReceiver() {
         // Handle explicit stop navigation request
         if (stopNavigation == true) {
             stopActiveNavigation(context)
+        }
+        if (nativeNavEnabled != null) {
+            OverlayPrefs.setNativeNavEnabled(context, nativeNavEnabled)
+            if (!nativeNavEnabled && NativeNavigationController.isActive()) {
+                NativeNavigationController.stopNavigation(context)
+                UiLogStore.append(
+                    LogCategory.NAVIGATION,
+                    "Штатная навигация отключена через intent"
+                )
+            }
         }
 
         if (navEnabled != null) {
@@ -464,6 +475,7 @@ class HudStatusReceiver : BroadcastReceiver() {
         const val ACTION_SET_PRESET_LEGACY = "G992.ANHUD.SET_PRESET"
         const val EXTRA_ENABLE = "ENABLE"
         const val EXTRA_STOP_NAVIGATION = "STOP_NAVIGATION"
+        const val EXTRA_NATIVE_NAV_ENABLED = "NATIVE_NAV"
         const val EXTRA_NAV_ENABLED = "NAV"
         const val EXTRA_LANE_GUIDANCE_ENABLED = "LANE_GUIDANCE"
         const val EXTRA_ARROW_ENABLED = "ARROW"

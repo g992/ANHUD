@@ -261,8 +261,12 @@
     <string name="custom_block_choose_png">Выбрать PNG</string>
     <string name="custom_block_script">Однострочный JS</string>
     <string name="custom_block_examples">Готовые примеры</string>
+    <string name="custom_block_choose_example">Выберите пример</string>
     <string name="custom_block_check">Проверить</string>
+    <string name="custom_block_checking">Проверка скрипта…</string>
     <string name="custom_block_save">Сохранить</string>
+    <string name="custom_block_cancel">Отмена</string>
+    <string name="custom_block_done">Готово</string>
     <string name="custom_block_enabled">Включён</string>
     <string name="custom_block_check_ok">Скрипт выполнен: %1$s</string>
     <string name="custom_block_delete_confirm">Удалить субблок «%1$s»?</string>
