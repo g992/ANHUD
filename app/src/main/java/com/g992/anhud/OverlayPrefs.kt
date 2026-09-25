@@ -165,7 +165,6 @@ object OverlayPrefs {
     private const val KEY_LANE_GUIDANCE_SHOW_DISTANCE = "overlay_lane_guidance_show_distance"
     private const val KEY_CAMERA_TIMEOUT_NEAR = "camera_timeout_near"
     private const val KEY_CAMERA_TIMEOUT_FAR = "camera_timeout_far"
-    private const val KEY_TRAFFIC_LIGHT_TIMEOUT = "traffic_light_timeout"
     private const val KEY_NAV_NOTIFICATION_END_TIMEOUT = "nav_notification_end_timeout"
     private const val KEY_NAV_UPDATES_END_TIMEOUT = "nav_updates_end_timeout"
     private const val KEY_ROAD_CAMERA_TIMEOUT = "road_camera_timeout"
@@ -865,8 +864,8 @@ object OverlayPrefs {
     fun containerSizeDp(context: Context): PointF {
         val prefs = prefs(context)
         val defaultSize = defaultContainerSizeDp(context)
-        val width = prefs.getFloat(KEY_CONTAINER_WIDTH_DP, defaultSize)
-        val height = prefs.getFloat(KEY_CONTAINER_HEIGHT_DP, defaultSize)
+        val width = prefs.getFloat(KEY_CONTAINER_WIDTH_DP, defaultSize.x)
+        val height = prefs.getFloat(KEY_CONTAINER_HEIGHT_DP, defaultSize.y)
         return PointF(width, height)
     }
 
@@ -1288,17 +1287,6 @@ object OverlayPrefs {
             .apply()
     }
 
-    fun trafficLightTimeout(context: Context): Int {
-        return prefs(context).getInt(KEY_TRAFFIC_LIGHT_TIMEOUT, 2)
-            .coerceIn(0, TIMEOUT_MAX)
-    }
-
-    fun setTrafficLightTimeout(context: Context, timeout: Int) {
-        prefs(context).edit()
-            .putInt(KEY_TRAFFIC_LIGHT_TIMEOUT, timeout.coerceIn(0, TIMEOUT_MAX))
-            .apply()
-    }
-
     fun navNotificationEndTimeout(context: Context): Int {
         return prefs(context).getInt(KEY_NAV_NOTIFICATION_END_TIMEOUT, 2)
             .coerceIn(0, TIMEOUT_MAX)
@@ -1582,14 +1570,23 @@ object OverlayPrefs {
 
     private fun prefs(context: Context) = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
-    private fun defaultContainerSizeDp(context: Context): Float {
+    private fun defaultContainerSizeDp(context: Context): PointF {
+        val display = HudDisplayUtils.resolveDisplay(context, displayId(context), allowFallback = false)
+        if (display != null) {
+            val metrics = context.createDisplayContext(display).resources.displayMetrics
+            if (metrics.density > 0f) {
+                return PointF(metrics.widthPixels / metrics.density, metrics.heightPixels / metrics.density)
+            }
+        }
         val density = context.resources.displayMetrics.density
         if (density <= 0f) {
-            return maxOf(CONTAINER_MIN_SIZE_PX, CONTAINER_DEFAULT_SIZE_PX)
+            val size = maxOf(CONTAINER_MIN_SIZE_PX, CONTAINER_DEFAULT_SIZE_PX)
+            return PointF(size, size)
         }
         val minDp = CONTAINER_MIN_SIZE_PX / density
         val defaultDp = CONTAINER_DEFAULT_SIZE_PX / density
-        return maxOf(minDp, defaultDp)
+        val size = maxOf(minDp, defaultDp)
+        return PointF(size, size)
     }
 
     private fun defaultMapSizeDp(context: Context): PointF {

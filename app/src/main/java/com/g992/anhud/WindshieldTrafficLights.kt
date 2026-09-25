@@ -74,10 +74,7 @@ class WindshieldTrafficLightBatcher(
             return color.isBlank() && id.isBlank() && countdown.isBlank() && arrow.isBlank()
         }
 
-        /**
-         * Replaces every windshield entry in [current] with [batch], keeping the countdown of a light
-         * whose colour did not change when the new update carries no countdown.
-         */
+        /** Replaces the current batch, retaining a countdown when its light keeps the same colour. */
         fun merge(
             current: Map<String, TrafficLightInfo>,
             batch: List<WindshieldTrafficLight>,
@@ -85,11 +82,6 @@ class WindshieldTrafficLightBatcher(
             ttlMs: Long = SAFETY_TTL_MS
         ): LinkedHashMap<String, TrafficLightInfo> {
             val result = LinkedHashMap<String, TrafficLightInfo>()
-            current.forEach { (key, info) ->
-                if (!key.startsWith(WindshieldTrafficLight.KEY_PREFIX)) {
-                    result[key] = info
-                }
-            }
             batch.forEach { light ->
                 val existing = current[light.key]
                 val keepCountdown = existing != null &&
@@ -100,7 +92,6 @@ class WindshieldTrafficLightBatcher(
                     id = light.key.hashCode(),
                     color = light.color,
                     countdownText = if (keepCountdown) existing?.countdownText.orEmpty() else light.countdown,
-                    arrowBitmap = null,
                     arrowDirection = light.arrow,
                     lastUpdated = now,
                     expiresAt = now + ttlMs,

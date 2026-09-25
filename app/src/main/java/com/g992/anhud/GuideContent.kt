@@ -152,11 +152,6 @@ object GuideContent {
                 ),
                 GuideItem(
                     null,
-                    R.string.guide_settings_traffic_light_timeout_title,
-                    R.string.guide_settings_traffic_light_timeout_body
-                ),
-                GuideItem(
-                    null,
                     R.string.guide_settings_road_camera_timeout_title,
                     R.string.guide_settings_road_camera_timeout_body
                 ),

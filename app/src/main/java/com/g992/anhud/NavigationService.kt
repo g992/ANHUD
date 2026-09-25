@@ -30,7 +30,6 @@ class NavigationService : Service() {
             addAction(NavigationReceiver.ACTION_YANDEX_TRIP_STATUS_BITMAP)
             addAction(NavigationReceiver.ACTION_YANDEX_NAV_ACTIVE)
             addAction(NavigationReceiver.ACTION_YANDEX_ROADCAMERA)
-            addAction(NavigationReceiver.ACTION_YANDEX_TRAFFICLIGHT)
             addAction(NavigationReceiver.ACTION_WINDSHIELD_TRAFFIC_LIGHT)
             addAction(NavigationReceiver.ACTION_YANDEX_ROUTE_POLYLINE)
             addAction(NavigationReceiver.ACTION_NATIVE_NAV_STOP)

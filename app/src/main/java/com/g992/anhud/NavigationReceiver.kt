@@ -270,33 +270,6 @@ class NavigationReceiver : BroadcastReceiver() {
                     scheduleRoadCameraHide(context)
                 }
             }
-            ACTION_YANDEX_TRAFFICLIGHT -> {
-                val trafficLightId = intent.getIntExtra(EXTRA_TRAFFIC_LIGHT_ID, 0)
-                val isVisible = intent.getBooleanExtra(EXTRA_TRAFFIC_IS_VISIBLE, true)
-                val signalColor = normalizeText(intent.getStringExtra(EXTRA_TRAFFIC_SIGNAL_COLOR).orEmpty())
-                val countdown = normalizeText(intent.getStringExtra(EXTRA_TRAFFIC_COUNTDOWN).orEmpty())
-                val timestamp = intent.getLongExtra(EXTRA_TRAFFIC_TIMESTAMP, 0L)
-                val arrowBitmap = getBitmapExtra(intent, EXTRA_TRAFFIC_ARROW_BITMAP)
-                val arrowDirection = normalizeText(intent.getStringExtra(EXTRA_TRAFFIC_ARROW_DIRECTION).orEmpty())
-                val arrowSize = if (arrowBitmap != null) "${arrowBitmap.width}x${arrowBitmap.height}" else "none"
-                Log.d(
-                    TAG,
-                    "Yandex traffic light: color=\"$signalColor\" countdown=\"$countdown\" timestamp=$timestamp " +
-                        "arrow=\"$arrowDirection\" arrowBitmap=$arrowSize id=$trafficLightId visible=$isVisible"
-                )
-                UiLogStore.append(LogCategory.NAVIGATION, "яндекс светофор: цвет=\"$signalColor\" обратный_отсчет=\"$countdown\"")
-                handleTrafficLightUpdate(
-                    context = context,
-                    action = action,
-                    id = trafficLightId,
-                    isVisible = isVisible,
-                    signalColor = signalColor,
-                    countdown = countdown,
-                    arrowBitmap = arrowBitmap,
-                    arrowDirection = arrowDirection,
-                    timestamp = timestamp
-                )
-            }
             ACTION_WINDSHIELD_TRAFFIC_LIGHT -> {
                 val color = normalizeText(intent.getStringExtra(EXTRA_TL_COLOR).orEmpty()).uppercase(Locale.US)
                 val countdown = normalizeText(intent.getStringExtra(EXTRA_TL_COUNTDOWN).orEmpty())
@@ -549,7 +522,6 @@ class NavigationReceiver : BroadcastReceiver() {
         const val ACTION_YANDEX_TRIP_STATUS_BITMAP = "com.yandex.TRIP_STATUS_BITMAP"
         const val ACTION_YANDEX_NAV_ACTIVE = "com.yandex.NAV_ACTIVE"
         const val ACTION_YANDEX_ROADCAMERA = "com.yandex.ROADCAMERA"
-        const val ACTION_YANDEX_TRAFFICLIGHT = "com.yandex.TRAFFICLIGHT"
         const val ACTION_YANDEX_ROUTE_POLYLINE = "com.yandex.ROUTE_POLYLINE"
         const val ACTION_WINDSHIELD_TRAFFIC_LIGHT = "plus.monjaro.TRAFFIC_LIGHT_UPDATE"
         const val ACTION_NATIVE_NAV_STOP = "com.g992.anhud.NATIVE_NAV_STOP"
@@ -572,13 +544,6 @@ class NavigationReceiver : BroadcastReceiver() {
         const val EXTRA_CAMERA_ID = "camera_id"
         const val EXTRA_CAMERA_DISTANCE = "distance_text"
         const val EXTRA_CAMERA_ICON = "camera_icon"
-        const val EXTRA_TRAFFIC_SIGNAL_COLOR = "signal_color"
-        const val EXTRA_TRAFFIC_COUNTDOWN = "countdown"
-        const val EXTRA_TRAFFIC_TIMESTAMP = "timestamp"
-        const val EXTRA_TRAFFIC_ARROW_BITMAP = "arrow_bitmap"
-        const val EXTRA_TRAFFIC_ARROW_DIRECTION = "arrow_direction"
-        const val EXTRA_TRAFFIC_LIGHT_ID = "traffic_light_id"
-        const val EXTRA_TRAFFIC_IS_VISIBLE = "is_visible"
         const val EXTRA_TL_COLOR = "tl_color"
         const val EXTRA_TL_COUNTDOWN = "tl_countdown"
         const val EXTRA_TL_ARROW = "tl_arrow"
@@ -640,7 +605,6 @@ class NavigationReceiver : BroadcastReceiver() {
                 action == ACTION_YANDEX_TRIP_STATUS_BITMAP ||
                 action == ACTION_YANDEX_NAV_ACTIVE ||
                 action == ACTION_YANDEX_ROADCAMERA ||
-                action == ACTION_YANDEX_TRAFFICLIGHT ||
                 action == ACTION_WINDSHIELD_TRAFFIC_LIGHT ||
                 action == ACTION_YANDEX_ROUTE_POLYLINE
         }
@@ -1063,78 +1027,6 @@ class NavigationReceiver : BroadcastReceiver() {
             return "$normalizedType:$bitmapKey"
         }
 
-        private fun handleTrafficLightUpdate(
-            context: Context,
-            action: String,
-            id: Int,
-            isVisible: Boolean,
-            signalColor: String,
-            countdown: String,
-            arrowBitmap: Bitmap?,
-            arrowDirection: String,
-            timestamp: Long
-        ) {
-            val now = System.currentTimeMillis()
-            trafficLightContext = context.applicationContext
-            if (!isVisible) {
-                if (id != 0) {
-                    activeTrafficLights.remove(id.toString())
-                }
-                updateTrafficLightState(context, action, now)
-                return
-            }
-            val timeoutSeconds = OverlayPrefs.trafficLightTimeout(context)
-            val timeoutMs = timeoutSeconds.takeIf { it > 0 }?.toLong()?.times(1000L)
-            val expiresAt = if (timeoutMs != null) {
-                now + timeoutMs
-            } else {
-                Long.MAX_VALUE
-            }
-            val resolvedId = if (id != 0) {
-                id
-            } else {
-                val base = timestamp.takeIf { it > 0L } ?: now
-                ((base % Int.MAX_VALUE).toInt().coerceAtLeast(1))
-            }
-            val existing = activeTrafficLights[resolvedId.toString()]
-            val incomingCountdown = countdown
-            val incomingColor = signalColor
-            val shouldIgnoreCountdown = existing != null &&
-                existing.countdownText.isNotBlank() &&
-                incomingCountdown.isBlank() &&
-                existing.color.equals(incomingColor, ignoreCase = true)
-            val resolvedCountdown = if (shouldIgnoreCountdown) {
-                existing?.countdownText.orEmpty()
-            } else {
-                incomingCountdown
-            }
-            val resolvedColor = if (shouldIgnoreCountdown) {
-                existing?.color.orEmpty()
-            } else {
-                incomingColor
-            }
-            val resolvedArrowBitmap = if (shouldIgnoreCountdown && arrowBitmap == null) {
-                existing?.arrowBitmap
-            } else {
-                arrowBitmap
-            }
-            val resolvedArrowDirection = if (shouldIgnoreCountdown && arrowDirection.isBlank()) {
-                existing?.arrowDirection.orEmpty()
-            } else {
-                arrowDirection
-            }
-            activeTrafficLights[resolvedId.toString()] = TrafficLightInfo(
-                id = resolvedId,
-                color = resolvedColor,
-                countdownText = resolvedCountdown,
-                arrowBitmap = resolvedArrowBitmap,
-                arrowDirection = resolvedArrowDirection,
-                lastUpdated = now,
-                expiresAt = expiresAt
-            )
-            updateTrafficLightState(context, action, now)
-        }
-
         private fun handleWindshieldTrafficLight(
             context: Context,
             action: String,
@@ -1219,8 +1111,6 @@ class NavigationReceiver : BroadcastReceiver() {
                 .take(maxActive)
             NavigationHudStore.update { state ->
                 state.copy(
-                    trafficLightColor = resolved.firstOrNull()?.color.orEmpty(),
-                    trafficLightCountdown = resolved.firstOrNull()?.countdownText.orEmpty(),
                     trafficLights = resolved,
                     source = SOURCE_YANDEX,
                     lastUpdated = now,
@@ -1293,7 +1183,7 @@ class NavigationReceiver : BroadcastReceiver() {
                 }
             }
             val context = trafficLightContext ?: return
-            updateTrafficLightState(context = context, action = "traffic_light_timeout", now = now)
+            updateTrafficLightState(context = context, action = "windshield_traffic_light_timeout", now = now)
         }
 
         private data class NativeNavPayload(

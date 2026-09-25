@@ -49,12 +49,10 @@ class WindshieldTrafficLightBatcherTest {
     }
 
     @Test
-    fun mergeReplacesWindshieldEntriesAndKeepsLegacy() {
-        val legacy = TrafficLightInfo(7, "GREEN", "5", null, "", 0, Long.MAX_VALUE)
+    fun mergeReplacesCurrentBatchAndKeepsCountdown() {
         val current = mapOf(
-            "7" to legacy,
-            "ws:a" to TrafficLightInfo("ws:a".hashCode(), "RED", "10", null, "", 0, 0, 0),
-            "ws:gone" to TrafficLightInfo("ws:gone".hashCode(), "RED", "", null, "", 0, 0, 1)
+            "ws:a" to TrafficLightInfo("ws:a".hashCode(), "RED", "10", "", 0, 0, 0),
+            "ws:gone" to TrafficLightInfo("ws:gone".hashCode(), "RED", "", "", 0, 0, 1)
         )
         val merged = WindshieldTrafficLightBatcher.merge(
             current,
@@ -62,7 +60,7 @@ class WindshieldTrafficLightBatcherTest {
             now = 100,
             ttlMs = 1000
         )
-        assertEquals(setOf("7", "ws:a", "ws:b"), merged.keys)
+        assertEquals(setOf("ws:a", "ws:b"), merged.keys)
         assertEquals("10", merged["ws:a"]!!.countdownText)
         assertEquals(0, merged["ws:a"]!!.position)
         assertEquals("LEFT", merged["ws:b"]!!.arrowDirection)
@@ -71,18 +69,17 @@ class WindshieldTrafficLightBatcherTest {
 
     @Test
     fun countdownDroppedWhenColorChanges() {
-        val current = mapOf("ws:a" to TrafficLightInfo("ws:a".hashCode(), "RED", "2", null, "", 0, 0, 0))
+        val current = mapOf("ws:a" to TrafficLightInfo("ws:a".hashCode(), "RED", "2", "", 0, 0, 0))
         val merged = WindshieldTrafficLightBatcher.merge(current, listOf(light("a", 0, color = "GREEN")), now = 1)
         assertEquals("", merged["ws:a"]!!.countdownText)
     }
 
     @Test
-    fun emptyBatchClearsWindshieldOnly() {
+    fun emptyBatchClearsAllLights() {
         val current = mapOf(
-            "1" to TrafficLightInfo(1, "RED", "", null, "", 0, Long.MAX_VALUE),
-            "ws:a" to TrafficLightInfo(2, "RED", "", null, "", 0, 0, 0)
+            "ws:a" to TrafficLightInfo(2, "RED", "", "", 0, 0, 0)
         )
-        assertEquals(setOf("1"), WindshieldTrafficLightBatcher.merge(current, emptyList(), now = 1).keys)
+        assertTrue(WindshieldTrafficLightBatcher.merge(current, emptyList(), now = 1).isEmpty())
         assertTrue(WindshieldTrafficLightBatcher.isClearSignal("", "", "", ""))
     }
 

@@ -152,7 +152,6 @@ class HudOverlayController(private val context: Context) {
     private var lastState: NavigationHudState = NavigationHudState()
     private var lastRenderSignature: RenderSignature? = null
     private var lastMapDebugKey: String? = null
-    private var trafficLightPreviewArrow: Bitmap? = null
     private var laneGuidanceHudBitmapSourceToken: Int = Int.MIN_VALUE
     private var laneGuidanceHudBitmapSourceGenId: Int = -1
     private var laneGuidanceHudBitmapSourceWidth: Int = 0
@@ -469,10 +468,7 @@ class HudOverlayController(private val context: Context) {
                 color = light.color,
                 countdownText = light.countdownText,
                 arrowDirection = light.arrowDirection,
-                position = light.position,
-                arrowGenId = light.arrowBitmap?.generationId ?: -1,
-                arrowWidth = light.arrowBitmap?.width ?: 0,
-                arrowHeight = light.arrowBitmap?.height ?: 0
+                position = light.position
             )
         }
         return RenderSignature(
@@ -591,10 +587,7 @@ class HudOverlayController(private val context: Context) {
         val color: String,
         val countdownText: String,
         val arrowDirection: String,
-        val position: Int,
-        val arrowGenId: Int,
-        val arrowWidth: Int,
-        val arrowHeight: Int
+        val position: Int
     )
 
     fun clearNavigation() {
@@ -2037,14 +2030,12 @@ class HudOverlayController(private val context: Context) {
         val roadCameraHasData = state.roadCameraIcon != null && state.roadCameraDistance?.isNotBlank() == true
         val trafficLights = if (previewTrafficLight) {
             val previewCount = trafficLightMaxActive.coerceAtLeast(1)
-            val previewArrow = resolveTrafficLightPreviewArrow()
             val previewCountdown = context.getString(R.string.preview_traffic_light_countdown)
             List(previewCount) { index ->
                 TrafficLightInfo(
                     id = index + 1,
                     color = "GREEN",
                     countdownText = previewCountdown,
-                    arrowBitmap = previewArrow,
                     arrowDirection = "FORWARD",
                     lastUpdated = System.currentTimeMillis(),
                     expiresAt = Long.MAX_VALUE
@@ -2170,7 +2161,7 @@ class HudOverlayController(private val context: Context) {
             updateHudSpeedOverspeed(false)
         }
         updateRoadCamera(state.roadCameraIcon, roadCameraDistanceText, roadCameraAllowed, previewRoadCamera)
-        updateTrafficLights(trafficLights, trafficLightAllowed, previewTrafficLight)
+        updateTrafficLights(trafficLights, trafficLightAllowed)
         updateLaneGuidance(
             maneuver = laneGuidanceManeuver,
             preview = previewLaneGuidance,
@@ -2995,24 +2986,9 @@ class HudOverlayController(private val context: Context) {
         container.visibility = View.VISIBLE
     }
 
-    private fun resolveTrafficLightPreviewArrow(): Bitmap? {
-        trafficLightPreviewArrow?.let { return it }
-        val drawable = ContextCompat.getDrawable(context, R.drawable.context_lane_straightahead_small_24)
-            ?: return null
-        val size = context.resources.getDimensionPixelSize(R.dimen.traffic_light_arrow_size_expanded)
-            .coerceAtLeast(1)
-        val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
-        val canvas = Canvas(bitmap)
-        drawable.setBounds(0, 0, size, size)
-        drawable.draw(canvas)
-        trafficLightPreviewArrow = bitmap
-        return bitmap
-    }
-
     private fun updateTrafficLights(
         lights: List<TrafficLightInfo>,
-        allowed: Boolean,
-        preview: Boolean
+        allowed: Boolean
     ) {
         val container = trafficLightContainer ?: return
         if (!allowed) {
@@ -3043,19 +3019,14 @@ class HudOverlayController(private val context: Context) {
             val backgroundRes = resolveTrafficLightBackground(light.color)
             val countdownText = light.countdownText
 
-            val arrowRes = if (light.arrowBitmap == null) resolveTrafficLightArrowRes(light.arrowDirection) else null
-            val useExpanded = light.arrowBitmap != null || arrowRes != null
-            if (useExpanded) {
+            val arrowRes = resolveTrafficLightArrowRes(light.arrowDirection)
+            if (arrowRes != null) {
                 compactView.visibility = View.GONE
                 expandedView.visibility = View.VISIBLE
                 expandedCircle.setBackgroundResource(backgroundRes)
                 expandedText.text = countdownText
                 expandedText.visibility = if (countdownText.isBlank()) View.INVISIBLE else View.VISIBLE
-                if (light.arrowBitmap != null) {
-                    expandedIcon.setImageBitmap(light.arrowBitmap)
-                } else if (arrowRes != null) {
-                    expandedIcon.setImageResource(arrowRes)
-                }
+                expandedIcon.setImageResource(arrowRes)
                 expandedIcon.visibility = View.VISIBLE
             } else {
                 compactView.visibility = View.VISIBLE
@@ -3095,10 +3066,10 @@ class HudOverlayController(private val context: Context) {
 
     private fun resolveTrafficLightBackground(color: String): Int {
         return when (color.trim().uppercase(Locale.US)) {
-            "RED" -> R.drawable.traffic_light_background_red
+            "RED", "RED_AND_YELLOW" -> R.drawable.traffic_light_background_red
             "YELLOW" -> R.drawable.traffic_light_background_yellow
             "GREEN" -> R.drawable.traffic_light_background_green
-            else -> R.drawable.traffic_light_background_green
+            else -> R.drawable.traffic_light_background_circle
         }
     }
 

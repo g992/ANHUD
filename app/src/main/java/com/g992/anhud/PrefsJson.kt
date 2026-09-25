@@ -379,7 +379,6 @@ object PrefsJson {
         putBoolean("overlay_lane_guidance_show_distance", OverlayPrefs.laneGuidanceShowDistance(context))
         putInt("camera_timeout_near", OverlayPrefs.cameraTimeoutNear(context))
         putInt("camera_timeout_far", OverlayPrefs.cameraTimeoutFar(context))
-        putInt("traffic_light_timeout", OverlayPrefs.trafficLightTimeout(context))
         putInt("nav_notification_end_timeout", OverlayPrefs.navNotificationEndTimeout(context))
         putInt("nav_updates_end_timeout", OverlayPrefs.navUpdatesEndTimeout(context))
         putInt("road_camera_timeout", OverlayPrefs.roadCameraTimeout(context))

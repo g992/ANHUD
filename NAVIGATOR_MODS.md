@@ -1,13 +1,13 @@
-# Мега-ЯН 30.3.0 vs ANHUD: интенты навигатора
+# ЯН MonjaroMOD 30.3.0 M+mHUD v2 vs ANHUD: интенты навигатора
 
-Источник: `1.3. Мега-ЯН v.30.3.0_F100_kill.apk` (`ru.yandex.yandexnavi` 30.3.0 / 739564630, targetSdk понижен до 29, модовые dex собраны 05–09.09.2026).
-Сравнение с тем, что читает ANHUD (`NavigationReceiver.kt`, `MapRouteTelemetry.kt`) и с baseline `MODIFICATIONS.md` (YN 26.7.2).
+Источник: `ЯН_MonjaroMOD_v30.3.0_M+mHUD_v2.apk` из `~/Downloads`, SHA-256 `39167536646215bc53be94d489b3cc94a94727cf87f097c869b7d8e13a1f2e14` (`ru.yandex.yandexnavi` 30.3.0 / 739564630, targetSdk 29). Проверены smali APK и текущие приёмники ANHUD (`NavigationReceiver.kt`, `MapRouteTelemetry.kt`). Предыдущий разбор `1.3. Мега-ЯН v.30.3.0_F100_kill.apk` служит ориентиром; побайтового сравнения нет, поскольку того APK сейчас нет локально. Проверка статическая, без запуска на устройстве.
 
 ## TL;DR
 
-- **Мини-карты в этой сборке нет.** Ни Bitmap-broadcast'а карты, ни Surface/VirtualDisplay/SharedMemory/ContentProvider/сокета в модовом коде. Проверено grep'ом по всем 20 dex и jadx-исходникам.
-- Единственный канал «карта наружу» — **стоковый** `NavigationCarAppService` (Android Auto / Car App Library, категории `NAVIGATION` + `FEATURE_CLUSTER`). Хост отдаёт Surface, но allowlist пропускает только Google gearhead/templates host или приложение с системным `android.car.permission.TEMPLATE_RENDERER`. ANHUD хостом стать не может.
-- Мод — другая линия, не та, что в `MODIFICATIONS.md`: старый `YandexBroadcastHelper` + новый `JAM_IMAGE` + порт MirrorHUD/Monjaro (полосы, светофоры), почти всё адресно для MHUD-пакетов.
+- **Мини-карта появилась:** `MinimapBroadcaster` создаёт отдельную `OffscreenMapWindow` MapKit, снимает скриншоты и отправляет JPEG в `com.yandex.MINIMAP`. Управляется интентами `com.yandex.MINIMAP_ENABLE` / `com.yandex.MINIMAP_DISABLE`.
+- **ANHUD пока не получит кадры:** отправитель вызывает `setPackage` только для `plus.monjaro`, `ack48.monjarodev.mhud` и `ack48.monjarodev.mhud.dev`. `com.g992.anhud` в списке нет; регистрация приёмника в ANHUD сама по себе недостаточна.
+- Стоковый `NavigationCarAppService` остаётся отдельным каналом Android Auto / Car App Library с ограничением на допустимый хост. Новый `MINIMAP` использует обычный broadcast JPEG и к этому каналу не относится.
+- Мод — другая линия, не та, что в `MODIFICATIONS.md`: старый `YandexBroadcastHelper` + `JAM_IMAGE` + порт MirrorHUD/Monjaro (полосы, светофоры) + поток мини-карты, адресованный MHUD-пакетам.
 - Пропали: `com.yandex.TRAFFICLIGHT`, `NAV_ACTIVE`, `ROADCAMERA`, extra `maneuver_type`.
 - `com.g992.anhud` в APK не упоминается.
 
@@ -16,22 +16,23 @@
 | dex | Классы |
 |---|---|
 | `classes18` | `ru.YandexBroadcastHelper`, `ru.TLListener`, `ru.DensitySetting`, `ru.DensityLevel`, `ru.NavChannelSetting`, `ru.zoomdpi` |
-| `classes19` | `ru.yandex.yandexnavi.ui.util.LaneSignListener` (тег `NavLaneSign`, «MirrorHUD patch»), `NotificationLanesBroadcaster` (`NavNotifLanes`) |
-| `classes20` | `bin.mt.signature.KillerApplication` (подмена подписи, «_kill»), `org.lsposed.hiddenapibypass` |
+| `classes19` | `ru.yandex.yandexnavi.ui.util.LaneSignListener`, `NotificationLanesBroadcaster`, `MinimapBroadcaster` и его `EnableReceiver` / `CaptureRunnable` / `JpegRunnable` / `LocListener` |
 
-Врезки: `ContextManeuverView.setupRegularManeuver` → MANEUVER/NIXT/NEXTSTREET; `ContextEtaView`, `SpeedLimitView` → ETA/лимит; `guidance/jams/ProgressView.setProgress` → JAM_IMAGE; `mapkit/.../DistancesProviderImpl.start/stop` → `TLListener` + `LaneSignListener` на Windshield API.
-Новых компонентов в манифесте нет, входящих receiver'ов мод не регистрирует.
+Врезки: `ContextManeuverView.setupRegularManeuver` → MANEUVER/NIXT/NEXTSTREET; `ContextEtaView`, `SpeedLimitView` → ETA/лимит; `guidance/jams/ProgressView.setProgress` → JAM_IMAGE; `mapkit/.../DistancesProviderImpl.start/stop` → `TLListener` + `LaneSignListener` на Windshield API. После инициализации MapKit вызывается `MinimapBroadcaster.onMapKitReady`, а при смене маршрута — `onRouteChanged`.
+Нового статического receiver'а мини-карты в манифесте нет: `EnableReceiver` регистрируется динамически после инициализации MapKit.
 
 ## Сводная таблица
 
-| Action | Мега-ЯН 30.3.0 | ANHUD | Статус |
+| Action | MonjaroMOD M+mHUD v2 | ANHUD | Статус по статическому анализу |
 |---|---|---|---|
-| `com.yandex.MANEUVER` | `maneuver_bitmap` (Bitmap) | `maneuver_bitmap`, `maneuver_type` | ✅ работает; `maneuver_type` больше не приходит → всегда fallback на `ManeuverRecognition.analyze` |
+| `com.yandex.MANEUVER` | `maneuver_bitmap` (Bitmap) | `maneuver_bitmap`, `maneuver_type` | ✅ форматы совместимы; `maneuver_type` не приходит → fallback на `ManeuverRecognition.analyze` |
 | `com.yandex.NIXT` | `next_text` | `next_text` | ✅; формат `"300  м"` (двойной пробел), значение отстаёт на одно обновление |
 | `com.yandex.NEXTSTREET` | `next_street` | `next_street` | ✅ |
 | `com.yandex.SPEEDLIMIT` | `speedlimit_text` | то же | ✅ |
 | `com.yandex.ARRIVAL` / `DISTANCE` / `TIME` | `Arrival_text` / `Distance_text` / `Time_text` | то же | ✅ |
 | `com.yandex.JAM_IMAGE` | `jam_bitmap` (ARGB_8888, размер ProgressView, ≤1/с) | — | 🆕 не слушаем |
+| `com.yandex.MINIMAP_ENABLE` / `com.yandex.MINIMAP_DISABLE` | входящие команды для `MinimapBroadcaster` | — | ✅ ЯН принимает после инициализации MapKit; ANHUD их пока не отправляет |
+| `com.yandex.MINIMAP` | `minimap_jpeg` (`byte[]` JPEG), `minimap_has_route` (`bool`), `minimap_src` (`String`); при простое без JPEG | — | 🔒 адресно трём MHUD-пакетам; ANHUD не получит |
 | `plus.monjaro.TRAFFIC_LIGHT_UPDATE` (глобально) | `tl_color`, `tl_countdown`, `tl_arrow`, `tl_id`, `tl_position`, `tl_source` | `NavigationReceiver` + `WindshieldTrafficLightBatcher` | ✅ принимается; замена `com.yandex.TRAFFICLIGHT` |
 | `com.yandex.TRAFFICLIGHT` | — | `traffic_light_id`, `is_visible`, `signal_color`, `countdown`, `timestamp`, `arrow_bitmap`, `arrow_direction` | ❌ удалено, блок светофоров мёртв |
 | `com.yandex.ROADCAMERA` | — | `camera_id`, `distance_text`, `camera_icon` | ❌ удалено |
@@ -46,13 +47,30 @@
 
 MHUD-пакеты (`setPackage` на каждый): `plus.monjaro`, `ack48.monjarodev.mhud`, `ack48.monjarodev.mhud.dev`.
 
-**Итог по карте:** на этой сборке встроенная MapLibre-карта ANHUD останется без маршрута. Маршрутные интенты (`ROUTE_POLYLINE`/`ROUTE_TELEMETRY`/…) шлёт какая-то другая сборка — не эта.
+**Итог по карте:** встроенная MapLibre-карта ANHUD останется без маршрута: `ROUTE_POLYLINE`/`ROUTE_TELEMETRY` эта сборка не отправляет. Отдельный поток готовых кадров Яндекс-карты есть, но для ANHUD он недоступен до изменения адресатов в APK или другого согласованного способа передачи.
 
 ## Детали новых интентов
 
 ### `com.yandex.JAM_IMAGE`
 - Extra: `jam_bitmap` — картинка полосы пробок (прогресс-бар маршрута), ARGB_8888.
 - Отправка из `ProgressView.setProgress`, троттлинг 1 с, только если view видима и размер > 0. Без флагов → нужен динамический receiver с `RECEIVER_EXPORTED`.
+
+### `com.yandex.MINIMAP_ENABLE` / `com.yandex.MINIMAP_DISABLE` → `com.yandex.MINIMAP`
+
+- `MinimapBroadcaster.onMapKitReady` регистрирует динамический `EnableReceiver` на `ENABLE` и `DISABLE`. Пока процесс ЯН не инициализировал MapKit, команду принимать некому. На Android 13+ регистрация идёт с `RECEIVER_EXPORTED` (значение `2`); на более ранних версиях — без флага.
+- `ENABLE` читает `minimap_width` и `minimap_height` (`int`, **нужно передать оба**): положительные значения ограничиваются 96–1920 px по каждой оси и округляются вниз до кратности 8. Без ранее заданных размеров `OffscreenMapWindow` не создаётся. Кадр снимается после прогрева 800 мс.
+- Остальные extras команды `ENABLE`: `minimap_labels` (`bool`, показывать подписи); `minimap_roads` (`bool`, оставить дороги); `minimap_view` (`int`: `0` — объёмный вид, `1`/`2` — 2D с разным масштабом, `3` принудительно включает дороги и режим `1`); `minimap_zoom` (`float`, `0` — автоматический); `minimap_overlay` (`float`, размер указателя); `minimap_route` (`float`, толщина маршрута); `minimap_hide_on_route_end` (`bool`). `DISABLE` выключает захват; также принимает `minimap_hide_on_route_end`.
+- Для каждого кадра используется `OffscreenMapWindow.captureScreenshot()`, JPEG quality `60`, затем `com.yandex.MINIMAP` с `minimap_jpeg` (`byte[]`), `minimap_has_route` (`bool`) и `minimap_src` (`String`, здесь `ru.yandex.yandexnavi`). Флаги интента `0x10000020`. Константа `minimap_bitmap` в классе объявлена, но в исходящий интент не записывается.
+- Цикл запланирован каждые 33 мс, с одним JPEG worker и пропуском кадров при его занятости; это **верхняя частота попыток**, а не гарантированные 30 FPS. Карта MapKit настроена на максимум 15 FPS. Размер JPEG не ограничен проверкой перед `sendBroadcast`, поэтому большие кадры требуют проверки лимита Binder на устройстве.
+- Если включено `minimap_hide_on_route_end` и маршрута нет, отправляется один `com.yandex.MINIMAP` с `minimap_has_route=false`, `minimap_src` и **без** `minimap_jpeg`; затем цикл останавливается. Получатель должен очистить устаревший кадр.
+- Все исходящие `MINIMAP` посылаются отдельно через `setPackage` только установленным `plus.monjaro`, `ack48.monjarodev.mhud` и `ack48.monjarodev.mhud.dev`. В текущем APK нет отправки в `com.g992.anhud`.
+
+Команда для проверки после запуска ЯН и инициализации MapKit (в текущем APK она не изменит адресатов кадров):
+
+```bash
+adb shell am broadcast -p ru.yandex.yandexnavi -a com.yandex.MINIMAP_ENABLE --ei minimap_width 320 --ei minimap_height 320
+adb shell am broadcast -p ru.yandex.yandexnavi -a com.yandex.MINIMAP_DISABLE
+```
 
 ### `plus.monjaro.TRAFFIC_LIGHT_UPDATE` (глобальный, от `ru.TLListener`)
 - Флаги `0x01000020` (INCLUDE_BACKGROUND | INCLUDE_STOPPED) — доходит и до manifest-receiver'а.
@@ -85,11 +103,12 @@ MHUD-пакеты (`setPackage` на каждый): `plus.monjaro`, `ack48.monja
 | «DPI» | `zoomdpi_prefs` | `density_level` (float) | масштаб рендера MapKit, перезапуск процесса |
 | «Аудиоканал навигации» | `nav_channel_prefs` | `nav_channel` (bool) | озвучка через usage NAVIGATION_GUIDANCE |
 
-Тумблеров для broadcast'ов нет — шлются всегда.
+Остальные навигационные broadcast'ы шлются без отдельного переключателя. Мини-карта управляется `MINIMAP_ENABLE` / `MINIMAP_DISABLE`.
 
 ## Баги мода
-- `LaneSignListener.attachGuidance` вызывает несуществующий `SpeedLimitBroadcaster.attach()` → `NoClassDefFoundError` глушится `catch Throwable`, `attachDrivingRoute` по этому пути не вызывается.
+- В этой версии `LaneSignListener.attachGuidance` вызывает `attachDrivingRoute` напрямую; описанный для прошлого APK вызов отсутствующего `SpeedLimitBroadcaster.attach()` больше не обнаружен.
 - Светофоры уходят дважды (глобально от `TLListener` и адресно от `LaneSignListener`).
+- `MinimapBroadcaster.refreshLiveTargets` добавляет в `sLiveTargets` **неустановленные** MHUD-пакеты, хотя `anyTargetInstalled` трактует непустой список как наличие получателя. Если установлены все три пакета, автоматический запуск по смене маршрута не сработает; если не установлен ни один, запуск может происходить впустую. Прямой `MINIMAP_ENABLE` не зависит от этой проверки, но отправка кадров всё равно ограничена установленными MHUD-пакетами.
 
 ## Что делать в ANHUD
 
@@ -98,18 +117,5 @@ MHUD-пакеты (`setPackage` на каждый): `plus.monjaro`, `ack48.monja
 3. **Манёвр:** `maneuver_type` не придёт — убедиться, что `ManeuverRecognition` покрывает все иконки.
 4. **NIXT:** парсер должен терпеть двойной пробел (`normalizeText` уже схлопывает).
 5. **Признак ведения:** NAV_ACTIVE нет; опираться на таймаут `touchNavigatorIntentTimeout` + уведомление навигатора.
-6. **Маршрут/карта:** с этой сборкой ROUTE_* не приходят. Нужна сборка с этими патчами или свой патч.
-
-## Мини-карта: как проверить новую сборку
-
-Если появится APK, где мини-карта есть:
-```bash
-apktool d -f -o out app.apk
-grep -rhoE 'const-string [vp][0-9]+, "(com\.yandex|plus\.monjaro)\.[A-Z_]+"' out | sort -u
-grep -rlE 'createVirtualDisplay|ImageReader|SharedMemory|HardwareBuffer|Bitmap;->compress' out/smali_classes1[8-9]* out/smali_classes2*
-diff <(grep -oE 'android:name="[^"]+"' old/AndroidManifest.xml | sort) <(grep -oE 'android:name="[^"]+"' out/AndroidManifest.xml | sort)
-```
-Вероятные варианты и приём:
-- **Bitmap в broadcast** (как JAM_IMAGE): принимать тем же receiver'ом. Лимит Binder ~1 МБ → маленькое разрешение, низкий FPS (ARGB 400×400 ≈ 640 КБ).
-- **Surface через bound service / Presentation на VirtualDisplay**: ANHUD создаёт `SurfaceTexture`/`TextureView` в оверлее и передаёт `Surface` в сервис навигатора. Нужны имя сервиса и AIDL/Messenger-протокол.
-- **Car App cluster**: требует системного разрешения — нереально без root/системной подписи.
+6. **Маршрут/карта:** `ROUTE_*` не приходят; отдельный поток `MINIMAP` даёт готовую картинку Яндекс-карты, а не геометрию маршрута для MapLibre.
+7. **Использовать мини-карту в ANHUD:** сначала обеспечить отправку `com.yandex.MINIMAP` в `com.g992.anhud` (например, патчем списка адресатов `TARGET_PACKAGES` с последующей пересборкой и подписью APK). Затем в ANHUD принимать `minimap_jpeg`, декодировать и показывать последний кадр в блоке карты; при `minimap_has_route=false` без JPEG очищать его. Отправлять `ENABLE` с размерами при включении блока и `DISABLE` при выключении. Проверить на устройстве доставку, частоту, задержку, размер кадра и нагрузку. Только после этого выбирать, заменять ли визуально текущую MapLibre-карту.

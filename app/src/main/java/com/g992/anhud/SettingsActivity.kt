@@ -106,7 +106,6 @@ class SettingsActivity : ScaledActivity() {
     private lateinit var useStrelkaSwitch: SwitchCompat
     private lateinit var cameraTimeoutNearInput: EditText
     private lateinit var cameraTimeoutFarInput: EditText
-    private lateinit var trafficLightTimeoutInput: EditText
     private lateinit var roadCameraTimeoutInput: EditText
     private lateinit var navNotificationEndTimeoutInput: EditText
     private lateinit var navUpdatesEndTimeoutInput: EditText
@@ -335,7 +334,6 @@ class SettingsActivity : ScaledActivity() {
         useStrelkaSwitch = findViewById(R.id.useStrelkaSwitch)
         cameraTimeoutNearInput = findViewById(R.id.cameraTimeoutNearInput)
         cameraTimeoutFarInput = findViewById(R.id.cameraTimeoutFarInput)
-        trafficLightTimeoutInput = findViewById(R.id.trafficLightTimeoutInput)
         roadCameraTimeoutInput = findViewById(R.id.roadCameraTimeoutInput)
         navNotificationEndTimeoutInput = findViewById(R.id.navNotificationEndTimeoutInput)
         navUpdatesEndTimeoutInput = findViewById(R.id.navUpdatesEndTimeoutInput)
@@ -586,17 +584,6 @@ class SettingsActivity : ScaledActivity() {
                 val value = s?.toString()?.toIntOrNull() ?: 0
                 val clamped = value.coerceIn(0, OverlayPrefs.TIMEOUT_MAX)
                 OverlayPrefs.setCameraTimeoutFar(this@SettingsActivity, clamped)
-            }
-        })
-
-        trafficLightTimeoutInput.addTextChangedListener(object : TextWatcher {
-            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
-            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
-            override fun afterTextChanged(s: Editable?) {
-                if (isSyncingUi) return
-                val value = s?.toString()?.toIntOrNull() ?: 0
-                val clamped = value.coerceIn(0, OverlayPrefs.TIMEOUT_MAX)
-                OverlayPrefs.setTrafficLightTimeout(this@SettingsActivity, clamped)
             }
         })
 
@@ -3566,7 +3553,6 @@ class SettingsActivity : ScaledActivity() {
             mainMenuCustomBlocksVisibleSwitch.isChecked = CustomBlockRepository(this).load().menuVisible
             cameraTimeoutNearInput.setText(OverlayPrefs.cameraTimeoutNear(this).toString())
             cameraTimeoutFarInput.setText(OverlayPrefs.cameraTimeoutFar(this).toString())
-            trafficLightTimeoutInput.setText(OverlayPrefs.trafficLightTimeout(this).toString())
             roadCameraTimeoutInput.setText(OverlayPrefs.roadCameraTimeout(this).toString())
             navNotificationEndTimeoutInput.setText(OverlayPrefs.navNotificationEndTimeout(this).toString())
             navUpdatesEndTimeoutInput.setText(OverlayPrefs.navUpdatesEndTimeout(this).toString())

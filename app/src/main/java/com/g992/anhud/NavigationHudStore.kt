@@ -6,7 +6,6 @@ data class TrafficLightInfo(
     val id: Int,
     val color: String,
     val countdownText: String,
-    val arrowBitmap: Bitmap?,
     val arrowDirection: String,
     val lastUpdated: Long,
     val expiresAt: Long,
@@ -22,8 +21,6 @@ data class NavigationHudState(
     val arrival: String = "",
     val distance: String = "",
     val time: String = "",
-    val trafficLight: String = "",
-    val trafficCountdown: String = "",
     val maneuverBitmap: Bitmap? = null,
     val maneuverType: String = "",
     val source: String = "",
@@ -57,8 +54,6 @@ data class NavigationHudState(
     val roadCameraId: String? = null,
     val roadCameraDistance: String? = null,
     val roadCameraIcon: Bitmap? = null,
-    val trafficLightColor: String = "",
-    val trafficLightCountdown: String = "",
     val trafficLights: List<TrafficLightInfo> = emptyList(),
     val turnSignalLeft: Boolean = false,
     val turnSignalRight: Boolean = false,
@@ -72,8 +67,6 @@ data class NavigationHudState(
             arrival.isBlank() &&
             distance.isBlank() &&
             time.isBlank() &&
-            trafficLight.isBlank() &&
-            trafficCountdown.isBlank() &&
             maneuverBitmap == null &&
             maneuverType.isBlank() &&
             tripStatusBitmap == null &&
@@ -133,8 +126,6 @@ object NavigationHudStore {
                 arrival = "",
                 distance = "",
                 time = "",
-                trafficLight = "",
-                trafficCountdown = "",
                 maneuverBitmap = null,
                 maneuverType = "",
                 source = "",
@@ -168,8 +159,6 @@ object NavigationHudStore {
                 roadCameraId = if (preserveRoadCamera) current.roadCameraId else null,
                 roadCameraDistance = if (preserveRoadCamera) current.roadCameraDistance else null,
                 roadCameraIcon = if (preserveRoadCamera) current.roadCameraIcon else null,
-                trafficLightColor = "",
-                trafficLightCountdown = "",
                 trafficLights = emptyList(),
                 turnSignalLeft = false,
                 turnSignalRight = false,

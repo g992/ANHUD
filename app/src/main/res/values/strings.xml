@@ -151,7 +151,7 @@
     <string name="preview_direction_label">Стрелка</string>
     <string name="preview_distance_text">1 км</string>
     <string name="preview_street_text">Пушкина</string>
-    <string name="preview_time_text">1 ч 10 мин · 84 км (12:00)</string>
+    <string name="preview_time_text">1 ч 10 мин\n84 км (12:00)</string>
     <string name="preview_time_text_no_distance">1 ч 10 мин (12:00)</string>
     <string name="preview_trip_status_arrival_text">12:00</string>
     <string name="preview_trip_status_eta_text">1 ч 10 мин</string>
@@ -299,8 +299,6 @@
     <string name="camera_timeout_near_label">Таймаут камер (HUD Speed, расстояние &lt; 50м)</string>
     <string name="camera_timeout_far_label">Таймаут камер (HUD Speed, расстояние ≥ 50м)</string>
     <string name="camera_timeout_hint">0 - отключить таймаут, 1-360 секунд</string>
-    <string name="traffic_light_timeout_label">Таймаут светофоров</string>
-    <string name="traffic_light_timeout_hint">0 - отключить, 1-360 секунд. Скрывает светофор при отсутствии данных</string>
     <string name="road_camera_timeout_label">Таймаут для камер (Яндекс)</string>
     <string name="road_camera_timeout_hint">0 - отключить, 1-360 секунд. Скрывает камеру после последнего обновления</string>
     <string name="nav_notification_end_timeout_label">Таймаут завершения поездки</string>
@@ -428,8 +426,6 @@
     <string name="guide_settings_timeout_near_body">Сколько секунд держать предупреждение, если камера ближе 50 м. 0 — выключить.</string>
     <string name="guide_settings_timeout_far_title">Таймаут камер (далеко)</string>
     <string name="guide_settings_timeout_far_body">Срабатывает при расстоянии 50 м и далее.</string>
-    <string name="guide_settings_traffic_light_timeout_title">Таймаут светофоров</string>
-    <string name="guide_settings_traffic_light_timeout_body">Скрывает светофор, если нет свежих данных.</string>
     <string name="guide_settings_road_camera_timeout_title">Таймаут камер (Яндекс)</string>
     <string name="guide_settings_road_camera_timeout_body">Скрывает предупреждение о камере после последнего обновления.</string>
     <string name="guide_settings_nav_notification_timeout_title">Таймаут завершения поездки</string>
