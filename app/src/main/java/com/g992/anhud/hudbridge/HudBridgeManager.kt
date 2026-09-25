@@ -171,8 +171,6 @@ object HudBridgeManager {
         } catch (e: IOException) {
             throw IOException("в APK нет ${DaemonInstaller.ASSET_NAME}")
         }
-        step(gen, "Проверяю доступ к QNX…")
-        DaemonInstaller.checkSharedDirWritable()?.let { throw IOException("NFS-мост QNX недоступен: $it") }
 
         val qnx = openQnx(gen, qnxWaitMs)
         val installed = qnx.use { shell ->

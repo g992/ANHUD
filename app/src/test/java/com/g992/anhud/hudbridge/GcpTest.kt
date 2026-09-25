@@ -144,6 +144,34 @@ class GcpTest {
     }
 
     @Test
+    fun telnetPrintLinesRecreateEveryByte() {
+        val bytes = ByteArray(3000).also { Random(7).nextBytes(it) }
+        bytes[0] = 0
+        bytes[1] = '\''.code.toByte()
+        bytes[2] = '\\'.code.toByte()
+        val lines = DaemonInstaller.printLines(bytes, "/tmp/x")
+        val out = ByteArrayOutputStream()
+        val line = Regex("""^print -n '([^']*)' >> /tmp/x$""")
+        for (l in lines) {
+            assertTrue(l, l.length <= 200)
+            val body = line.find(l)?.groupValues?.get(1) ?: return fail("bad line: $l")
+            var i = 0
+            while (i < body.length) {
+                if (body[i] == '\\') {
+                    assertEquals('0', body[i + 1])
+                    out.write(body.substring(i + 2, i + 5).toInt(8))
+                    i += 5
+                } else {
+                    assertTrue(body[i].code in 0x21..0x7e)
+                    out.write(body[i].code)
+                    i++
+                }
+            }
+        }
+        assertArrayEquals(bytes, out.toByteArray())
+    }
+
+    @Test
     fun onlyTheMarkerFollowedByTheExitCodeEndsACommand() {
         val m = "__DONE_1__"
         assertEquals(-1, QnxShell.completedMarker("# sleep 5; echo $m\$?\n", m))

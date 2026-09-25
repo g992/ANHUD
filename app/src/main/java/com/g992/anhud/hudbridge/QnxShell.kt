@@ -44,6 +44,24 @@ class QnxShell private constructor(private val socket: Socket) : Closeable {
         return parseExecOutput(raw, marker) ?: throw IOException("QNX не ответила на команду: $cmd")
     }
 
+    /**
+     * Sends every line of [lines] as its own command without waiting in between, then one
+     * marker for the lot. Only the exit code of the last line is reported.
+     */
+    @Throws(IOException::class)
+    fun execBatch(lines: List<String>, timeoutMs: Long = EXEC_TIMEOUT_MS): Result {
+        val marker = "__DONE_" + System.nanoTime() + "__"
+        val sb = StringBuilder()
+        for (line in lines) {
+            sb.append(line.trim()).append("\r\n")
+        }
+        sb.append("echo ").append(marker).append("\$?\r\n")
+        output.write(sb.toString().toByteArray(Charsets.UTF_8))
+        output.flush()
+        val raw = readUntilMarker(marker, timeoutMs)
+        return parseExecOutput(raw, marker) ?: throw IOException("QNX не ответила на пакет из ${lines.size} команд")
+    }
+
     override fun close() {
         try {
             socket.close()
