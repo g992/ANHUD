@@ -10,7 +10,8 @@ data class WindshieldTrafficLight(
     val position: Int,
     val color: String,
     val countdown: String,
-    val arrow: String
+    val arrow: String,
+    val distanceMeters: Double? = null
 ) {
     companion object {
         const val KEY_PREFIX = "ws:"
@@ -74,6 +75,25 @@ class WindshieldTrafficLightBatcher(
             return color.isBlank() && id.isBlank() && countdown.isBlank() && arrow.isBlank()
         }
 
+        fun parseDistanceMeters(value: Any?): Double? {
+            val parsed = when (value) {
+                is Number -> value.toDouble()
+                is String -> value.trim().replace(',', '.').toDoubleOrNull()
+                else -> null
+            }
+            return parsed?.takeIf { it.isFinite() && it >= 0.0 }
+        }
+
+        /** Position 0 is nearest. Filter before limiting so a distant item never takes a slot. */
+        fun visibleWithin(
+            lights: List<TrafficLightInfo>,
+            maxDistanceMeters: Int,
+            maxActive: Int
+        ): List<TrafficLightInfo> = lights
+            .filter { light -> light.distanceMeters?.let { it <= maxDistanceMeters } == true }
+            .sortedWith(compareBy<TrafficLightInfo>({ it.position }, { it.distanceMeters }, { it.id }))
+            .take(maxActive.coerceAtLeast(1))
+
         /** Replaces the current batch, retaining a countdown when its light keeps the same colour. */
         fun merge(
             current: Map<String, TrafficLightInfo>,
@@ -95,7 +115,8 @@ class WindshieldTrafficLightBatcher(
                     arrowDirection = light.arrow,
                     lastUpdated = now,
                     expiresAt = now + ttlMs,
-                    position = light.position
+                    position = light.position,
+                    distanceMeters = light.distanceMeters
                 )
             }
             return result

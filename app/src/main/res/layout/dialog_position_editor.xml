@@ -2,7 +2,8 @@
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:fillViewport="true">
+    android:fillViewport="true"
+    android:fadeScrollbars="false">
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -30,14 +31,10 @@
                 android:background="#603396F3"
                 android:visibility="gone">
 
-                <TextView
+                <com.g992.anhud.YandexMapPreviewView
                     android:layout_width="match_parent"
                     android:layout_height="match_parent"
-                    android:gravity="center"
-                    android:text="@string/position_map_block_label"
-                    android:textColor="@color/white"
-                    android:textSize="12sp"
-                    android:textStyle="bold" />
+                    android:contentDescription="@string/position_map_block_label" />
 
                 <com.g992.anhud.MapTripStatusView
                     android:id="@+id/dialogPreviewMapTripStatus"
@@ -60,14 +57,13 @@
                     android:layout_height="48dp"
                     android:background="@drawable/bg_direction_box">
 
-                    <TextView
+                    <ImageView
                         android:layout_width="match_parent"
                         android:layout_height="match_parent"
-                        android:gravity="center"
-                        android:text="@string/preview_direction_label"
-                        android:textColor="@color/white"
-                        android:textSize="14sp"
-                        android:textStyle="bold" />
+                        android:contentDescription="@string/preview_direction_label"
+                        android:padding="8dp"
+                        android:scaleType="fitCenter"
+                        android:src="@drawable/context_ra_turn_right" />
                 </FrameLayout>
 
                 <LinearLayout
@@ -116,17 +112,6 @@
                 android:orientation="vertical"
                 android:visibility="gone">
 
-                <TextView
-                    android:id="@+id/dialogPreviewLaneGuidancePlaceholder"
-                    android:layout_width="96dp"
-                    android:layout_height="48dp"
-                    android:gravity="center"
-                    android:padding="8dp"
-                    android:text="@string/position_lane_guidance_block_label"
-                    android:textColor="@color/white"
-                    android:textSize="10sp"
-                    android:textStyle="bold" />
-
                 <ImageView
                     android:id="@+id/dialogPreviewLaneGuidanceImage"
                     android:layout_width="wrap_content"
@@ -134,7 +119,7 @@
                     android:adjustViewBounds="true"
                     android:contentDescription="@string/position_lane_guidance_block_label"
                     android:scaleType="fitCenter"
-                    android:visibility="gone" />
+                    android:src="@drawable/preview_yandex_lanes" />
 
                 <TextView
                     android:id="@+id/dialogPreviewLaneGuidanceDistance"
@@ -142,7 +127,7 @@
                     android:layout_height="wrap_content"
                     android:gravity="center"
                     android:includeFontPadding="false"
-                    android:text="@string/preview_hudspeed_distance"
+                    android:text="@string/preview_lane_guidance_distance"
                     android:textColor="@color/white"
                     android:textSize="14sp"
                     android:textStyle="bold"
@@ -156,14 +141,13 @@
                 android:background="@drawable/bg_direction_box"
                 android:visibility="gone">
 
-                <TextView
+                <ImageView
                     android:layout_width="match_parent"
                     android:layout_height="match_parent"
-                    android:gravity="center"
-                    android:text="@string/preview_direction_label"
-                    android:textColor="@color/white"
-                    android:textSize="14sp"
-                    android:textStyle="bold" />
+                    android:contentDescription="@string/preview_direction_label"
+                    android:padding="8dp"
+                    android:scaleType="fitCenter"
+                    android:src="@drawable/context_ra_turn_right" />
             </FrameLayout>
 
             <TextView
@@ -702,6 +686,16 @@
         android:textSize="16sp" />
 
     <CheckBox
+        android:id="@+id/dialogMapJamsCheck"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:text="@string/position_map_jams"
+        android:textColor="@color/white"
+        android:textSize="16sp"
+        android:visibility="gone" />
+
+    <CheckBox
         android:id="@+id/dialogHideWhenMapActive"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
@@ -740,6 +734,43 @@
         android:textColor="@color/white"
         android:textSize="16sp"
         android:visibility="gone" />
+
+    <LinearLayout
+        android:id="@+id/dialogTrafficLightDistanceRow"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:orientation="vertical"
+        android:visibility="gone">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/position_traffic_light_display_distance"
+                android:textColor="@color/white"
+                android:textSize="16sp" />
+
+            <TextView
+                android:id="@+id/dialogTrafficLightDistanceValue"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textColor="@color/white"
+                android:textSize="14sp" />
+        </LinearLayout>
+
+        <SeekBar
+            android:id="@+id/dialogTrafficLightDistanceSeek"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp" />
+    </LinearLayout>
 
     <TextView
         android:layout_width="match_parent"

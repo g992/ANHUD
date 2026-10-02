@@ -462,6 +462,7 @@ class HudStatusReceiver : BroadcastReceiver() {
             preserveStrelka = true
         )
         UiLogStore.append(LogCategory.NAVIGATION, "Маршрут завершен через intent")
+        YandexVisualStore.endRoute()
 
         // Send broadcast to clear overlay display
         val clearIntent = Intent(OverlayBroadcasts.ACTION_CLEAR_NAVIGATION)

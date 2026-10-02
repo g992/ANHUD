@@ -1,5 +1,6 @@
 package com.g992.anhud
 
+import android.content.res.ColorStateList
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.text.InputType
@@ -155,7 +156,7 @@ private fun MainActivity.createCustomBlockRow(block: CustomBlockDefinition): Vie
 
 private fun MainActivity.compactButton(label: String, action: () -> Unit): Button = Button(this).apply {
     text = label
-    textSize = 11f
+    textSize = 13f
     minWidth = 0
     minimumWidth = 0
     setPadding(customDp(8), 0, customDp(8), 0)
@@ -450,6 +451,9 @@ private data class SpinnerWithLabel(
             setPadding(0, activity.customDp(8), 0, 0)
         },
         android.widget.Spinner(activity).apply {
+            backgroundTintList = ColorStateList.valueOf(
+                ContextCompat.getColor(activity, R.color.spinner_indicator)
+            )
             val values = listOf(activity.getString(R.string.custom_block_choose_example)) + examples
             adapter = object : ArrayAdapter<String>(
                 activity,

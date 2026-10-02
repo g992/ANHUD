@@ -19,7 +19,9 @@ class NavigationReceiver : BroadcastReceiver() {
         if (action.startsWith("com.yandex.") && shouldSuppressDuplicateYandexIntent(intent, action)) {
             return
         }
-        if (action.startsWith("com.yandex.")) {
+        if (action == ACTION_YANDEX_MINIMAP || action == ACTION_YANDEX_JAM_IMAGE || action == ACTION_YANDEX_LANES_BITMAP) {
+            Log.d(TAG, "Yandex image: $action")
+        } else if (action.startsWith("com.yandex.")) {
             Log.d(TAG, "Yandex intent: $action extras=${formatExtras(intent)}")
         } else {
             Log.d(TAG, "not Yandex intent: $action extras=${formatExtras(intent)}")
@@ -48,6 +50,7 @@ class NavigationReceiver : BroadcastReceiver() {
                         "speedLimit=\"${update.speedLimit}\" active=${update.routeActive} source=\"${update.source}\""
                 )
                 if (intent.hasExtra(EXTRA_ROUTE_ACTIVE) && !update.routeActive) {
+                    YandexVisualStore.endRoute()
                     UiLogStore.append(LogCategory.NAVIGATION, "маршрут завершен (route_active=false)")
                     cancelNavigatorIntentTimeout()
                     dynamicHideTurnSpeedBucket = null
@@ -162,16 +165,54 @@ class NavigationReceiver : BroadcastReceiver() {
                     return
                 }
                 val raw = normalizeText(intent.getStringExtra(EXTRA_SPEEDLIMIT_TEXT).orEmpty())
+                if (raw.isBlank() && NavigationHudStore.snapshot().routeActive == false) return
                 Log.d(TAG, "Yandex speedlimit: $raw")
                 UiLogStore.append(LogCategory.NAVIGATION, "яндекс speedlimit=\"$raw\"")
                 NavigationHudStore.update { state ->
                     state.copy(
-                        speedLimit = raw.takeIf { it.isNotBlank() } ?: state.speedLimit,
+                        speedLimit = yandexSpeedLimitAfterUpdate(state.speedLimit, raw, state.routeActive),
                         source = SOURCE_YANDEX,
                         lastUpdated = System.currentTimeMillis(),
                         lastAction = action,
                         rawSpeedLimit = raw
                     )
+                }
+            }
+            ACTION_YANDEX_LANE_SIGN -> {
+                val queue = intent.getStringExtra("lanes").orEmpty()
+                YandexVisualStore.acceptLaneQueue(queue)
+            }
+            ACTION_YANDEX_LANES -> {
+                intent.getStringExtra("lane_data_v2")?.let(YandexVisualStore::acceptLaneQueue)
+            }
+            ACTION_YANDEX_LANE_DIST -> {
+                val text = intent.getStringExtra("dist").orEmpty() + intent.getStringExtra("metrics").orEmpty()
+                YandexVisualStore.acceptLaneDistance(text.trim())
+            }
+            ACTION_YANDEX_LANES_BITMAP -> YandexVisualStore.acceptLanes(getBitmapExtra(intent, "lanes_bitmap"))
+            ACTION_YANDEX_LANES_BITMAP_CLEAR -> YandexVisualStore.clearLanes()
+            ACTION_YANDEX_MINIMAP -> {
+                YandexVisualStore.acceptMinimap(
+                    intent.getByteArrayExtra("minimap_jpeg"),
+                    intent.getBooleanExtra("minimap_has_route", false)
+                )
+            }
+            ACTION_YANDEX_JAM_IMAGE -> {
+                val bitmap = getBitmapExtra(intent, "jam_bitmap")
+                    ?: intent.getByteArrayExtra("jam_bitmap")?.takeIf { it.size <= 900_000 }?.let { bytes ->
+                        BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                    }
+                YandexVisualStore.acceptJams(bitmap)
+            }
+            ACTION_YANDEX_NAVIGATION_ENDED -> {
+                if (intent.getStringExtra("source") == "yandex_lane_clear") {
+                    // The APK sends route_gone=true even after merely passing a junction.
+                    YandexVisualStore.clearLanes()
+                } else if (isYandexRouteEnd(intent.getStringExtra("source"), intent.getBooleanExtra("route_gone", true))) {
+                    YandexVisualStore.endRoute()
+                    endNavigation(context, action, "маршрут завершён (Яндекс)")
+                } else {
+                    YandexVisualStore.clearLanes()
                 }
             }
             ACTION_YANDEX_ARRIVAL -> {
@@ -242,45 +283,20 @@ class NavigationReceiver : BroadcastReceiver() {
                 UiLogStore.append(LogCategory.NAVIGATION, "яндекс состояние навигации: ${if (isActive) "активна" else "завершена"}")
                 // NAV_ACTIVE is ignored for navigation state; keep for diagnostics only.
             }
-            ACTION_YANDEX_ROADCAMERA -> {
-                val cameraId = normalizeText(intent.getStringExtra(EXTRA_CAMERA_ID).orEmpty())
-                val distance = normalizeText(intent.getStringExtra(EXTRA_CAMERA_DISTANCE).orEmpty())
-                val icon = getBitmapExtra(intent, EXTRA_CAMERA_ICON)
-                val iconSize = if (icon != null) "${icon.width}x${icon.height}" else "none"
-
-                if (cameraId.isBlank()) {
-                    Log.d(TAG, "Yandex road camera: hidden")
-                    UiLogStore.append(LogCategory.NAVIGATION, "яндекс дорожная камера: скрыта")
-                    cancelRoadCameraHide()
-                    clearRoadCamera(context, action)
-                } else {
-                    Log.d(TAG, "Yandex road camera: id=\"$cameraId\" distance=\"$distance\" icon=$iconSize")
-                    UiLogStore.append(LogCategory.NAVIGATION, "яндекс дорожная камера: id=\"$cameraId\" distance=\"$distance\" icon=$iconSize")
-                    roadCameraContext = context.applicationContext
-                    NavigationHudStore.update { state ->
-                        state.copy(
-                            roadCameraId = cameraId,
-                            roadCameraDistance = distance,
-                            roadCameraIcon = icon,
-                            source = SOURCE_YANDEX,
-                            lastUpdated = System.currentTimeMillis(),
-                            lastAction = action
-                        )
-                    }
-                    scheduleRoadCameraHide(context)
-                }
-            }
             ACTION_WINDSHIELD_TRAFFIC_LIGHT -> {
                 val color = normalizeText(intent.getStringExtra(EXTRA_TL_COLOR).orEmpty()).uppercase(Locale.US)
                 val countdown = normalizeText(intent.getStringExtra(EXTRA_TL_COUNTDOWN).orEmpty())
                 val arrow = normalizeText(intent.getStringExtra(EXTRA_TL_ARROW).orEmpty()).uppercase(Locale.US)
                 val id = readStringOrIntExtra(intent, EXTRA_TL_ID)
                 val position = intent.getIntExtra(EXTRA_TL_POSITION, 0)
-                val source = intent.getStringExtra(EXTRA_TL_SOURCE).orEmpty()
+                @Suppress("DEPRECATION")
+                val distanceMeters = WindshieldTrafficLightBatcher.parseDistanceMeters(
+                    intent.extras?.get(EXTRA_TL_DIST_M)
+                )
                 Log.d(
                     TAG,
                     "Windshield traffic light: color=\"$color\" countdown=\"$countdown\" arrow=\"$arrow\" " +
-                        "id=\"$id\" position=$position source=\"$source\""
+                        "id=\"$id\" position=$position dist_m=$distanceMeters"
                 )
                 handleWindshieldTrafficLight(
                     context = context,
@@ -289,54 +305,9 @@ class NavigationReceiver : BroadcastReceiver() {
                     countdown = countdown,
                     arrow = arrow,
                     id = id,
-                    position = position
+                    position = position,
+                    distanceMeters = distanceMeters
                 )
-            }
-            ACTION_YANDEX_ROUTE_POLYLINE -> {
-                val routeActive = intent.getBooleanExtra(EXTRA_ROUTE_ACTIVE_FLAG, false)
-                val routeId = normalizeText(intent.getStringExtra(EXTRA_ROUTE_ID).orEmpty())
-                val lats = intent.getDoubleArrayExtra(EXTRA_POLYLINE_LATS)
-                val lons = intent.getDoubleArrayExtra(EXTRA_POLYLINE_LONS)
-                val count = intent.getIntExtra(EXTRA_POLYLINE_COUNT, 0)
-
-                val latsInfo = if (lats != null) "size=${lats.size} first=${lats.firstOrNull()}" else "null"
-                val lonsInfo = if (lons != null) "size=${lons.size} first=${lons.firstOrNull()}" else "null"
-
-                Log.d(TAG, "Yandex route polyline: active=$routeActive id=\"$routeId\" count=$count lats=[$latsInfo] lons=[$lonsInfo]")
-                UiLogStore.append(
-                    LogCategory.NAVIGATION,
-                    "яндекс полилиния маршрута: active=$routeActive id=\"$routeId\" points=$count"
-                )
-
-                val safeCount = if (lats != null && lons != null) {
-                    val arrayCount = minOf(lats.size, lons.size)
-                    if (count > 0) minOf(count, arrayCount) else arrayCount
-                } else {
-                    0
-                }
-                if (routeActive && lats != null && lons != null && safeCount >= 2) {
-                    val points = buildList {
-                        for (index in 0 until safeCount) {
-                            val lat = lats[index]
-                            val lon = lons[index]
-                            if (lat in -90.0..90.0 && lon in -180.0..180.0) {
-                                add(LatLng(lat, lon))
-                            }
-                        }
-                    }
-                    Log.d(TAG, "Route polyline: ${points.size} valid points received")
-                    UiLogStore.append(LogCategory.NAVIGATION, "получена полилиния: ${points.size} точек")
-                    MapRouteTelemetryStore.replaceRoutePolyline(context.applicationContext, routeId, points)
-                } else if (!routeActive) {
-                    Log.d(TAG, "Route polyline: inactive update, clearing current route")
-                    UiLogStore.append(LogCategory.NAVIGATION, "полилиния inactive: очищаем текущий маршрут")
-                    MapRouteTelemetryStore.clearRoutePolyline(context.applicationContext)
-                } else {
-                    Log.w(
-                        TAG,
-                        "Route polyline ignored: invalid payload active=$routeActive safeCount=$safeCount"
-                    )
-                }
             }
             ACTION_NATIVE_NAV_STOP -> {
                 endNavigation(context, action, "штатная навигация: стоп")
@@ -483,12 +454,9 @@ class NavigationReceiver : BroadcastReceiver() {
         private val activeTrafficLights = LinkedHashMap<String, TrafficLightInfo>()
         private val windshieldBatcher = WindshieldTrafficLightBatcher()
         private var pendingWindshieldCommit: Runnable? = null
-        private val roadCameraHandler = android.os.Handler(android.os.Looper.getMainLooper())
-        private var pendingRoadCameraHide: Runnable? = null
         private val navigatorIntentTimeoutHandler = android.os.Handler(android.os.Looper.getMainLooper())
         private var pendingNavigatorIntentTimeout: Runnable? = null
         private var navigatorIntentTimeoutContext: Context? = null
-        private var roadCameraContext: Context? = null
         private var trafficLightContext: Context? = null
 
         @Volatile
@@ -516,13 +484,19 @@ class NavigationReceiver : BroadcastReceiver() {
         const val ACTION_YANDEX_NEXT_TEXT = "com.yandex.NIXT"
         const val ACTION_YANDEX_NEXT_STREET = "com.yandex.NEXTSTREET"
         const val ACTION_YANDEX_SPEEDLIMIT = "com.yandex.SPEEDLIMIT"
+        const val ACTION_YANDEX_LANE_SIGN = "com.yandex.LANE_SIGN"
+        const val ACTION_YANDEX_LANE_DIST = "com.yandex.LANE_DIST"
+        const val ACTION_YANDEX_LANES = "com.yandex.LANES"
+        const val ACTION_YANDEX_LANES_BITMAP = "com.yandex.LANES_BITMAP"
+        const val ACTION_YANDEX_LANES_BITMAP_CLEAR = "com.yandex.LANES_BITMAP_CLEAR"
+        const val ACTION_YANDEX_MINIMAP = "com.yandex.MINIMAP"
+        const val ACTION_YANDEX_JAM_IMAGE = "com.yandex.JAM_IMAGE"
+        const val ACTION_YANDEX_NAVIGATION_ENDED = "plus.monjaro.NAVIGATION_ENDED"
         const val ACTION_YANDEX_ARRIVAL = "com.yandex.ARRIVAL"
         const val ACTION_YANDEX_DISTANCE = "com.yandex.DISTANCE"
         const val ACTION_YANDEX_TIME = "com.yandex.TIME"
         const val ACTION_YANDEX_TRIP_STATUS_BITMAP = "com.yandex.TRIP_STATUS_BITMAP"
         const val ACTION_YANDEX_NAV_ACTIVE = "com.yandex.NAV_ACTIVE"
-        const val ACTION_YANDEX_ROADCAMERA = "com.yandex.ROADCAMERA"
-        const val ACTION_YANDEX_ROUTE_POLYLINE = "com.yandex.ROUTE_POLYLINE"
         const val ACTION_WINDSHIELD_TRAFFIC_LIGHT = "plus.monjaro.TRAFFIC_LIGHT_UPDATE"
         const val ACTION_NATIVE_NAV_STOP = "com.g992.anhud.NATIVE_NAV_STOP"
         const val ACTION_HUDSPEED_UPDATE = "air.strelkasd.CAMERA_INFO_CHANGED"
@@ -541,20 +515,12 @@ class NavigationReceiver : BroadcastReceiver() {
         const val EXTRA_TIME_TEXT = "Time_text"
         const val EXTRA_TRIP_STATUS_BITMAP = "trip_status_bitmap"
         const val EXTRA_NAV_IS_ACTIVE = "is_active"
-        const val EXTRA_CAMERA_ID = "camera_id"
-        const val EXTRA_CAMERA_DISTANCE = "distance_text"
-        const val EXTRA_CAMERA_ICON = "camera_icon"
         const val EXTRA_TL_COLOR = "tl_color"
         const val EXTRA_TL_COUNTDOWN = "tl_countdown"
         const val EXTRA_TL_ARROW = "tl_arrow"
         const val EXTRA_TL_ID = "tl_id"
         const val EXTRA_TL_POSITION = "tl_position"
-        const val EXTRA_TL_SOURCE = "tl_source"
-        const val EXTRA_ROUTE_ACTIVE_FLAG = "route_active"
-        const val EXTRA_ROUTE_ID = "route_id"
-        const val EXTRA_POLYLINE_LATS = "polyline_lats"
-        const val EXTRA_POLYLINE_LONS = "polyline_lons"
-        const val EXTRA_POLYLINE_COUNT = "polyline_count"
+        const val EXTRA_TL_DIST_M = "tl_dist_m"
         const val HUDSPEED_HAS_CAMERA = "hasCamera"
         const val HUDSPEED_HAS_GPS = "hasGps"
         const val HUDSPEED_DISTANCE = "distance"
@@ -604,9 +570,7 @@ class NavigationReceiver : BroadcastReceiver() {
                 action == ACTION_YANDEX_TIME ||
                 action == ACTION_YANDEX_TRIP_STATUS_BITMAP ||
                 action == ACTION_YANDEX_NAV_ACTIVE ||
-                action == ACTION_YANDEX_ROADCAMERA ||
-                action == ACTION_WINDSHIELD_TRAFFIC_LIGHT ||
-                action == ACTION_YANDEX_ROUTE_POLYLINE
+                action == ACTION_WINDSHIELD_TRAFFIC_LIGHT
         }
 
         private fun scheduleNavigatorIntentTimeout(context: Context) {
@@ -758,12 +722,15 @@ class NavigationReceiver : BroadcastReceiver() {
         }
 
         private fun getBitmapExtra(intent: Intent, key: String): Bitmap? {
-            return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                intent.getParcelableExtra(key, Bitmap::class.java)
-            } else {
-                @Suppress("DEPRECATION")
-                intent.getParcelableExtra(key)
-            }
+            return try {
+                intent.extras?.classLoader = Bitmap::class.java.classLoader
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    intent.getParcelableExtra(key, Bitmap::class.java)
+                } else {
+                    @Suppress("DEPRECATION")
+                    intent.getParcelableExtra(key)
+                }
+            } catch (_: RuntimeException) { null }
         }
 
         private fun formatExtras(intent: Intent): String {
@@ -979,6 +946,7 @@ class NavigationReceiver : BroadcastReceiver() {
         }
 
         private fun endNavigation(context: Context, action: String, reason: String) {
+            YandexVisualStore.endRoute()
             Log.d(TAG, "Navigation ended: $reason")
             UiLogStore.append(LogCategory.NAVIGATION, reason)
             cancelNavigatorIntentTimeout()
@@ -1034,7 +1002,8 @@ class NavigationReceiver : BroadcastReceiver() {
             countdown: String,
             arrow: String,
             id: String,
-            position: Int
+            position: Int,
+            distanceMeters: Double?
         ) {
             val now = System.currentTimeMillis()
             trafficLightContext = context.applicationContext
@@ -1052,7 +1021,8 @@ class NavigationReceiver : BroadcastReceiver() {
                 position = position,
                 color = color,
                 countdown = countdown,
-                arrow = arrow
+                arrow = arrow,
+                distanceMeters = distanceMeters
             )
             windshieldBatcher.accept(light, now)?.let { previous ->
                 commitWindshieldBatch(context, action, previous, now)
@@ -1105,10 +1075,8 @@ class NavigationReceiver : BroadcastReceiver() {
         }
 
         private fun updateTrafficLightState(context: Context, action: String, now: Long) {
-            val maxActive = OverlayPrefs.trafficLightMaxActive(context).coerceAtLeast(1)
             val resolved = activeTrafficLights.values
-                .sortedWith(compareBy<TrafficLightInfo>({ it.position }, { it.id }))
-                .take(maxActive)
+                .sortedWith(compareBy<TrafficLightInfo>({ it.position }, { it.distanceMeters }, { it.id }))
             NavigationHudStore.update { state ->
                 state.copy(
                     trafficLights = resolved,
@@ -1118,39 +1086,6 @@ class NavigationReceiver : BroadcastReceiver() {
                 )
             }
             scheduleTrafficLightCleanup()
-        }
-
-        private fun scheduleRoadCameraHide(context: Context) {
-            cancelRoadCameraHide()
-            val seconds = OverlayPrefs.roadCameraTimeout(context)
-            if (seconds <= 0) {
-                return
-            }
-            val delayMs = seconds.toLong() * 1000L
-            val runnable = Runnable {
-                pendingRoadCameraHide = null
-                val ctx = roadCameraContext ?: context.applicationContext
-                clearRoadCamera(ctx, "road_camera_timeout")
-            }
-            pendingRoadCameraHide = runnable
-            roadCameraHandler.postDelayed(runnable, delayMs)
-        }
-
-        private fun cancelRoadCameraHide() {
-            pendingRoadCameraHide?.let { roadCameraHandler.removeCallbacks(it) }
-            pendingRoadCameraHide = null
-        }
-
-        private fun clearRoadCamera(context: Context, action: String) {
-            NavigationHudStore.update { state ->
-                state.copy(
-                    roadCameraId = null,
-                    roadCameraDistance = null,
-                    roadCameraIcon = null,
-                    lastUpdated = System.currentTimeMillis(),
-                    lastAction = action
-                )
-            }
         }
 
         private fun scheduleTrafficLightCleanup() {

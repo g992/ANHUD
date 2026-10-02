@@ -284,8 +284,16 @@ object HudBridgeManager {
         val oldLink = link
         link = null
         if (oldSink != null) {
+            oldSink.stopSending()
             // Detach the overlay from the virtual display before it goes away.
             notifyRenderTarget()
+        }
+        if (oldLink != null) {
+            // The HUD keeps the last posted frame; leave it transparent rather than frozen.
+            try {
+                oldLink.sendFrame(ByteArray(Gcp.WIDTH * Gcp.HEIGHT * 4), Gcp.Rect(0, 0, Gcp.WIDTH, Gcp.HEIGHT))
+            } catch (_: IOException) {
+            }
         }
         oldLink?.close()
         if (oldSink != null) {

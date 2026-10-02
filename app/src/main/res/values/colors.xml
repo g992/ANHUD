@@ -15,4 +15,5 @@
     <color name="update_badge_red">#FF3B30</color>
     <color name="seekbar_track_bg">#404040</color>
     <color name="seekbar_track_secondary">#606060</color>
+    <color name="spinner_indicator">#B3FFFFFF</color>
 </resources>

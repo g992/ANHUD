@@ -9,7 +9,8 @@ data class TrafficLightInfo(
     val arrowDirection: String,
     val lastUpdated: Long,
     val expiresAt: Long,
-    val position: Int = Int.MAX_VALUE
+    val position: Int = Int.MAX_VALUE,
+    val distanceMeters: Double? = null
 )
 
 data class NavigationHudState(

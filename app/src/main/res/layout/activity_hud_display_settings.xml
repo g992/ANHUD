@@ -10,7 +10,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:padding="20dp">
+        android:padding="12dp">
 
         <LinearLayout
             android:layout_width="match_parent"
@@ -25,7 +25,7 @@
                 android:layout_weight="1"
                 android:text="@string/hud_settings_title"
                 android:textColor="@color/white"
-                android:textSize="24sp"
+                android:textSize="20sp"
                 android:textStyle="bold" />
 
             <ImageButton
@@ -68,10 +68,10 @@
             android:id="@+id/presetLabel"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
+            android:layout_marginTop="10dp"
             android:text="@string/preset_label"
             android:textColor="@color/white"
-            android:textSize="18sp" />
+            android:textSize="16sp" />
 
         <LinearLayout
             android:layout_width="match_parent"
@@ -84,7 +84,8 @@
                 android:id="@+id/presetSpinner"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:layout_weight="1" />
+                android:layout_weight="1"
+                android:backgroundTint="@color/spinner_indicator" />
 
             <ImageButton
                 android:id="@+id/savePresetButton"
@@ -283,7 +284,8 @@
             android:id="@+id/displaySpinner"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="6dp" />
+            android:layout_marginTop="6dp"
+            android:backgroundTint="@color/spinner_indicator" />
 
         <TextView
             android:layout_width="wrap_content"
@@ -364,11 +366,11 @@
                     android:textColor="@color/white" />
             </LinearLayout>
 
-            <FrameLayout
+            <com.g992.anhud.YandexMapPreviewView
                 android:layout_width="112dp"
                 android:layout_height="64dp"
                 android:layout_marginTop="8dp"
-                android:background="#603396F3" />
+                android:contentDescription="@string/position_map_block_label" />
         </LinearLayout>
 
         <LinearLayout
@@ -410,7 +412,7 @@
                 android:layout_width="158dp"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
-                android:background="@android:color/transparent"
+                android:background="@drawable/bg_nav_block_outline"
                 android:orientation="horizontal"
                 android:padding="8dp">
 
@@ -419,14 +421,13 @@
                     android:layout_height="48dp"
                     android:background="@drawable/bg_direction_box">
 
-                    <TextView
+                    <ImageView
                         android:layout_width="match_parent"
-                        android:layout_height="32dp"
-                        android:gravity="center"
-                        android:text="@string/preview_direction_label"
-                        android:textColor="@color/white"
-                        android:textSize="14sp"
-                        android:textStyle="bold" />
+                        android:layout_height="match_parent"
+                        android:contentDescription="@string/preview_direction_label"
+                        android:padding="8dp"
+                        android:scaleType="fitCenter"
+                        android:src="@drawable/context_ra_turn_right" />
                 </FrameLayout>
 
                 <LinearLayout
@@ -500,16 +501,24 @@
             <FrameLayout
                 android:layout_width="160dp"
                 android:layout_height="80dp"
-                android:layout_marginTop="8dp">
+                android:layout_marginTop="8dp"
+                android:background="@drawable/bg_nav_block_outline">
+
+                <ImageView
+                    android:layout_width="match_parent"
+                    android:layout_height="44dp"
+                    android:contentDescription="@string/position_lane_guidance_block_label"
+                    android:scaleType="fitCenter"
+                    android:src="@drawable/preview_yandex_lanes" />
 
                 <TextView
                     android:layout_width="match_parent"
-                    android:layout_height="match_parent"
+                    android:layout_height="28dp"
+                    android:layout_gravity="bottom"
                     android:gravity="center"
-                    android:padding="12dp"
-                    android:text="@string/position_lane_guidance_block_label"
+                    android:text="@string/preview_lane_guidance_distance"
                     android:textColor="@color/white"
-                    android:textSize="12sp"
+                    android:textSize="14sp"
                     android:textStyle="bold" />
             </FrameLayout>
         </LinearLayout>
@@ -555,14 +564,13 @@
                 android:layout_marginTop="8dp"
                 android:background="@drawable/bg_direction_box">
 
-                <TextView
+                <ImageView
                     android:layout_width="match_parent"
-                    android:layout_height="32dp"
-                    android:gravity="center"
-                    android:text="@string/preview_direction_label"
-                    android:textColor="@color/white"
-                    android:textSize="14sp"
-                    android:textStyle="bold" />
+                    android:layout_height="match_parent"
+                    android:contentDescription="@string/preview_direction_label"
+                    android:padding="8dp"
+                    android:scaleType="fitCenter"
+                    android:src="@drawable/context_ra_turn_right" />
             </FrameLayout>
 
             <CheckBox
@@ -914,68 +922,6 @@
                         android:layout_height="wrap_content"
                         android:max="20" />
                 </LinearLayout>
-            </LinearLayout>
-        </LinearLayout>
-
-        <LinearLayout
-            android:id="@+id/positionRoadCameraCard"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
-            android:background="@drawable/bg_log_section"
-            android:clickable="true"
-            android:focusable="true"
-            android:foreground="?attr/selectableItemBackground"
-            android:orientation="vertical"
-            android:padding="16dp"
-            android:visibility="gone">
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:gravity="center_vertical"
-                android:orientation="horizontal">
-
-                <TextView
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="@string/position_road_camera_block_label"
-                    android:textColor="@color/white"
-                    android:textSize="16sp"
-                    android:textStyle="bold" />
-
-                <androidx.appcompat.widget.SwitchCompat
-                    android:id="@+id/roadCameraProjectionSwitch"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="@string/projection_toggle_label"
-                    android:textColor="@color/white" />
-            </LinearLayout>
-
-            <LinearLayout
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:gravity="center_horizontal"
-                android:orientation="vertical">
-
-                <ImageView
-                    android:layout_width="48dp"
-                    android:layout_height="48dp"
-                    android:contentDescription="@string/preview_direction_label"
-                    android:scaleType="fitCenter"
-                    android:src="@drawable/road_events_camera_48" />
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="2dp"
-                    android:gravity="center"
-                    android:text="@string/preview_road_camera_distance"
-                    android:textColor="@color/white"
-                    android:textSize="14sp"
-                    android:textStyle="bold" />
             </LinearLayout>
         </LinearLayout>
 

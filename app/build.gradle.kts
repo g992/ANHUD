@@ -159,7 +159,6 @@ dependencies {
     implementation(libs.material)
     implementation(libs.androidx.activity)
     implementation(libs.androidx.constraintlayout)
-    implementation(libs.tananaev.adblib)
     implementation(libs.androidsvg)
     implementation(libs.maplibre.android.sdk)
     implementation(libs.quickjs.wrapper.android)

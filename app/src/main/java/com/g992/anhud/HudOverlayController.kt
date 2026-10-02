@@ -1,6 +1,7 @@
 package com.g992.anhud
 
 import android.content.Context
+import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
@@ -9,6 +10,7 @@ import android.graphics.PointF
 import android.graphics.Typeface
 import android.graphics.drawable.ColorDrawable
 import android.hardware.display.DisplayManager
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
@@ -29,6 +31,7 @@ import android.widget.TextView
 import androidx.core.content.ContextCompat
 import com.g992.anhud.hudbridge.HudBridgeFrameSink
 import com.g992.anhud.hudbridge.HudBridgeManager
+import com.g992.anhud.hudbridge.HudBridgePrefs
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -40,6 +43,11 @@ class HudOverlayController(private val context: Context) {
         private const val CONTAINER_OUTLINE_PREVIEW_MIN_ALPHA = 0.35f
         private const val CLOCK_TICK_MS = 5_000L
         private const val MAP_HIDE_BY_MANEUVER_DELAY_MS = 5_000L
+        private const val JAM_MIN_HEIGHT_FRACTION = 0.12f
+        private const val JAM_MIN_HEIGHT_DP = 6f
+        /** Height of the position arrow and thickness of the bar, relative to the bar block height. */
+        private const val JAM_ARROW_SCALE = 1.75f
+        private const val JAM_BAR_THICKNESS = 0.6f
         private const val DISPLAY_CHANGE_REFRESH_DELAY_MS = 500L
         private const val DISPLAY_RETRY_DELAY_MS = 2_000L
         private const val DISPLAY_RETRY_MAX_ATTEMPTS = 100
@@ -63,6 +71,7 @@ class HudOverlayController(private val context: Context) {
         private const val SPEEDOMETER_UNIT_RELATIVE_SIZE = 1f / 3f
         private const val TURN_SIGNAL_BLINK_INTERVAL_MS = 400L
         private const val CLEAR_BEFORE_REDRAW_DELAY_MS = 32L
+        private const val CLEAR_FRAME_TIMEOUT_MS = 250L
         private const val HUD_OVERLAY_TAG = "HudOverlayController"
     }
     private val handler = Handler(Looper.getMainLooper())
@@ -97,14 +106,12 @@ class HudOverlayController(private val context: Context) {
     private var navContainer: LinearLayout? = null
     private var maneuverContainer: FrameLayout? = null
     private var maneuverView: ImageView? = null
-    private var maneuverLabel: TextView? = null
     private var laneGuidanceContainer: LinearLayout? = null
     private var laneGuidanceImageView: ImageView? = null
     private var laneGuidancePlaceholderView: TextView? = null
     private var laneGuidanceDistanceView: TextView? = null
     private var arrowContainer: FrameLayout? = null
     private var arrowView: ImageView? = null
-    private var arrowLabel: TextView? = null
     private var primaryView: TextView? = null
     private var secondaryView: TextView? = null
     private var timeView: TextView? = null
@@ -139,11 +146,21 @@ class HudOverlayController(private val context: Context) {
     private var clockView: TextView? = null
     private var mapContainerView: FrameLayout? = null
     private var mapContentView: FrameLayout? = null
+    private var minimapImageView: ImageView? = null
+    private var jamImageView: JamsBarView? = null
+    private var requestedMinimapSize: Pair<Int, Int>? = null
+    private var lastJamLayoutKey: String? = null
+    private val minimapRetry = object : Runnable {
+        override fun run() {
+            val size = requestedMinimapSize ?: return
+            // Navigator stops capturing when ENABLE is not repeated within 20 s, so this is a heartbeat.
+            sendMinimapEnable(size)
+            handler.postDelayed(this, 5_000L)
+        }
+    }
     private var mapTripStatusView: MapTripStatusView? = null
     private var hudMapController: HudMapController? = null
     private var mapPlaceholderView: FrameLayout? = null
-    private var mapPlaceholderIconView: ImageView? = null
-    private var mapPlaceholderLabelView: TextView? = null
     private var customBlocksLayer: FrameLayout? = null
     private val customBlockViewHolders = linkedMapOf<String, CustomBlockViewFactory.ViewHolder>()
     private var customBlocksDocument: CustomBlocksDocument = CustomBlocksDocument()
@@ -229,6 +246,9 @@ class HudOverlayController(private val context: Context) {
     private var previewTarget: String? = null
     private var previewShowOthers: Boolean = false
     private var clearOnDisablePending: Boolean = false
+    private var displaySwitchClearPending: Boolean = false
+    /** The overlay already emptied by [clearOverlayThen]; it only waits to be removed. */
+    private var clearedOverlay: FrameLayout? = null
     private var clearBeforeRedrawPending: Boolean = false
     private var delayedRedrawRunnable: Runnable? = null
     private val speedLimitNumberRegex = Regex("\\d+")
@@ -266,6 +286,25 @@ class HudOverlayController(private val context: Context) {
                 clearOverlayForDisable()
                 return@post
             }
+            if (bridgeDisplay == null && HudBridgePrefs.enabled(context)) {
+                // Background rendering is on: never draw on the Android HUD display (not while the
+                // bridge starts, nor after it failed). A frame left there covers the stock HUD for good.
+                clearDisplayRetry()
+                if (displaySwitchClearPending) {
+                    return@post
+                }
+                val oldOverlay = overlayView
+                if (oldOverlay != null && currentDisplayId?.let(::isBridgeDisplay) == false && oldOverlay !== clearedOverlay) {
+                    displaySwitchClearPending = true
+                    clearOverlayThen(oldOverlay) {
+                        displaySwitchClearPending = false
+                        refresh()
+                    }
+                    return@post
+                }
+                removeOverlay()
+                return@post
+            }
             val targetDisplayId = OverlayPrefs.displayId(context)
             val display = bridgeDisplay
                 ?: HudDisplayUtils.resolveDisplay(context, targetDisplayId, allowFallback = false)
@@ -275,6 +314,21 @@ class HudOverlayController(private val context: Context) {
                 return@post
             }
             clearDisplayRetry()
+            if (displaySwitchClearPending) {
+                return@post
+            }
+            val oldOverlay = overlayView
+            if (oldOverlay != null && currentDisplayId != display.displayId &&
+                currentDisplayId?.let(::isBridgeDisplay) == false && oldOverlay !== clearedOverlay
+            ) {
+                // The HUD keeps showing the last frame of a display we leave: push a transparent one first.
+                displaySwitchClearPending = true
+                clearOverlayThen(oldOverlay) {
+                    displaySwitchClearPending = false
+                    refresh()
+                }
+                return@post
+            }
             if (overlayView != null && currentDisplayId == display.displayId) {
                 if (clearBeforeRedrawPending) {
                     applyLayoutInternal()
@@ -359,7 +413,7 @@ class HudOverlayController(private val context: Context) {
         }
     }
 
-    fun shouldRefreshForMapRouteTelemetry(): Boolean {
+    fun shouldRefreshForYandexVisuals(): Boolean {
         val previewMap = shouldPreviewBlock(OverlayBroadcasts.PREVIEW_TARGET_MAP, mapEnabled)
         val previewLaneGuidance = shouldPreviewBlock(
             OverlayBroadcasts.PREVIEW_TARGET_LANE_GUIDANCE,
@@ -433,7 +487,7 @@ class HudOverlayController(private val context: Context) {
         val roadCameraDistanceText = state.roadCameraDistance.orEmpty()
         val roadCameraBitmap = state.roadCameraIcon
         val bitmap = state.maneuverBitmap
-        val laneGuidanceManeuver = MapRouteTelemetryStore.current().laneManeuver
+        val laneGuidanceManeuver = YandexVisualStore.snapshot().lanes
         val previewMap = shouldPreviewBlock(OverlayBroadcasts.PREVIEW_TARGET_MAP, mapEnabled)
         val includeTripStatusInSignature = previewMap || mapEnabled || mapHadVisibleContent
         val tripStatusDistanceText = if (!includeTripStatusInSignature) {
@@ -468,7 +522,8 @@ class HudOverlayController(private val context: Context) {
                 color = light.color,
                 countdownText = light.countdownText,
                 arrowDirection = light.arrowDirection,
-                position = light.position
+                position = light.position,
+                distanceMeters = light.distanceMeters
             )
         }
         return RenderSignature(
@@ -481,11 +536,11 @@ class HudOverlayController(private val context: Context) {
             roadCameraGenId = roadCameraBitmap?.generationId ?: -1,
             roadCameraWidth = roadCameraBitmap?.width ?: 0,
             roadCameraHeight = roadCameraBitmap?.height ?: 0,
-            laneGuidanceToken = laneGuidanceManeuver?.token ?: -1,
-            laneGuidanceGenId = laneGuidanceManeuver?.bitmap?.generationId ?: -1,
-            laneGuidanceWidth = laneGuidanceManeuver?.bitmap?.width ?: 0,
-            laneGuidanceHeight = laneGuidanceManeuver?.bitmap?.height ?: 0,
-            laneGuidanceDistanceMeters = laneGuidanceManeuver?.distanceMeters ?: -1,
+            laneGuidanceToken = laneGuidanceManeuver?.generationId ?: -1,
+            laneGuidanceGenId = laneGuidanceManeuver?.generationId ?: -1,
+            laneGuidanceWidth = laneGuidanceManeuver?.width ?: 0,
+            laneGuidanceHeight = laneGuidanceManeuver?.height ?: 0,
+            laneGuidanceDistanceMeters = -1,
             laneGuidanceShowDistance = OverlayPrefs.laneGuidanceShowDistance(context),
             tripStatusDistanceText = tripStatusDistanceText,
             tripStatusArrivalText = tripStatusArrivalText,
@@ -587,7 +642,8 @@ class HudOverlayController(private val context: Context) {
         val color: String,
         val countdownText: String,
         val arrowDirection: String,
-        val position: Int
+        val position: Int,
+        val distanceMeters: Double?
     )
 
     fun clearNavigation() {
@@ -871,9 +927,6 @@ class HudOverlayController(private val context: Context) {
                 this.hudSpeedLimitAlertThreshold = hudSpeedLimitAlertThreshold
                     .coerceIn(0, OverlayPrefs.SPEED_LIMIT_ALERT_THRESHOLD_MAX)
             }
-            if (roadCameraEnabled != null) {
-                this.roadCameraEnabled = roadCameraEnabled
-            }
             if (trafficLightEnabled != null) {
                 this.trafficLightEnabled = trafficLightEnabled
             }
@@ -1023,22 +1076,7 @@ class HudOverlayController(private val context: Context) {
             scaleType = ImageView.ScaleType.FIT_CENTER
         }
 
-        val maneuverText = TextView(displayContext).apply {
-            layoutParams = FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT,
-                FrameLayout.LayoutParams.MATCH_PARENT
-            )
-            includeFontPadding = false
-            setPadding(0, 0, 0, 0)
-            gravity = Gravity.CENTER
-            text = displayContext.getString(R.string.preview_direction_label)
-            setTextColor(Color.WHITE)
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
-            setTypeface(typeface, Typeface.BOLD)
-        }
-
         maneuverBox.addView(maneuverImage)
-        maneuverBox.addView(maneuverText)
 
         val textColumn = LinearLayout(displayContext).apply {
             orientation = LinearLayout.VERTICAL
@@ -1192,22 +1230,7 @@ class HudOverlayController(private val context: Context) {
             scaleType = ImageView.ScaleType.FIT_CENTER
         }
 
-        val arrowText = TextView(displayContext).apply {
-            layoutParams = FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT,
-                FrameLayout.LayoutParams.MATCH_PARENT
-            )
-            includeFontPadding = false
-            setPadding(0, 0, 0, 0)
-            gravity = Gravity.CENTER
-            text = displayContext.getString(R.string.preview_direction_label)
-            setTextColor(Color.WHITE)
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
-            setTypeface(typeface, Typeface.BOLD)
-        }
-
         arrowBox.addView(arrowImage)
-        arrowBox.addView(arrowText)
 
         val speedText = OutlinedTextView(displayContext).apply {
             layoutParams = FrameLayout.LayoutParams(speedSize, speedSize)
@@ -1509,6 +1532,27 @@ class HudOverlayController(private val context: Context) {
             )
             setBackgroundColor(Color.TRANSPARENT)
         }
+        val minimapImage = ImageView(displayContext).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.MATCH_PARENT
+            )
+            scaleType = ImageView.ScaleType.FIT_XY
+        }
+        val jamsImage = JamsBarView(displayContext).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                (24 * metrics.density).roundToInt().coerceAtLeast(1)
+            )
+            visibility = View.GONE
+        }
+        mapContent.addView(LinearLayout(displayContext).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
+            layoutParams = FrameLayout.LayoutParams(-1, -1)
+            addView(minimapImage)
+            addView(jamsImage)
+        })
         val initialMapHeightPx = (mapHeightDp * metrics.density).roundToInt().coerceAtLeast(1)
         val mapTripStatus = MapTripStatusView(displayContext).apply {
             layoutParams = FrameLayout.LayoutParams(
@@ -1524,32 +1568,15 @@ class HudOverlayController(private val context: Context) {
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.MATCH_PARENT
             )
-            background = ColorDrawable(Color.argb(96, 33, 150, 243))
             visibility = View.GONE
         }
-        val mapPlaceholderContent = LinearLayout(displayContext).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER
+        mapPlaceholder.addView(YandexMapPreviewView(displayContext).apply {
             layoutParams = FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.MATCH_PARENT
             )
-            setPadding(4, 4, 4, 4)
-        }
-        val mapPlaceholderLabel = TextView(displayContext).apply {
-            gravity = Gravity.CENTER
-            text = displayContext.getString(R.string.position_map_block_label)
-            setTextColor(Color.WHITE)
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
-            setTypeface(typeface, Typeface.BOLD)
-        }
-        val mapPlaceholderIcon = ImageView(displayContext).apply {
-            setImageResource(R.drawable.pin_alerts_speed_camera)
-            scaleType = ImageView.ScaleType.FIT_CENTER
-        }
-        mapPlaceholderContent.addView(mapPlaceholderLabel)
-        mapPlaceholderContent.addView(mapPlaceholderIcon)
-        mapPlaceholder.addView(mapPlaceholderContent)
+            contentDescription = displayContext.getString(R.string.position_map_block_label)
+        })
 
         mapBlock.addView(mapContent)
         mapBlock.addView(mapPlaceholder)
@@ -1603,14 +1630,12 @@ class HudOverlayController(private val context: Context) {
             navContainer = navBlock
             maneuverContainer = maneuverBox
             maneuverView = maneuverImage
-            maneuverLabel = maneuverText
             laneGuidanceContainer = laneGuidanceBlock
             laneGuidanceImageView = laneGuidanceImage
             laneGuidancePlaceholderView = laneGuidancePlaceholder
             laneGuidanceDistanceView = laneGuidanceDistance
             arrowContainer = arrowBox
             arrowView = arrowImage
-            arrowLabel = arrowText
             primaryView = primaryText
             secondaryView = secondaryText
             timeView = timeText
@@ -1644,10 +1669,10 @@ class HudOverlayController(private val context: Context) {
             clockView = clockText
             mapContainerView = mapBlock
             mapContentView = mapContent
+            minimapImageView = minimapImage
+            jamImageView = jamsImage
             mapTripStatusView = mapTripStatus
             mapPlaceholderView = mapPlaceholder
-            mapPlaceholderIconView = mapPlaceholderIcon
-            mapPlaceholderLabelView = mapPlaceholderLabel
             customBlocksLayer = customLayer
             currentDisplayId = display.displayId
             syncCustomBlockViews()
@@ -1663,14 +1688,12 @@ class HudOverlayController(private val context: Context) {
             navContainer = null
             maneuverContainer = null
             maneuverView = null
-            maneuverLabel = null
             laneGuidanceContainer = null
             laneGuidanceImageView = null
             laneGuidancePlaceholderView = null
             laneGuidanceDistanceView = null
             arrowContainer = null
             arrowView = null
-            arrowLabel = null
             primaryView = null
             secondaryView = null
             timeView = null
@@ -1707,8 +1730,6 @@ class HudOverlayController(private val context: Context) {
             mapContentView = null
             mapTripStatusView = null
             mapPlaceholderView = null
-            mapPlaceholderIconView = null
-            mapPlaceholderLabelView = null
             customBlocksLayer = null
             customBlockViewHolders.clear()
             currentDisplayId = null
@@ -1738,18 +1759,17 @@ class HudOverlayController(private val context: Context) {
         }
         windowManager = null
         overlayView = null
+        clearedOverlay = null
         overlayLayoutParams = null
         navContainer = null
         maneuverContainer = null
         maneuverView = null
-        maneuverLabel = null
         laneGuidanceContainer = null
         laneGuidanceImageView = null
         laneGuidancePlaceholderView = null
         laneGuidanceDistanceView = null
         arrowContainer = null
         arrowView = null
-        arrowLabel = null
         primaryView = null
         secondaryView = null
         timeView = null
@@ -1786,8 +1806,6 @@ class HudOverlayController(private val context: Context) {
         mapContentView = null
         mapTripStatusView = null
         mapPlaceholderView = null
-        mapPlaceholderIconView = null
-        mapPlaceholderLabelView = null
         customBlocksLayer = null
         customBlockViewHolders.clear()
         currentDisplayId = null
@@ -1808,25 +1826,42 @@ class HudOverlayController(private val context: Context) {
             return
         }
         clearOnDisablePending = true
-        navContainer?.visibility = View.GONE
-        laneGuidanceContainer?.visibility = View.GONE
-        arrowContainer?.visibility = View.GONE
-        speedLimitView?.visibility = View.GONE
-        hudSpeedContainer?.visibility = View.GONE
-        roadCameraContainer?.visibility = View.GONE
-        trafficLightContainer?.visibility = View.GONE
-        speedometerView?.visibility = View.GONE
-        turnSignalsContainer?.visibility = View.GONE
-        clockView?.visibility = View.GONE
-        container.setBackgroundColor(Color.TRANSPARENT)
-        container.visibility = View.VISIBLE
-        container.invalidate()
-        container.post {
+        clearOverlayThen(container) {
             clearOnDisablePending = false
-            if (!OverlayPrefs.isEnabled(context) || !Settings.canDrawOverlays(context)) {
-                removeOverlay()
+            removeOverlay()
+            if (OverlayPrefs.isEnabled(context)) {
+                // Re-enabled while clearing: build the overlay again.
+                refresh()
             }
         }
+    }
+
+    /**
+     * Hides everything in [overlay] and runs [action] once that transparent frame reached the
+     * display. The window must stay and redraw: a hidden (alpha 0) or removed window never sends a
+     * transparent frame, and the HUD keeps showing its last picture over the stock one.
+     */
+    private fun clearOverlayThen(overlay: FrameLayout, action: () -> Unit) {
+        var done = false
+        val finish = Runnable {
+            if (done) return@Runnable
+            done = true
+            action()
+        }
+        stopTurnSignalBlinking()
+        clearedOverlay = overlay
+        for (i in 0 until overlay.childCount) {
+            overlay.getChildAt(i).visibility = View.INVISIBLE
+        }
+        overlay.background = null
+        overlay.setBackgroundColor(Color.TRANSPARENT)
+        overlay.visibility = View.VISIBLE
+        overlay.invalidate()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            overlay.viewTreeObserver.registerFrameCommitCallback { handler.post(finish) }
+        }
+        // No frame commit arrives if nothing redraws (or before Android 10).
+        handler.postDelayed(finish, CLEAR_FRAME_TIMEOUT_MS)
     }
 
     private fun clearOverlayForRedraw() {
@@ -1876,6 +1911,7 @@ class HudOverlayController(private val context: Context) {
     }
 
     private fun applyState(state: NavigationHudState) {
+        if (overlayView != null && overlayView === clearedOverlay) return
         val primary = primaryView ?: return
         val secondary = secondaryView ?: return
         val time = timeView ?: return
@@ -1900,10 +1936,7 @@ class HudOverlayController(private val context: Context) {
             shouldPreviewBlock(OverlayBroadcasts.PREVIEW_TARGET_HUDSPEED, hudSpeedEnabled)
         val previewStrelka = activeHudAlertSource == OverlayPrefs.HudAlertSource.STRELKA &&
             shouldPreviewBlock(OverlayBroadcasts.PREVIEW_TARGET_STRELKA, hudSpeedEnabled)
-        val previewRoadCamera = shouldPreviewBlock(
-            OverlayBroadcasts.PREVIEW_TARGET_ROAD_CAMERA,
-            roadCameraEnabled
-        )
+        val previewRoadCamera = false
         val previewTrafficLight = shouldPreviewBlock(
             OverlayBroadcasts.PREVIEW_TARGET_TRAFFIC_LIGHT,
             trafficLightEnabled
@@ -1917,15 +1950,15 @@ class HudOverlayController(private val context: Context) {
         val navAllowed = navEnabled || isPreviewTarget(OverlayBroadcasts.PREVIEW_TARGET_NAV)
         val laneGuidanceAllowed =
             laneGuidanceEnabled || isPreviewTarget(OverlayBroadcasts.PREVIEW_TARGET_LANE_GUIDANCE)
-        val routeSnapshot = MapRouteTelemetryStore.current()
-        val hasMapRoute = routeSnapshot.hasRoute
+        val visual = YandexVisualStore.snapshot()
+        val hasMapRoute = visual.minimap != null
         val mapAllowed = mapEnabled || isPreviewTarget(OverlayBroadcasts.PREVIEW_TARGET_MAP)
         val arrowAllowed = arrowEnabled || isPreviewTarget(OverlayBroadcasts.PREVIEW_TARGET_ARROW)
         val speedAllowed = speedEnabled || isPreviewTarget(OverlayBroadcasts.PREVIEW_TARGET_SPEED)
         val speedometerAllowed = speedometerEnabled || isPreviewTarget(OverlayBroadcasts.PREVIEW_TARGET_SPEEDOMETER)
         val turnSignalsAllowed = turnSignalsEnabled || isPreviewTarget(OverlayBroadcasts.PREVIEW_TARGET_TURN_SIGNALS)
         val hudSpeedAllowed = hudSpeedEnabled || isSharedAlertPreviewTarget()
-        val roadCameraAllowed = roadCameraEnabled || isPreviewTarget(OverlayBroadcasts.PREVIEW_TARGET_ROAD_CAMERA)
+        val roadCameraAllowed = false
         val trafficLightAllowed = trafficLightEnabled || isPreviewTarget(OverlayBroadcasts.PREVIEW_TARGET_TRAFFIC_LIGHT)
         val clockAllowed = clockEnabled || isPreviewTarget(OverlayBroadcasts.PREVIEW_TARGET_CLOCK)
 
@@ -2044,7 +2077,16 @@ class HudOverlayController(private val context: Context) {
         } else {
             state.trafficLights
         }
-        val laneGuidanceManeuver = routeSnapshot.laneManeuver
+        val displayTrafficLights = if (previewTrafficLight) {
+            trafficLights
+        } else {
+            WindshieldTrafficLightBatcher.visibleWithin(
+                trafficLights,
+                OverlayPrefs.trafficLightDisplayDistanceMeters(context),
+                trafficLightMaxActive
+            )
+        }
+        val laneGuidanceManeuver = visual.lanes
         val hideMapByManeuver = resolveMapHideByManeuver(showPreview, hideNavigationByDistance)
         hideMapByManeuverActive = hideMapByManeuver
         val mapVisible = mapAllowed && if (showPreview) {
@@ -2110,7 +2152,7 @@ class HudOverlayController(private val context: Context) {
         val laneGuidanceVisible = laneGuidanceAllowed && if (showPreview) {
             previewLaneGuidance
         } else {
-            laneGuidanceManeuver != null && !laneGuidanceHiddenByMap
+            (laneGuidanceManeuver != null || formatYandexLanes(visual.laneQueue).isNotBlank()) && !laneGuidanceHiddenByMap
         }
         val laneGuidanceTransparentFillVisible = !laneGuidanceHiddenByMap &&
             !laneGuidanceVisible &&
@@ -2161,9 +2203,11 @@ class HudOverlayController(private val context: Context) {
             updateHudSpeedOverspeed(false)
         }
         updateRoadCamera(state.roadCameraIcon, roadCameraDistanceText, roadCameraAllowed, previewRoadCamera)
-        updateTrafficLights(trafficLights, trafficLightAllowed)
+        updateTrafficLights(displayTrafficLights, trafficLightAllowed)
         updateLaneGuidance(
-            maneuver = laneGuidanceManeuver,
+            bitmap = laneGuidanceManeuver,
+            distanceText = visual.laneDistance,
+            queue = visual.laneQueue,
             preview = previewLaneGuidance,
             fillTransparentBackground = laneGuidanceTransparentFillVisible
         )
@@ -2234,7 +2278,7 @@ class HudOverlayController(private val context: Context) {
         val trafficLightVisible = if (showPreview) {
             trafficLightAllowed && previewTrafficLight
         } else {
-            trafficLightAllowed && trafficLights.isNotEmpty() && !trafficLightHiddenByMap
+            trafficLightAllowed && displayTrafficLights.isNotEmpty() && !trafficLightHiddenByMap
         }
         navContainer?.visibility = if (navAllowed && navVisible) View.VISIBLE else View.GONE
         laneGuidanceContainer?.visibility = if (laneGuidanceVisible || laneGuidanceTransparentFillVisible) {
@@ -2350,7 +2394,9 @@ class HudOverlayController(private val context: Context) {
     }
 
     private fun updateLaneGuidance(
-        maneuver: MapLaneManeuver?,
+        bitmap: Bitmap?,
+        distanceText: String,
+        queue: String,
         preview: Boolean,
         fillTransparentBackground: Boolean
     ) {
@@ -2359,7 +2405,11 @@ class HudOverlayController(private val context: Context) {
         val placeholder = laneGuidancePlaceholderView ?: return
         val distance = laneGuidanceDistanceView ?: return
         val showDistance = OverlayPrefs.laneGuidanceShowDistance(context)
-        container.setBackgroundColor(Color.TRANSPARENT)
+        container.background = if (preview && isPreviewTarget(OverlayBroadcasts.PREVIEW_TARGET_LANE_GUIDANCE)) {
+            ContextCompat.getDrawable(container.context, R.drawable.bg_nav_block_outline)
+        } else {
+            null
+        }
         if (fillTransparentBackground) {
             val hadImage = image.visibility == View.VISIBLE && image.drawable != null
             val hadPlaceholder = placeholder.visibility == View.VISIBLE
@@ -2371,37 +2421,26 @@ class HudOverlayController(private val context: Context) {
             container.postInvalidateOnAnimation()
             return
         }
-        val bitmap = maneuver?.bitmap?.takeUnless { it.isRecycled || it.width <= 0 || it.height <= 0 }
-        if (preview && bitmap != null) {
-            image.setImageBitmap(resolveLaneGuidanceHudBitmap(maneuver))
-            image.visibility = View.VISIBLE
-            placeholder.visibility = View.GONE
-            distance.text = formatLaneGuidanceDistance(maneuver.distanceMeters)
-            distance.visibility = if (showDistance) View.VISIBLE else View.GONE
-            container.background = null
-            return
-        }
+        val validBitmap = bitmap?.takeUnless { it.isRecycled || it.width <= 0 || it.height <= 0 }
         if (preview) {
             laneGuidanceHudBitmapSourceToken = Int.MIN_VALUE
             laneGuidanceHudBitmapSourceGenId = -1
             laneGuidanceHudBitmapSourceWidth = 0
             laneGuidanceHudBitmapSourceHeight = 0
             laneGuidanceHudBitmap = null
-            image.setImageDrawable(null)
-            image.visibility = View.GONE
-            placeholder.visibility = View.VISIBLE
-            distance.text = context.getString(R.string.preview_hudspeed_distance)
-            distance.visibility = if (showDistance) View.VISIBLE else View.GONE
-            container.background = null
-            return
-        }
-        if (bitmap != null) {
-            image.setImageBitmap(resolveLaneGuidanceHudBitmap(maneuver))
+            image.setImageResource(R.drawable.preview_yandex_lanes)
             image.visibility = View.VISIBLE
             placeholder.visibility = View.GONE
-            distance.text = formatLaneGuidanceDistance(maneuver.distanceMeters)
+            distance.text = context.getString(R.string.preview_lane_guidance_distance)
             distance.visibility = if (showDistance) View.VISIBLE else View.GONE
-            container.background = null
+            return
+        }
+        if (validBitmap != null) {
+            image.setImageBitmap(resolveLaneGuidanceHudBitmap(validBitmap))
+            image.visibility = View.VISIBLE
+            placeholder.visibility = View.GONE
+            distance.text = distanceText
+            distance.visibility = if (showDistance && distanceText.isNotBlank()) View.VISIBLE else View.GONE
             return
         }
         laneGuidanceHudBitmapSourceToken = Int.MIN_VALUE
@@ -2411,19 +2450,18 @@ class HudOverlayController(private val context: Context) {
         laneGuidanceHudBitmap = null
         image.setImageDrawable(null)
         image.visibility = View.GONE
-        placeholder.visibility = if (preview) View.VISIBLE else View.GONE
-        distance.text = context.getString(R.string.preview_hudspeed_distance)
-        distance.visibility = if (preview && showDistance) View.VISIBLE else View.GONE
-        container.background = null
+        placeholder.text = formatYandexLanes(queue)
+        placeholder.visibility = if (placeholder.text.isNotBlank()) View.VISIBLE else View.GONE
+        distance.text = distanceText
+        distance.visibility = if (showDistance && distanceText.isNotBlank()) View.VISIBLE else View.GONE
     }
 
     private fun formatLaneGuidanceDistance(distanceMeters: Int): String {
         return LaneGuidanceHudRenderHelper.formatDistance(distanceMeters)
     }
 
-    private fun resolveLaneGuidanceHudBitmap(maneuver: MapLaneManeuver): Bitmap {
-        val source = maneuver.bitmap
-        val token = maneuver.token
+    private fun resolveLaneGuidanceHudBitmap(source: Bitmap): Bitmap {
+        val token = source.generationId
         val generationId = source.generationId
         val width = source.width
         val height = source.height
@@ -2447,7 +2485,6 @@ class HudOverlayController(private val context: Context) {
 
     private fun updateManeuver(bitmap: android.graphics.Bitmap?, preview: Boolean) {
         val image = maneuverView ?: return
-        val label = maneuverLabel ?: return
         val container = maneuverContainer ?: return
         val boxBackground = if (preview) {
             ContextCompat.getDrawable(container.context, R.drawable.bg_direction_box)
@@ -2456,23 +2493,20 @@ class HudOverlayController(private val context: Context) {
         }
         container.background = boxBackground
         if (preview) {
-            image.visibility = View.GONE
-            label.visibility = View.VISIBLE
+            image.setImageResource(R.drawable.context_ra_turn_right)
+            image.visibility = View.VISIBLE
             return
         }
         if (bitmap != null) {
             image.setImageBitmap(bitmap)
             image.visibility = View.VISIBLE
-            label.visibility = View.GONE
         } else {
             image.visibility = View.GONE
-            label.visibility = View.GONE
         }
     }
 
     private fun updateArrowManeuver(bitmap: android.graphics.Bitmap?, preview: Boolean) {
         val image = arrowView ?: return
-        val label = arrowLabel ?: return
         val container = arrowContainer ?: return
         val boxBackground = if (preview) {
             ContextCompat.getDrawable(container.context, R.drawable.bg_direction_box)
@@ -2481,17 +2515,15 @@ class HudOverlayController(private val context: Context) {
         }
         container.background = boxBackground
         if (preview) {
-            image.visibility = View.GONE
-            label.visibility = View.VISIBLE
+            image.setImageResource(R.drawable.context_ra_turn_right)
+            image.visibility = View.VISIBLE
             return
         }
         if (bitmap != null) {
             image.setImageBitmap(bitmap)
             image.visibility = View.VISIBLE
-            label.visibility = View.GONE
         } else {
             image.visibility = View.GONE
-            label.visibility = View.GONE
         }
     }
 
@@ -3006,6 +3038,7 @@ class HudOverlayController(private val context: Context) {
         val inflater = LayoutInflater.from(container.context)
         val density = container.resources.displayMetrics.density
         val itemSpacingPx = (8 * density).roundToInt()
+        var contentWidthPx = 0
         container.removeAllViews()
         displayLights.forEachIndexed { index, light ->
             val item = inflater.inflate(R.layout.traffic_light_notification_view, container, false)
@@ -3048,7 +3081,16 @@ class HudOverlayController(private val context: Context) {
                 params.marginEnd = 0
             }
             item.layoutParams = params
+            item.measure(
+                View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
+                View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
+            )
+            contentWidthPx += item.measuredWidth + params.marginStart + params.marginEnd
             container.addView(item)
+        }
+        (container.layoutParams as? FrameLayout.LayoutParams)?.let { params ->
+            params.width = contentWidthPx.coerceAtLeast(1)
+            container.layoutParams = params
         }
         container.visibility = View.VISIBLE
     }
@@ -3232,6 +3274,11 @@ class HudOverlayController(private val context: Context) {
             positionView(it, navPositionDp, navScale, navAlpha, metrics.density, containerWidth, containerHeight)
         }
         laneGuidanceContainer?.let {
+            it.background = if (isPreviewTarget(OverlayBroadcasts.PREVIEW_TARGET_LANE_GUIDANCE)) {
+                ContextCompat.getDrawable(it.context, R.drawable.bg_nav_block_outline)
+            } else {
+                null
+            }
             positionView(
                 it,
                 laneGuidancePositionDp,
@@ -3418,8 +3465,8 @@ class HudOverlayController(private val context: Context) {
 
     private fun updateMapView(displayContext: Context, containerWidthPx: Int, containerHeightPx: Int) {
         val previewMap = shouldPreviewBlock(OverlayBroadcasts.PREVIEW_TARGET_MAP, mapEnabled)
-        val routeSnapshot = MapRouteTelemetryStore.current()
-        val hasMapRoute = routeSnapshot.hasRoute
+        val visual = YandexVisualStore.snapshot()
+        val hasMapRoute = visual.minimap != null
         val runtimeMapVisible = !previewMode && mapEnabled && hasMapRoute && !hideMapByManeuverActive
         logMapState(
             stage = "update",
@@ -3430,7 +3477,6 @@ class HudOverlayController(private val context: Context) {
         )
         val mapContainer = mapContainerView ?: return
         val mapContent = mapContentView ?: return
-        val mapTripStatus = mapTripStatusView ?: return
         val placeholder = mapPlaceholderView ?: return
         val widthPx = (mapWidthDp * displayContext.resources.displayMetrics.density)
             .roundToInt()
@@ -3455,10 +3501,12 @@ class HudOverlayController(private val context: Context) {
             containerWidthPx.toFloat(),
             containerHeightPx.toFloat()
         )
+        requestMinimap(if (!previewMode && mapEnabled) widthPx to heightPx else null)
         if (!previewMap && !runtimeMapVisible) {
-            releaseMapController()
             if (mapTransparentFillPending) {
-                clearMapBlock(mapContainer, mapContent, mapTripStatus, placeholder)
+                mapContainer.visibility = View.VISIBLE
+                mapContent.visibility = View.GONE
+                placeholder.visibility = View.GONE
             } else {
                 hideMapBlock()
             }
@@ -3467,42 +3515,87 @@ class HudOverlayController(private val context: Context) {
         mapContainer.visibility = View.VISIBLE
         mapContainer.background = null
         mapContainer.setBackgroundColor(Color.TRANSPARENT)
-        val tripStatusReservedHeightPx = updateMapTripStatus(
-            view = mapTripStatus,
-            state = lastState,
-            mapHeightPx = heightPx,
-            preview = previewMap
-        )
+        mapTripStatusView?.visibility = View.GONE
         if (previewMap) {
-            hudMapController?.setVisible(false)
             mapContent.visibility = View.GONE
             placeholder.background = if (previewTarget == OverlayBroadcasts.PREVIEW_TARGET_MAP) {
                 ContextCompat.getDrawable(displayContext, R.drawable.bg_nav_block_outline)
             } else {
                 null
             }
-            mapPlaceholderLabelView?.text = displayContext.getString(R.string.position_map_block_label)
-            mapPlaceholderIconView?.let { icon ->
-                val iconSizePx = MapRenderSettingsStore.current().roadEventIconSizePx
-                    .coerceIn(ROAD_EVENT_ICON_SIZE_MIN_PX, ROAD_EVENT_ICON_SIZE_MAX_PX)
-                icon.layoutParams = (icon.layoutParams as? LinearLayout.LayoutParams)?.apply {
-                    width = iconSizePx
-                    height = iconSizePx
-                    topMargin = 4
-                } ?: LinearLayout.LayoutParams(iconSizePx, iconSizePx).apply {
-                    topMargin = 4
-                }
-            }
             placeholder.visibility = View.VISIBLE
         } else {
             mapContent.visibility = View.VISIBLE
             placeholder.visibility = View.GONE
-            ensureLocalMapController(displayContext, mapContent).apply {
-                attachTo(mapContent)
-                setTripStatusReservedHeightPx(tripStatusReservedHeightPx)
-                setVisible(true)
+            val minimap = visual.minimap ?: return
+            val jams = visual.jams?.takeIf { OverlayPrefs.mapJamsEnabled(context) }
+            minimapImageView?.setImageBitmap(minimap)
+            jamImageView?.apply {
+                setJams(jams)
+                visibility = if (jams != null) View.VISIBLE else View.GONE
+            }
+            layoutMinimapAndJams(minimap, jams, widthPx, heightPx)
+        }
+    }
+
+    private fun layoutMinimapAndJams(minimap: Bitmap, jams: JamsBar?, maxWidth: Int, maxHeight: Int) {
+        val mapRatio = minimap.height.toFloat() / minimap.width
+        // Navigator's ProgressView is a thin strip; scaled proportionally it is barely visible on the HUD.
+        val jamBarHeight = if (jams == null) 0 else {
+            val density = minimapImageView?.resources?.displayMetrics?.density ?: 1f
+            maxOf(maxHeight * JAM_MIN_HEIGHT_FRACTION, JAM_MIN_HEIGHT_DP * density)
+                .roundToInt().coerceIn(1, (maxHeight / 4).coerceAtLeast(1))
+        }
+        // The position arrow is taller than the bar.
+        val jamHeight = if (jams?.progress == null) jamBarHeight else {
+            (jamBarHeight * JAM_ARROW_SCALE).roundToInt().coerceAtMost((maxHeight / 3).coerceAtLeast(1))
+        }
+        val contentWidth = minOf(maxWidth.toFloat(), (maxHeight - jamHeight) / mapRatio)
+            .roundToInt().coerceAtLeast(1)
+        val mapHeight = (contentWidth * mapRatio).roundToInt().coerceIn(1, maxHeight)
+        if (jams != null) {
+            val key = "${jams.bar.width}x${jams.bar.height}->${contentWidth}x$jamBarHeight/$jamHeight"
+            if (key != lastJamLayoutKey) {
+                lastJamLayoutKey = key
+                Log.d(HUD_OVERLAY_TAG, "jams layout $key progress=${jams.progress} map=${contentWidth}x$mapHeight")
             }
         }
+        jamImageView?.barHeightPx = (jamBarHeight * JAM_BAR_THICKNESS).roundToInt().coerceAtLeast(1)
+        minimapImageView?.let { image ->
+            val params = image.layoutParams as LinearLayout.LayoutParams
+            if (params.width != contentWidth || params.height != mapHeight) {
+                image.layoutParams = params.apply { width = contentWidth; height = mapHeight }
+            }
+        }
+        jamImageView?.let { image ->
+            val params = image.layoutParams as LinearLayout.LayoutParams
+            if (params.width != contentWidth || params.height != jamHeight) {
+                image.layoutParams = params.apply { width = contentWidth; height = jamHeight }
+            }
+        }
+    }
+
+    private fun requestMinimap(size: Pair<Int, Int>?) {
+        val rounded = size?.let { (width, height) ->
+            (width.coerceIn(96, 1920) / 8 * 8) to (height.coerceIn(96, 1920) / 8 * 8)
+        }
+        if (rounded == requestedMinimapSize) return
+        requestedMinimapSize = rounded
+        handler.removeCallbacks(minimapRetry)
+        if (rounded == null) {
+            context.sendBroadcast(Intent("com.yandex.MINIMAP_DISABLE").setPackage("ru.yandex.yandexnavi"))
+        } else {
+            sendMinimapEnable(rounded)
+            handler.postDelayed(minimapRetry, 5_000L)
+        }
+    }
+
+    private fun sendMinimapEnable(size: Pair<Int, Int>) {
+        context.sendBroadcast(Intent("com.yandex.MINIMAP_ENABLE")
+            .setPackage("ru.yandex.yandexnavi")
+            .putExtra("minimap_width", size.first)
+            .putExtra("minimap_height", size.second)
+            .putExtra("minimap_hide_on_route_end", true))
     }
 
     private fun releaseMapController() {
@@ -3552,6 +3645,7 @@ class HudOverlayController(private val context: Context) {
     }
 
     private fun removeMapView() {
+        requestMinimap(null)
         releaseMapController()
         hideMapBlock()
     }

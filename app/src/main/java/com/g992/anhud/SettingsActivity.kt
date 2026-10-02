@@ -89,30 +89,15 @@ private const val SETTINGS_BUTTON_DANGER = 2
 class SettingsActivity : ScaledActivity() {
     private lateinit var tabLayout: TabLayout
     private lateinit var tabGeneralContent: View
-    private lateinit var tabMapContent: LinearLayout
     private lateinit var tabManeuverContent: View
     private lateinit var tabUpdatesContent: View
     private lateinit var tabDebugContent: View
     private lateinit var tabHelpContent: View
-    private lateinit var timeoutSettingsToggle: View
-    private lateinit var timeoutSettingsContent: View
-    private lateinit var timeoutSettingsToggleLabel: TextView
     private lateinit var legacyExperimentalVisibilityToggle: View
     private lateinit var legacyExperimentalVisibilityContent: View
     private lateinit var legacyExperimentalVisibilityToggleLabel: TextView
-    private lateinit var mainMenuTrafficLightVisibleSwitch: SwitchCompat
-    private lateinit var mainMenuRoadCameraVisibleSwitch: SwitchCompat
     private lateinit var mainMenuCustomBlocksVisibleSwitch: SwitchCompat
     private lateinit var useStrelkaSwitch: SwitchCompat
-    private lateinit var cameraTimeoutNearInput: EditText
-    private lateinit var cameraTimeoutFarInput: EditText
-    private lateinit var roadCameraTimeoutInput: EditText
-    private lateinit var navNotificationEndTimeoutInput: EditText
-    private lateinit var navUpdatesEndTimeoutInput: EditText
-    private lateinit var speedometerFreezeTimeoutInput: EditText
-    private lateinit var speedCorrectionSeek: SeekBar
-    private lateinit var speedCorrectionValue: TextView
-    private lateinit var speedFromGpsCheck: SwitchCompat
     private lateinit var infoMirrorStarsheep7Switch: SwitchCompat
     private lateinit var infoMirrorGalaxySwitch: SwitchCompat
     private lateinit var backgroundRenderSwitch: SwitchCompat
@@ -139,12 +124,6 @@ class SettingsActivity : ScaledActivity() {
     private lateinit var updateInstallButton: View
     private lateinit var updateProgressBar: ProgressBar
     private lateinit var updateProgressText: TextView
-    private lateinit var cpuGraph: PerformanceGraphView
-    private lateinit var ramGraph: PerformanceGraphView
-    private lateinit var cpuGraphSummary: TextView
-    private lateinit var ramGraphSummary: TextView
-    private lateinit var topCpuTable: TableLayout
-    private lateinit var topCpuNote: TextView
     private lateinit var mapZoomValue: TextView
     private lateinit var mapAutoZoomZeroValue: TextView
     private lateinit var mapAutoZoomSixtyValue: TextView
@@ -179,9 +158,7 @@ class SettingsActivity : ScaledActivity() {
     private var isCheckingUpdates = false
 
     private var isSyncingUi = false
-    private var areTimeoutSettingsExpanded = false
     private var isLegacyExperimentalVisibilityExpanded = false
-    private var pendingSpeedFromGpsAfterBackgroundPermission = false
 
     private val storagePermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -191,32 +168,6 @@ class SettingsActivity : ScaledActivity() {
         } else {
             showToast(R.string.settings_export_failed)
         }
-    }
-
-    private val locationPermissionLauncher = registerForActivityResult(
-        ActivityResultContracts.RequestMultiplePermissions()
-    ) { grants ->
-        val granted = grants[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
-            grants[Manifest.permission.ACCESS_COARSE_LOCATION] == true
-        if (!granted) {
-            disableSpeedFromGpsForPermission(R.string.speed_from_gps_permission_denied)
-            return@registerForActivityResult
-        }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && !hasBackgroundLocationPermission()) {
-            requestBackgroundLocationPermissionForGpsSpeed()
-            return@registerForActivityResult
-        }
-        enableSpeedFromGps()
-    }
-
-    private val backgroundLocationPermissionLauncher = registerForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) {
-        if (!hasBackgroundLocationPermission()) {
-            disableSpeedFromGpsForPermission(R.string.speed_from_gps_background_permission_denied)
-            return@registerForActivityResult
-        }
-        enableSpeedFromGps()
     }
 
     private val exportSettingsLauncher = registerForActivityResult(
@@ -257,14 +208,6 @@ class SettingsActivity : ScaledActivity() {
                 section.scrollView.post {
                     section.scrollView.fullScroll(View.FOCUS_DOWN)
                 }
-            }
-        }
-    }
-
-    private val performanceListener = object : PerformanceDebugMonitor.Listener {
-        override fun onSnapshotUpdated(snapshot: PerformanceDebugMonitor.Snapshot) {
-            runOnUiThread {
-                renderPerformanceSnapshot(snapshot)
             }
         }
     }
@@ -317,30 +260,15 @@ class SettingsActivity : ScaledActivity() {
 
         tabLayout = findViewById(R.id.tabLayout)
         tabGeneralContent = findViewById(R.id.tabGeneralContent)
-        tabMapContent = findViewById(R.id.tabMapContent)
         tabManeuverContent = findViewById(R.id.tabManeuverContent)
         tabUpdatesContent = findViewById(R.id.tabUpdatesContent)
         tabDebugContent = findViewById(R.id.tabDebugContent)
         tabHelpContent = findViewById(R.id.tabHelpContent)
-        timeoutSettingsToggle = findViewById(R.id.timeoutSettingsToggle)
-        timeoutSettingsContent = findViewById(R.id.timeoutSettingsContent)
-        timeoutSettingsToggleLabel = findViewById(R.id.timeoutSettingsToggleLabel)
         legacyExperimentalVisibilityToggle = findViewById(R.id.legacyExperimentalVisibilityToggle)
         legacyExperimentalVisibilityContent = findViewById(R.id.legacyExperimentalVisibilityContent)
         legacyExperimentalVisibilityToggleLabel = findViewById(R.id.legacyExperimentalVisibilityToggleLabel)
-        mainMenuTrafficLightVisibleSwitch = findViewById(R.id.mainMenuTrafficLightVisibleSwitch)
-        mainMenuRoadCameraVisibleSwitch = findViewById(R.id.mainMenuRoadCameraVisibleSwitch)
         mainMenuCustomBlocksVisibleSwitch = findViewById(R.id.mainMenuCustomBlocksVisibleSwitch)
         useStrelkaSwitch = findViewById(R.id.useStrelkaSwitch)
-        cameraTimeoutNearInput = findViewById(R.id.cameraTimeoutNearInput)
-        cameraTimeoutFarInput = findViewById(R.id.cameraTimeoutFarInput)
-        roadCameraTimeoutInput = findViewById(R.id.roadCameraTimeoutInput)
-        navNotificationEndTimeoutInput = findViewById(R.id.navNotificationEndTimeoutInput)
-        navUpdatesEndTimeoutInput = findViewById(R.id.navUpdatesEndTimeoutInput)
-        speedometerFreezeTimeoutInput = findViewById(R.id.speedometerFreezeTimeoutInput)
-        speedCorrectionSeek = findViewById(R.id.speedCorrectionSeek)
-        speedCorrectionValue = findViewById(R.id.speedCorrectionValue)
-        speedFromGpsCheck = findViewById(R.id.speedFromGpsCheck)
         infoMirrorStarsheep7Switch = findViewById(R.id.infoMirrorStarsheep7Switch)
         infoMirrorGalaxySwitch = findViewById(R.id.infoMirrorGalaxySwitch)
         backgroundRenderSwitch = findViewById(R.id.backgroundRenderSwitch)
@@ -366,30 +294,20 @@ class SettingsActivity : ScaledActivity() {
         updateInstallButton = findViewById(R.id.updateInstallButton)
         updateProgressBar = findViewById(R.id.updateProgressBar)
         updateProgressText = findViewById(R.id.updateProgressText)
-        cpuGraph = findViewById(R.id.cpuGraphView)
-        ramGraph = findViewById(R.id.ramGraphView)
-        cpuGraphSummary = findViewById(R.id.cpuGraphSummary)
-        ramGraphSummary = findViewById(R.id.ramGraphSummary)
-        topCpuTable = findViewById(R.id.topCpuTable)
-        topCpuNote = findViewById(R.id.topCpuNote)
 
         setupTabs()
         setupGeneralSettings()
-        setupMapTab()
         setupManeuverTab()
         setupUpdatesTab()
         setupDebugTab()
         setupHelpTab()
-        areTimeoutSettingsExpanded = savedInstanceState?.getBoolean(STATE_TIMEOUTS_EXPANDED, false) ?: false
         isLegacyExperimentalVisibilityExpanded =
             savedInstanceState?.getBoolean(STATE_LEGACY_EXPERIMENTAL_VISIBILITY_EXPANDED, false) ?: false
-        updateTimeoutSettingsSection()
         updateLegacyExperimentalVisibilitySection()
         syncUiFromPrefs()
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
-        outState.putBoolean(STATE_TIMEOUTS_EXPANDED, areTimeoutSettingsExpanded)
         outState.putBoolean(
             STATE_LEGACY_EXPERIMENTAL_VISIBILITY_EXPANDED,
             isLegacyExperimentalVisibilityExpanded
@@ -399,7 +317,6 @@ class SettingsActivity : ScaledActivity() {
 
     override fun onDestroy() {
         UiLogStore.unregisterListener(logListener)
-        PerformanceDebugMonitor.unregisterListener(performanceListener)
         super.onDestroy()
     }
 
@@ -417,23 +334,14 @@ class SettingsActivity : ScaledActivity() {
             IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE),
             ContextCompat.RECEIVER_EXPORTED
         )
-        MapCacheController.addListener(mapCacheListener)
         syncMapCacheUi(MapCacheController.current())
         HudBridgeManager.addListener(hudBridgeListener)
         renderBackgroundRenderState(HudBridgeManager.state)
         refreshUpdateUi()
-        if (pendingSpeedFromGpsAfterBackgroundPermission) {
-            pendingSpeedFromGpsAfterBackgroundPermission = false
-            if (hasBackgroundLocationPermission()) {
-                enableSpeedFromGps()
-            }
-            syncUiFromPrefs()
-        }
     }
 
     override fun onStop() {
         offlineCachePreviewSession?.dismiss()
-        MapCacheController.removeListener(mapCacheListener)
         HudBridgeManager.removeListener(hudBridgeListener)
         try {
             unregisterReceiver(updateReceiver)
@@ -449,13 +357,12 @@ class SettingsActivity : ScaledActivity() {
 
     private fun setupTabs() {
         tabLayout.addTab(tabLayout.newTab().setText(R.string.tab_general_settings))
-        tabLayout.addTab(tabLayout.newTab().setText(R.string.tab_map_settings))
         tabLayout.addTab(tabLayout.newTab().setText(R.string.tab_nav_settings))
         tabLayout.addTab(tabLayout.newTab().setText(R.string.tab_updates))
         tabLayout.addTab(tabLayout.newTab().setText(R.string.tab_debug))
         tabLayout.addTab(tabLayout.newTab().setText(R.string.tab_help))
 
-        updatesTabIndex = 3
+        updatesTabIndex = 2
         val badge = tabLayout.getTabAt(updatesTabIndex)?.orCreateBadge
         badge?.setBackgroundColor(ContextCompat.getColor(this@SettingsActivity, R.color.update_badge_red))
         badge?.setVisible(false)
@@ -464,55 +371,9 @@ class SettingsActivity : ScaledActivity() {
 
         tabLayout.addOnTabSelectedListener(object : TabLayout.OnTabSelectedListener {
             override fun onTabSelected(tab: TabLayout.Tab) {
-                when (tab.position) {
-                    0 -> {
-                        tabGeneralContent.visibility = View.VISIBLE
-                        tabMapContent.visibility = View.GONE
-                        tabManeuverContent.visibility = View.GONE
-                        tabUpdatesContent.visibility = View.GONE
-                        tabDebugContent.visibility = View.GONE
-                        tabHelpContent.visibility = View.GONE
-                    }
-                    1 -> {
-                        tabGeneralContent.visibility = View.GONE
-                        tabMapContent.visibility = View.VISIBLE
-                        tabManeuverContent.visibility = View.GONE
-                        tabUpdatesContent.visibility = View.GONE
-                        tabDebugContent.visibility = View.GONE
-                        tabHelpContent.visibility = View.GONE
-                    }
-                    2 -> {
-                        tabGeneralContent.visibility = View.GONE
-                        tabMapContent.visibility = View.GONE
-                        tabManeuverContent.visibility = View.VISIBLE
-                        tabUpdatesContent.visibility = View.GONE
-                        tabDebugContent.visibility = View.GONE
-                        tabHelpContent.visibility = View.GONE
-                    }
-                    3 -> {
-                        tabGeneralContent.visibility = View.GONE
-                        tabMapContent.visibility = View.GONE
-                        tabManeuverContent.visibility = View.GONE
-                        tabUpdatesContent.visibility = View.VISIBLE
-                        tabDebugContent.visibility = View.GONE
-                        tabHelpContent.visibility = View.GONE
-                    }
-                    4 -> {
-                        tabGeneralContent.visibility = View.GONE
-                        tabMapContent.visibility = View.GONE
-                        tabManeuverContent.visibility = View.GONE
-                        tabUpdatesContent.visibility = View.GONE
-                        tabDebugContent.visibility = View.VISIBLE
-                        tabHelpContent.visibility = View.GONE
-                    }
-                    5 -> {
-                        tabGeneralContent.visibility = View.GONE
-                        tabMapContent.visibility = View.GONE
-                        tabManeuverContent.visibility = View.GONE
-                        tabUpdatesContent.visibility = View.GONE
-                        tabDebugContent.visibility = View.GONE
-                        tabHelpContent.visibility = View.VISIBLE
-                    }
+                val contents = listOf(tabGeneralContent, tabManeuverContent, tabUpdatesContent, tabDebugContent, tabHelpContent)
+                contents.forEachIndexed { index, content ->
+                    content.visibility = if (index == tab.position) View.VISIBLE else View.GONE
                 }
             }
 
@@ -529,24 +390,9 @@ class SettingsActivity : ScaledActivity() {
             broadcastHudAlertSource(source)
         }
 
-        timeoutSettingsToggle.setOnClickListener {
-            areTimeoutSettingsExpanded = !areTimeoutSettingsExpanded
-            updateTimeoutSettingsSection()
-        }
-
         legacyExperimentalVisibilityToggle.setOnClickListener {
             isLegacyExperimentalVisibilityExpanded = !isLegacyExperimentalVisibilityExpanded
             updateLegacyExperimentalVisibilitySection()
-        }
-
-        mainMenuTrafficLightVisibleSwitch.setOnCheckedChangeListener { _, isChecked ->
-            if (isSyncingUi) return@setOnCheckedChangeListener
-            OverlayPrefs.setMainMenuTrafficLightVisible(this, isChecked)
-        }
-
-        mainMenuRoadCameraVisibleSwitch.setOnCheckedChangeListener { _, isChecked ->
-            if (isSyncingUi) return@setOnCheckedChangeListener
-            OverlayPrefs.setMainMenuRoadCameraVisible(this, isChecked)
         }
 
         mainMenuCustomBlocksVisibleSwitch.setOnCheckedChangeListener { _, isChecked ->
@@ -563,105 +409,6 @@ class SettingsActivity : ScaledActivity() {
         }
         importSettingsButton.setOnClickListener {
             importSettingsLauncher.launch(arrayOf("application/json", "*/*"))
-        }
-
-        cameraTimeoutNearInput.addTextChangedListener(object : TextWatcher {
-            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
-            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
-            override fun afterTextChanged(s: Editable?) {
-                if (isSyncingUi) return
-                val value = s?.toString()?.toIntOrNull() ?: 0
-                val clamped = value.coerceIn(0, OverlayPrefs.TIMEOUT_MAX)
-                OverlayPrefs.setCameraTimeoutNear(this@SettingsActivity, clamped)
-            }
-        })
-
-        cameraTimeoutFarInput.addTextChangedListener(object : TextWatcher {
-            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
-            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
-            override fun afterTextChanged(s: Editable?) {
-                if (isSyncingUi) return
-                val value = s?.toString()?.toIntOrNull() ?: 0
-                val clamped = value.coerceIn(0, OverlayPrefs.TIMEOUT_MAX)
-                OverlayPrefs.setCameraTimeoutFar(this@SettingsActivity, clamped)
-            }
-        })
-
-        roadCameraTimeoutInput.addTextChangedListener(object : TextWatcher {
-            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
-            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
-            override fun afterTextChanged(s: Editable?) {
-                if (isSyncingUi) return
-                val value = s?.toString()?.toIntOrNull() ?: 0
-                val clamped = value.coerceIn(0, OverlayPrefs.TIMEOUT_MAX)
-                OverlayPrefs.setRoadCameraTimeout(this@SettingsActivity, clamped)
-            }
-        })
-
-        navNotificationEndTimeoutInput.addTextChangedListener(object : TextWatcher {
-            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
-            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
-            override fun afterTextChanged(s: Editable?) {
-                if (isSyncingUi) return
-                val value = s?.toString()?.toIntOrNull() ?: 0
-                val clamped = value.coerceIn(0, OverlayPrefs.TIMEOUT_MAX)
-                OverlayPrefs.setNavNotificationEndTimeout(this@SettingsActivity, clamped)
-            }
-        })
-
-        navUpdatesEndTimeoutInput.addTextChangedListener(object : TextWatcher {
-            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
-            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
-            override fun afterTextChanged(s: Editable?) {
-                if (isSyncingUi) return
-                val value = s?.toString()?.toIntOrNull() ?: 0
-                val clamped = value.coerceIn(0, OverlayPrefs.TIMEOUT_MAX)
-                OverlayPrefs.setNavUpdatesEndTimeout(this@SettingsActivity, clamped)
-            }
-        })
-
-        speedometerFreezeTimeoutInput.addTextChangedListener(object : TextWatcher {
-            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
-            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
-            override fun afterTextChanged(s: Editable?) {
-                if (isSyncingUi) return
-                val value = s?.toString()?.toIntOrNull() ?: 0
-                val clamped = value.coerceIn(0, OverlayPrefs.TIMEOUT_MAX)
-                OverlayPrefs.setSpeedometerFreezeTimeout(this@SettingsActivity, clamped)
-            }
-        })
-
-        speedCorrectionSeek.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-            override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
-                val correction = progress - 10
-                speedCorrectionValue.text = getString(R.string.speed_correction_value, correction)
-                if (!isSyncingUi && fromUser) {
-                    OverlayPrefs.setSpeedCorrection(this@SettingsActivity, correction)
-                }
-            }
-
-            override fun onStartTrackingTouch(seekBar: SeekBar?) {}
-            override fun onStopTrackingTouch(seekBar: SeekBar?) {}
-        })
-
-        speedFromGpsCheck.setOnCheckedChangeListener { _, isChecked ->
-            if (isSyncingUi) return@setOnCheckedChangeListener
-            if (isChecked && !hasLocationPermission()) {
-                locationPermissionLauncher.launch(
-                    arrayOf(
-                        Manifest.permission.ACCESS_FINE_LOCATION,
-                        Manifest.permission.ACCESS_COARSE_LOCATION
-                    )
-                )
-                return@setOnCheckedChangeListener
-            }
-            if (isChecked && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && !hasBackgroundLocationPermission()) {
-                requestBackgroundLocationPermissionForGpsSpeed()
-                syncUiFromPrefs()
-                return@setOnCheckedChangeListener
-            }
-            OverlayPrefs.setSpeedFromGps(this, isChecked)
-            startService(Intent(this, SensorDataService::class.java))
         }
 
         infoMirrorStarsheep7Switch.setOnCheckedChangeListener { _, isChecked ->
@@ -730,315 +477,6 @@ class SettingsActivity : ScaledActivity() {
         hideTurnDynamicConfigButton.setOnClickListener {
             showHideTurnDynamicSettingsDialog()
         }
-    }
-
-    private fun setupMapTab() {
-        MapRenderSettingsStore.initialize(applicationContext)
-        val settings = MapRenderSettingsStore.current()
-
-        mapZoomValue = createMapValueView()
-        mapAutoZoomZeroValue = createMapValueView()
-        mapAutoZoomSixtyValue = createMapValueView()
-        mapAutoZoomNinetyValue = createMapValueView()
-        mapTiltValue = createMapValueView()
-        mapArrowValue = createMapValueView()
-        mapTileProviderValue = createMapValueView()
-        mapStyleModeValue = createMapValueView()
-        mapStyleModeHint = createMapHintView("")
-        mapCacheValue = createMapValueView()
-        mapRouteSnapDistanceValue = createMapValueView()
-        mapOfflineRegionValue = createMapValueView()
-        mapAutoZoomSwitch = SwitchCompat(this).apply {
-            text = getString(R.string.map_settings_auto_zoom)
-            setTextColor(ContextCompat.getColor(this@SettingsActivity, R.color.white))
-            setOnCheckedChangeListener { _, isChecked ->
-                if (!isSyncingUi) {
-                    MapRenderSettingsStore.update { it.copy(autoZoomEnabled = isChecked) }
-                    syncMapUiFromPrefs()
-                }
-            }
-        }
-        mapVignetteSwitch = SwitchCompat(this).apply {
-            text = getString(R.string.map_settings_vignette)
-            setTextColor(ContextCompat.getColor(this@SettingsActivity, R.color.white))
-            setOnCheckedChangeListener { _, isChecked ->
-                if (!isSyncingUi) {
-                    MapRenderSettingsStore.update { it.copy(mapVignetteEnabled = isChecked) }
-                }
-            }
-        }
-        mapRouteDownloadSwitch = SwitchCompat(this).apply {
-            text = getString(R.string.map_settings_route_download)
-            setTextColor(ContextCompat.getColor(this@SettingsActivity, R.color.white))
-            setOnCheckedChangeListener { _, isChecked ->
-                if (!isSyncingUi) {
-                    MapRenderSettingsStore.update { it.copy(downloadRouteEnabled = isChecked) }
-                }
-            }
-        }
-        mapRouteSnapSwitch = SwitchCompat(this).apply {
-            text = getString(R.string.map_settings_route_snap)
-            setTextColor(ContextCompat.getColor(this@SettingsActivity, R.color.white))
-            setOnCheckedChangeListener { _, isChecked ->
-                if (!isSyncingUi) {
-                    MapRenderSettingsStore.update { it.copy(snapRouteToRoadsEnabled = isChecked) }
-                    syncMapUiFromPrefs()
-                }
-            }
-        }
-        mapLocationSnapSwitch = SwitchCompat(this).apply {
-            text = getString(R.string.map_settings_location_snap)
-            setTextColor(ContextCompat.getColor(this@SettingsActivity, R.color.white))
-            setOnCheckedChangeListener { _, isChecked ->
-                if (!isSyncingUi) {
-                    MapRenderSettingsStore.update { it.copy(snapLocationToRoadsEnabled = isChecked) }
-                    syncMapUiFromPrefs()
-                }
-            }
-        }
-
-        val zoomSeek = SeekBar(this).apply {
-            max = ((MAP_ZOOM_MAX - MAP_ZOOM_MIN) * 10).roundToInt()
-            setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-                override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
-                    val value = MAP_ZOOM_MIN + (progress / 10.0)
-                    mapZoomValue.text = formatMapDecimal(value)
-                    if (fromUser && !isSyncingUi) {
-                        MapRenderSettingsStore.update { it.copy(zoom = value) }
-                    }
-                }
-
-                override fun onStartTrackingTouch(seekBar: SeekBar?) = Unit
-                override fun onStopTrackingTouch(seekBar: SeekBar?) = Unit
-            })
-        }
-        val autoZoomZeroSeek = SeekBar(this).apply {
-            max = ((MAP_ZOOM_MAX - MAP_ZOOM_MIN) * 10).roundToInt()
-            setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-                override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
-                    val value = MAP_ZOOM_MIN + (progress / 10.0)
-                    mapAutoZoomZeroValue.text = formatMapDecimal(value)
-                    if (fromUser && !isSyncingUi) {
-                        MapRenderSettingsStore.update { it.copy(autoZoomAt0Kmh = value) }
-                    }
-                }
-
-                override fun onStartTrackingTouch(seekBar: SeekBar?) = Unit
-                override fun onStopTrackingTouch(seekBar: SeekBar?) = Unit
-            })
-        }
-        val autoZoomSixtySeek = SeekBar(this).apply {
-            max = ((MAP_ZOOM_MAX - MAP_ZOOM_MIN) * 10).roundToInt()
-            setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-                override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
-                    val value = MAP_ZOOM_MIN + (progress / 10.0)
-                    mapAutoZoomSixtyValue.text = formatMapDecimal(value)
-                    if (fromUser && !isSyncingUi) {
-                        MapRenderSettingsStore.update { it.copy(autoZoomAt60Kmh = value) }
-                    }
-                }
-
-                override fun onStartTrackingTouch(seekBar: SeekBar?) = Unit
-                override fun onStopTrackingTouch(seekBar: SeekBar?) = Unit
-            })
-        }
-        val autoZoomNinetySeek = SeekBar(this).apply {
-            max = ((MAP_ZOOM_MAX - MAP_ZOOM_MIN) * 10).roundToInt()
-            setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-                override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
-                    val value = MAP_ZOOM_MIN + (progress / 10.0)
-                    mapAutoZoomNinetyValue.text = formatMapDecimal(value)
-                    if (fromUser && !isSyncingUi) {
-                        MapRenderSettingsStore.update { it.copy(autoZoomAt90Kmh = value) }
-                    }
-                }
-
-                override fun onStartTrackingTouch(seekBar: SeekBar?) = Unit
-                override fun onStopTrackingTouch(seekBar: SeekBar?) = Unit
-            })
-        }
-        val tiltSeek = SeekBar(this).apply {
-            max = 80
-            setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-                override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
-                    val value = progress.toDouble()
-                    mapTiltValue.text = getString(R.string.map_settings_tilt_value, value.roundToInt())
-                    if (fromUser && !isSyncingUi) {
-                        MapRenderSettingsStore.update { it.copy(tilt = value) }
-                    }
-                }
-
-                override fun onStartTrackingTouch(seekBar: SeekBar?) = Unit
-                override fun onStopTrackingTouch(seekBar: SeekBar?) = Unit
-            })
-        }
-        val arrowSeek = SeekBar(this).apply {
-            max = MAP_ARROW_SCALE_MAX_PERCENT - MAP_ARROW_SCALE_MIN_PERCENT
-            setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-                override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
-                    val value = MAP_ARROW_SCALE_MIN_PERCENT + progress
-                    mapArrowValue.text = value.toString()
-                    if (fromUser && !isSyncingUi) {
-                        MapRenderSettingsStore.update { it.copy(arrowScalePercent = value) }
-                    }
-                }
-
-                override fun onStartTrackingTouch(seekBar: SeekBar?) = Unit
-                override fun onStopTrackingTouch(seekBar: SeekBar?) = Unit
-            })
-        }
-        val routeSnapDistanceSeek = SeekBar(this).apply {
-            max = MAP_ROUTE_SNAP_MAX_METERS - MAP_ROUTE_SNAP_MIN_METERS
-            setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-                override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
-                    val value = MAP_ROUTE_SNAP_MIN_METERS + progress
-                    mapRouteSnapDistanceValue.text = getString(R.string.map_settings_route_snap_distance_value, value)
-                    if (fromUser && !isSyncingUi) {
-                        MapRenderSettingsStore.update { it.copy(routeSnapDistanceMeters = value) }
-                    }
-                }
-
-                override fun onStartTrackingTouch(seekBar: SeekBar?) = Unit
-                override fun onStopTrackingTouch(seekBar: SeekBar?) = Unit
-            })
-        }
-
-        val cacheButtons = MapCacheSizeOptionsMb.mapIndexed { index, valueMb ->
-            createSettingsButton(formatCacheStepLabel(valueMb), SETTINGS_BUTTON_SECONDARY).apply {
-                text = formatCacheStepLabel(valueMb)
-                setOnClickListener {
-                    if (!isSyncingUi) {
-                        MapRenderSettingsStore.update { it.copy(cacheSizeStep = index) }
-                        syncMapUiFromPrefs()
-                    }
-                }
-            }
-        }
-        mapCacheClearButton = createSettingsButton(
-            getString(R.string.map_settings_cache_clear),
-            SETTINGS_BUTTON_DANGER
-        ).apply {
-            setOnClickListener {
-                MapCacheController.clearCache()
-            }
-        }
-        mapTileProviderButtons = MapTileProvider.entries.associateWith { provider ->
-            createSettingsButton(provider.displayName, SETTINGS_BUTTON_SECONDARY).apply {
-                setOnClickListener {
-                    if (isSyncingUi || provider.id == MapRenderSettingsStore.current().tileProviderId) {
-                        return@setOnClickListener
-                    }
-                    confirmMapTileProviderChange(provider)
-                }
-            }
-        }
-        mapStyleModeButtons = MapStyleMode.entries.associateWith { mode ->
-            createSettingsButton(
-                getString(
-                    when (mode) {
-                        MapStyleMode.SYSTEM -> R.string.map_settings_style_system
-                        MapStyleMode.USER -> R.string.map_settings_style_custom
-                    }
-                ),
-                SETTINGS_BUTTON_SECONDARY
-            ).apply {
-                setOnClickListener {
-                    if (isSyncingUi) {
-                        return@setOnClickListener
-                    }
-                    handleMapStyleModeClick(mode)
-                }
-            }
-        }
-        mapCacheButtons = cacheButtons
-        val cacheRow = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            weightSum = cacheButtons.size.toFloat()
-            cacheButtons.forEachIndexed { index, button ->
-                addView(
-                    button,
-                    LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
-                        if (index > 0) marginStart = dp(8)
-                    }
-                )
-            }
-        }
-        val tileProviderRow = createMapButtonRow(
-            MapTileProvider.entries.mapNotNull { provider -> mapTileProviderButtons[provider] }
-        )
-        val styleModeRow = createMapButtonRow(
-            MapStyleMode.entries.mapNotNull { mode -> mapStyleModeButtons[mode] }
-        )
-        val mapDisplaySettingsButton = createSettingsButton(
-            getString(R.string.map_settings_display_settings),
-            SETTINGS_BUTTON_SECONDARY
-        ).apply {
-            setOnClickListener { showMapDisplaySettingsDialog() }
-        }
-
-        val offlineDownloadsButton = createSettingsButton(
-            getString(R.string.map_settings_offline_downloads),
-            SETTINGS_BUTTON_PRIMARY
-        ).apply {
-            setOnClickListener { showOfflineDownloadsDialog() }
-        }
-
-        val autoZoomRows = listOf(
-            createMapSliderRow(getString(R.string.map_settings_auto_zoom_at_0), mapAutoZoomZeroValue, autoZoomZeroSeek),
-            createMapSliderRow(getString(R.string.map_settings_auto_zoom_at_60), mapAutoZoomSixtyValue, autoZoomSixtySeek),
-            createMapSliderRow(getString(R.string.map_settings_auto_zoom_at_90), mapAutoZoomNinetyValue, autoZoomNinetySeek),
-        )
-        mapAutoZoomConfigRows = autoZoomRows
-        val routeSnapRows = listOf(
-            createMapSliderRow(getString(R.string.map_settings_route_snap_distance), mapRouteSnapDistanceValue, routeSnapDistanceSeek),
-        )
-        mapRouteSnapConfigRows = routeSnapRows
-
-        tabMapContent.removeAllViews()
-        tabMapContent.addView(
-            createMapSection(
-                title = getString(R.string.map_settings_title),
-                subtitle = getString(R.string.map_settings_subtitle),
-                body = listOf(
-                    createMapSliderRow(getString(R.string.map_settings_zoom), mapZoomValue, zoomSeek),
-                    createMapSwitchRow(mapAutoZoomSwitch, getString(R.string.map_settings_auto_zoom_hint)),
-                    *autoZoomRows.toTypedArray(),
-                    createMapSliderRow(getString(R.string.map_settings_tilt), mapTiltValue, tiltSeek),
-                    createMapSliderRow(getString(R.string.map_settings_arrow_scale), mapArrowValue, arrowSeek),
-                    createMapValueRow(getString(R.string.map_settings_tile_source), mapTileProviderValue, tileProviderRow),
-                    createMapHintView(getString(R.string.map_settings_tile_source_hint)),
-                    createMapSwitchRow(mapVignetteSwitch, getString(R.string.map_settings_vignette_hint)),
-                    createMapValueRow(getString(R.string.map_settings_style), mapStyleModeValue, styleModeRow),
-                    mapStyleModeHint,
-                    createMapButtonRow(listOf(mapDisplaySettingsButton)),
-                    createMapSwitchRow(mapLocationSnapSwitch, getString(R.string.map_settings_location_snap_hint)),
-                    *routeSnapRows.toTypedArray(),
-                    createMapValueRow(getString(R.string.map_settings_cache), mapCacheValue, cacheRow),
-                    createMapButtonRow(listOf(mapCacheClearButton)),
-                    createMapButtonRow(listOf(offlineDownloadsButton)),
-                )
-            )
-        )
-
-        isSyncingUi = true
-        try {
-            zoomSeek.progress = ((settings.zoom - MAP_ZOOM_MIN) * 10).roundToInt()
-                .coerceIn(0, zoomSeek.max)
-            autoZoomZeroSeek.progress = ((settings.autoZoomAt0Kmh - MAP_ZOOM_MIN) * 10).roundToInt()
-                .coerceIn(0, autoZoomZeroSeek.max)
-            autoZoomSixtySeek.progress = ((settings.autoZoomAt60Kmh - MAP_ZOOM_MIN) * 10).roundToInt()
-                .coerceIn(0, autoZoomSixtySeek.max)
-            autoZoomNinetySeek.progress = ((settings.autoZoomAt90Kmh - MAP_ZOOM_MIN) * 10).roundToInt()
-                .coerceIn(0, autoZoomNinetySeek.max)
-            tiltSeek.progress = settings.tilt.roundToInt().coerceIn(0, 80)
-            arrowSeek.progress = settings.arrowScalePercent
-                .coerceIn(MAP_ARROW_SCALE_MIN_PERCENT, MAP_ARROW_SCALE_MAX_PERCENT) - MAP_ARROW_SCALE_MIN_PERCENT
-            routeSnapDistanceSeek.progress = settings.routeSnapDistanceMeters
-                .coerceIn(MAP_ROUTE_SNAP_MIN_METERS, MAP_ROUTE_SNAP_MAX_METERS) - MAP_ROUTE_SNAP_MIN_METERS
-        } finally {
-            isSyncingUi = false
-        }
-        syncMapUiFromPrefs()
     }
 
     private fun createMapSection(
@@ -1143,53 +581,7 @@ class SettingsActivity : ScaledActivity() {
         }
     }
 
-    private fun syncMapUiFromPrefs() {
-        val settings = MapRenderSettingsStore.current()
-        mapZoomValue.text = formatMapDecimal(settings.zoom)
-        mapAutoZoomZeroValue.text = formatMapDecimal(settings.autoZoomAt0Kmh)
-        mapAutoZoomSixtyValue.text = formatMapDecimal(settings.autoZoomAt60Kmh)
-        mapAutoZoomNinetyValue.text = formatMapDecimal(settings.autoZoomAt90Kmh)
-        mapTiltValue.text = getString(R.string.map_settings_tilt_value, settings.tilt.roundToInt())
-        mapArrowValue.text = settings.arrowScalePercent.toString()
-        mapTileProviderValue.text = resolveConfiguredMapTileProvider(settings.tileProviderId).displayName
-        val styleMode = settings.effectiveMapStyleMode()
-        mapStyleModeValue.text = getString(
-            if (styleMode == MapStyleMode.USER) {
-                R.string.map_settings_style_custom
-            } else {
-                R.string.map_settings_style_system
-            }
-        )
-        mapStyleModeHint.text = if (styleMode == MapStyleMode.USER) {
-            getString(
-                R.string.map_settings_style_custom_hint,
-                settings.customStyleName ?: getString(R.string.map_settings_style_custom_default_name)
-            )
-        } else {
-            getString(R.string.map_settings_style_system_hint)
-        }
-        mapRouteSnapDistanceValue.text = getString(
-            R.string.map_settings_route_snap_distance_value,
-            settings.routeSnapDistanceMeters
-        )
-        mapOfflineRegionValue.text = formatOfflineRegion(settings)
-        mapAutoZoomSwitch.isChecked = settings.autoZoomEnabled
-        mapVignetteSwitch.isChecked = settings.mapVignetteEnabled
-        mapRouteDownloadSwitch.isChecked = settings.downloadRouteEnabled
-        mapRouteSnapSwitch.isChecked = settings.snapRouteToRoadsEnabled
-        mapLocationSnapSwitch.isChecked = settings.snapLocationToRoadsEnabled
-        val autoZoomVisibility = if (settings.autoZoomEnabled) View.VISIBLE else View.GONE
-        mapAutoZoomConfigRows.forEach { it.visibility = autoZoomVisibility }
-        val routeSnapVisibility = if (
-            settings.snapRouteToRoadsEnabled ||
-            settings.snapLocationToRoadsEnabled
-        ) View.VISIBLE else View.GONE
-        mapRouteSnapConfigRows.forEach { it.visibility = routeSnapVisibility }
-        refreshMapTileProviderButtons(settings.tileProviderId)
-        refreshMapStyleModeButtons(styleMode)
-        refreshMapCacheButtons(settings.cacheSizeStep)
-        syncMapCacheUi(MapCacheController.current())
-    }
+    private fun syncMapUiFromPrefs() = Unit
 
     private fun refreshMapTileProviderButtons(selectedProviderId: String) {
         val selectedProvider = resolveConfiguredMapTileProvider(selectedProviderId)
@@ -1306,8 +698,7 @@ class SettingsActivity : ScaledActivity() {
                         offlineManualLon2 = null,
                     )
                 }
-                syncMapUiFromPrefs()
-                dialog?.dismiss()
+                        dialog?.dismiss()
             }
         }
         searchInput.addTextChangedListener(object : TextWatcher {
@@ -1845,8 +1236,7 @@ class SettingsActivity : ScaledActivity() {
                     customStyleJson = styleJson,
                 )
             }
-            syncMapUiFromPrefs()
-            showToast(getString(R.string.map_settings_style_custom_loaded, displayName))
+                showToast(getString(R.string.map_settings_style_custom_loaded, displayName))
         }.onFailure { error ->
             showToast(
                 getString(
@@ -1886,8 +1276,7 @@ class SettingsActivity : ScaledActivity() {
                     customStyleJson = null,
                 )
             }
-            syncMapUiFromPrefs()
-            showToast(R.string.map_settings_style_system_restored)
+                showToast(R.string.map_settings_style_system_restored)
         }
     }
 
@@ -2010,8 +1399,7 @@ class SettingsActivity : ScaledActivity() {
                     buildings3dEnabled = buildings3dCheckBox.isChecked,
                 )
             }
-            syncMapUiFromPrefs()
-            dialog?.dismiss()
+                dialog?.dismiss()
         }
         dialog = AlertDialog.Builder(this, R.style.ThemeOverlay_ANHUD_Dialog)
             .setView(container)
@@ -2149,8 +1537,7 @@ class SettingsActivity : ScaledActivity() {
             confirmLabel = getString(R.string.map_settings_tile_source_change_confirm),
         ) {
             MapRenderSettingsStore.update { it.copy(tileProviderId = provider.id) }
-            syncMapUiFromPrefs()
-            MapCacheController.clearCache()
+                MapCacheController.clearCache()
             showToast(R.string.map_settings_tile_source_changed)
         }
     }
@@ -2790,40 +2177,6 @@ class SettingsActivity : ScaledActivity() {
         ) != PackageManager.PERMISSION_GRANTED
     }
 
-    private fun hasLocationPermission(): Boolean {
-        return hasForegroundLocationPermission()
-    }
-
-    private fun enableSpeedFromGps() {
-        pendingSpeedFromGpsAfterBackgroundPermission = false
-        OverlayPrefs.setSpeedFromGps(this, true)
-        startService(Intent(this, SensorDataService::class.java))
-    }
-
-    private fun disableSpeedFromGpsForPermission(messageId: Int) {
-        pendingSpeedFromGpsAfterBackgroundPermission = false
-        OverlayPrefs.setSpeedFromGps(this, false)
-        syncUiFromPrefs()
-        showToast(messageId)
-    }
-
-    private fun requestBackgroundLocationPermissionForGpsSpeed() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
-            enableSpeedFromGps()
-            return
-        }
-        pendingSpeedFromGpsAfterBackgroundPermission = true
-        if (Build.VERSION.SDK_INT == Build.VERSION_CODES.Q) {
-            backgroundLocationPermissionLauncher.launch(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
-            return
-        }
-        showToast(R.string.speed_from_gps_background_permission_denied)
-        val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-            data = Uri.parse("package:$packageName")
-        }
-        startActivity(intent)
-    }
-
     private fun requestStoragePermission() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
             storagePermissionLauncher.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
@@ -3077,8 +2430,6 @@ class SettingsActivity : ScaledActivity() {
     }
 
     private fun setupDebugTab() {
-        cpuGraph.setLineColor(0xFFE57373.toInt())
-        ramGraph.setLineColor(0xFF4DB6AC.toInt())
 
         logSections[LogCategory.NAVIGATION] = LogSection(
             findViewById(R.id.navScroll),
@@ -3093,93 +2444,6 @@ class SettingsActivity : ScaledActivity() {
             findViewById(R.id.systemLogs)
         )
         UiLogStore.registerListener(logListener)
-        PerformanceDebugMonitor.registerListener(performanceListener)
-        renderPerformanceSnapshot(PerformanceDebugMonitor.currentSnapshot())
-    }
-
-    private fun renderPerformanceSnapshot(snapshot: PerformanceDebugMonitor.Snapshot) {
-        val cpuValues = snapshot.samples.map { it.systemCpuPercent }
-        val ramValues = snapshot.samples.map { it.ramUsedPercent }
-        cpuGraph.setValues(cpuValues)
-        ramGraph.setValues(ramValues)
-
-        val latest = snapshot.samples.lastOrNull()
-        if (latest == null) {
-            cpuGraphSummary.text = getString(R.string.performance_waiting_data)
-            ramGraphSummary.text = getString(R.string.performance_waiting_data)
-            renderTopCpuRows(emptyList())
-            topCpuNote.visibility = View.VISIBLE
-            topCpuNote.text = getString(R.string.performance_waiting_data)
-            return
-        }
-
-        cpuGraphSummary.text = getString(
-            R.string.performance_cpu_summary,
-            PerformanceDebugMonitor.formatPercent(latest.systemCpuPercent),
-            PerformanceDebugMonitor.formatPercent(latest.appCpuPercent)
-        ) + snapshot.systemCpuNote?.let { "\n$it" }.orEmpty()
-        ramGraphSummary.text = getString(
-            R.string.performance_ram_summary,
-            PerformanceDebugMonitor.formatPercent(latest.ramUsedPercent),
-            PerformanceDebugMonitor.formatMb(latest.ramUsedMb),
-            PerformanceDebugMonitor.formatMb(latest.ramTotalMb),
-            PerformanceDebugMonitor.formatMb(latest.appPssMb)
-        )
-
-        renderTopCpuRows(snapshot.topApps)
-        if (snapshot.topAppsNote.isNullOrBlank()) {
-            topCpuNote.visibility = View.GONE
-        } else {
-            topCpuNote.visibility = View.VISIBLE
-            topCpuNote.text = snapshot.topAppsNote
-        }
-    }
-
-    private fun renderTopCpuRows(topApps: List<PerformanceDebugMonitor.TopAppCpu>) {
-        if (topCpuTable.childCount > 1) {
-            topCpuTable.removeViews(1, topCpuTable.childCount - 1)
-        }
-
-        if (topApps.isEmpty()) {
-            val row = TableRow(this)
-            row.addView(makeTopCpuCell("—", 0.9f, Gravity.CENTER))
-            row.addView(makeTopCpuCell("—", 1.1f, Gravity.END))
-            row.addView(makeTopCpuCell("—", 1.0f, Gravity.END))
-            row.addView(makeTopCpuCell(getString(R.string.performance_no_active_apps), 4.0f, Gravity.START))
-            topCpuTable.addView(row)
-            return
-        }
-
-        topApps.take(10).forEachIndexed { index, app ->
-            val row = TableRow(this)
-            row.addView(makeTopCpuCell((index + 1).toString(), 0.9f, Gravity.CENTER))
-            row.addView(
-                makeTopCpuCell(
-                    PerformanceDebugMonitor.formatPercent(app.cpuPercent),
-                    1.1f,
-                    Gravity.END
-                )
-            )
-            row.addView(makeTopCpuCell(app.pid.toString(), 1.0f, Gravity.END))
-            row.addView(makeTopCpuCell(app.processName, 4.0f, Gravity.START))
-            topCpuTable.addView(row)
-        }
-    }
-
-    private fun makeTopCpuCell(text: String, weight: Float, gravity: Int): TextView {
-        return TextView(this).apply {
-            this.text = text
-            this.gravity = gravity
-            setTextColor(ContextCompat.getColor(this@SettingsActivity, R.color.white))
-            textSize = 12f
-            maxLines = 1
-            ellipsize = android.text.TextUtils.TruncateAt.END
-            layoutParams = TableRow.LayoutParams(0, TableRow.LayoutParams.WRAP_CONTENT, weight).apply {
-                marginEnd = dp(4)
-                topMargin = dp(2)
-                bottomMargin = dp(2)
-            }
-        }
     }
 
     private fun setupHelpTab() {
@@ -3548,19 +2812,7 @@ class SettingsActivity : ScaledActivity() {
         isSyncingUi = true
         try {
             useStrelkaSwitch.isChecked = OverlayPrefs.hudAlertSource(this) == OverlayPrefs.HudAlertSource.STRELKA
-            mainMenuTrafficLightVisibleSwitch.isChecked = OverlayPrefs.mainMenuTrafficLightVisible(this)
-            mainMenuRoadCameraVisibleSwitch.isChecked = OverlayPrefs.mainMenuRoadCameraVisible(this)
             mainMenuCustomBlocksVisibleSwitch.isChecked = CustomBlockRepository(this).load().menuVisible
-            cameraTimeoutNearInput.setText(OverlayPrefs.cameraTimeoutNear(this).toString())
-            cameraTimeoutFarInput.setText(OverlayPrefs.cameraTimeoutFar(this).toString())
-            roadCameraTimeoutInput.setText(OverlayPrefs.roadCameraTimeout(this).toString())
-            navNotificationEndTimeoutInput.setText(OverlayPrefs.navNotificationEndTimeout(this).toString())
-            navUpdatesEndTimeoutInput.setText(OverlayPrefs.navUpdatesEndTimeout(this).toString())
-            speedometerFreezeTimeoutInput.setText(OverlayPrefs.speedometerFreezeTimeout(this).toString())
-            val correction = OverlayPrefs.speedCorrection(this)
-            speedCorrectionSeek.progress = correction + 10
-            speedCorrectionValue.text = getString(R.string.speed_correction_value, correction)
-            speedFromGpsCheck.isChecked = OverlayPrefs.speedFromGps(this)
             infoMirrorStarsheep7Switch.isChecked = OverlayPrefs.infoMirrorStarsheep7Enabled(this)
             infoMirrorGalaxySwitch.isChecked = OverlayPrefs.infoMirrorGalaxyEnabled(this)
             val hideTurnWhenFarEnabled = OverlayPrefs.hideTurnWhenFarEnabled(this)
@@ -3574,21 +2826,9 @@ class SettingsActivity : ScaledActivity() {
             updateHideTurnSwitchLabel(hideDistance)
             updateHideTurnDistanceControls(hideTurnWhenFarEnabled)
             updateHideTurnDynamicControls(hideTurnWhenFarEnabled, hideTurnDynamicEnabled)
-            syncMapUiFromPrefs()
-        } finally {
+            } finally {
             isSyncingUi = false
         }
-    }
-
-    private fun updateTimeoutSettingsSection() {
-        timeoutSettingsContent.visibility = if (areTimeoutSettingsExpanded) View.VISIBLE else View.GONE
-        timeoutSettingsToggleLabel.setText(
-            if (areTimeoutSettingsExpanded) {
-                R.string.settings_section_collapse
-            } else {
-                R.string.settings_section_expand
-            }
-        )
     }
 
     private fun updateLegacyExperimentalVisibilitySection() {
@@ -3953,7 +3193,6 @@ class SettingsActivity : ScaledActivity() {
     }
 
     companion object {
-        private const val STATE_TIMEOUTS_EXPANDED = "state_timeouts_expanded"
         private const val STATE_LEGACY_EXPERIMENTAL_VISIBILITY_EXPANDED =
             "state_legacy_experimental_visibility_expanded"
         private const val DEFAULT_BASIC_ICON_ID = "101"

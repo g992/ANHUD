@@ -136,7 +136,6 @@ class MainActivity : ScaledActivity() {
     private lateinit var positionHudSpeedCard: View
     internal lateinit var sharedAlertBlockTitle: TextView
     internal lateinit var sharedAlertSourceSummary: TextView
-    private lateinit var positionRoadCameraCard: View
     private lateinit var positionTrafficLightCard: View
     private lateinit var positionSpeedometerCard: View
     private lateinit var positionTurnSignalsCard: View
@@ -155,7 +154,6 @@ class MainActivity : ScaledActivity() {
     internal lateinit var arrowProjectionSwitch: SwitchCompat
     internal lateinit var speedProjectionSwitch: SwitchCompat
     internal lateinit var hudSpeedProjectionSwitch: SwitchCompat
-    internal lateinit var roadCameraProjectionSwitch: SwitchCompat
     internal lateinit var trafficLightProjectionSwitch: SwitchCompat
     internal lateinit var speedometerProjectionSwitch: SwitchCompat
     internal lateinit var turnSignalsProjectionSwitch: SwitchCompat
@@ -255,7 +253,6 @@ class MainActivity : ScaledActivity() {
         positionHudSpeedCard = findViewById(R.id.positionHudSpeedCard)
         sharedAlertBlockTitle = findViewById(R.id.sharedAlertBlockTitle)
         sharedAlertSourceSummary = findViewById(R.id.sharedAlertSourceSummary)
-        positionRoadCameraCard = findViewById(R.id.positionRoadCameraCard)
         positionTrafficLightCard = findViewById(R.id.positionTrafficLightCard)
         positionSpeedometerCard = findViewById(R.id.positionSpeedometerCard)
         positionTurnSignalsCard = findViewById(R.id.positionTurnSignalsCard)
@@ -274,7 +271,6 @@ class MainActivity : ScaledActivity() {
         arrowProjectionSwitch = findViewById(R.id.arrowProjectionSwitch)
         speedProjectionSwitch = findViewById(R.id.speedProjectionSwitch)
         hudSpeedProjectionSwitch = findViewById(R.id.hudSpeedProjectionSwitch)
-        roadCameraProjectionSwitch = findViewById(R.id.roadCameraProjectionSwitch)
         trafficLightProjectionSwitch = findViewById(R.id.trafficLightProjectionSwitch)
         speedometerProjectionSwitch = findViewById(R.id.speedometerProjectionSwitch)
         turnSignalsProjectionSwitch = findViewById(R.id.turnSignalsProjectionSwitch)
@@ -369,11 +365,7 @@ class MainActivity : ScaledActivity() {
                 }
                 OverlayPrefs.setMapEnabled(this@MainActivity, isChecked)
                 notifyOverlaySettingsChanged(mapEnabled = isChecked)
-                if (isChecked && !hasForegroundLocationPermission()) {
-                    requestForegroundLocationPermission()
-                } else {
-                    updatePermissionStatus()
-                }
+                updatePermissionStatus()
             }
         }
 
@@ -394,9 +386,6 @@ class MainActivity : ScaledActivity() {
         }
         positionHudSpeedCard.setOnClickListener {
             openPositionDialog(currentSharedAlertOverlayTarget())
-        }
-        positionRoadCameraCard.setOnClickListener {
-            openPositionDialog(OverlayTarget.ROAD_CAMERA)
         }
         positionTrafficLightCard.setOnClickListener {
             openPositionDialog(OverlayTarget.TRAFFIC_LIGHT)
@@ -422,7 +411,6 @@ class MainActivity : ScaledActivity() {
         arrowProjectionSwitch.isChecked = OverlayPrefs.arrowEnabled(this)
         speedProjectionSwitch.isChecked = OverlayPrefs.speedEnabled(this)
         hudSpeedProjectionSwitch.isChecked = OverlayPrefs.hudSpeedEnabled(this)
-        roadCameraProjectionSwitch.isChecked = OverlayPrefs.roadCameraEnabled(this)
         trafficLightProjectionSwitch.isChecked = OverlayPrefs.trafficLightEnabled(this)
         speedometerProjectionSwitch.isChecked = OverlayPrefs.speedometerEnabled(this)
         turnSignalsProjectionSwitch.isChecked = OverlayPrefs.turnSignalsEnabled(this)
@@ -465,13 +453,6 @@ class MainActivity : ScaledActivity() {
             }
             OverlayPrefs.setHudSpeedEnabled(this, isChecked)
             notifyOverlaySettingsChanged(hudSpeedEnabled = isChecked)
-        }
-        roadCameraProjectionSwitch.setOnCheckedChangeListener { _, isChecked ->
-            if (isSyncingUi) {
-                return@setOnCheckedChangeListener
-            }
-            OverlayPrefs.setRoadCameraEnabled(this, isChecked)
-            notifyOverlaySettingsChanged(roadCameraEnabled = isChecked)
         }
         trafficLightProjectionSwitch.setOnCheckedChangeListener { _, isChecked ->
             if (isSyncingUi) {
@@ -739,16 +720,7 @@ class MainActivity : ScaledActivity() {
     }
 
     internal fun syncLegacyExperimentalBlockVisibility() {
-        positionRoadCameraCard.visibility = if (OverlayPrefs.mainMenuRoadCameraVisible(this)) {
-            View.VISIBLE
-        } else {
-            View.GONE
-        }
-        positionTrafficLightCard.visibility = if (OverlayPrefs.mainMenuTrafficLightVisible(this)) {
-            View.VISIBLE
-        } else {
-            View.GONE
-        }
+        positionTrafficLightCard.visibility = View.VISIBLE
         customBlocksCard.visibility = if (customBlockRepository.load().menuVisible) {
             View.VISIBLE
         } else {

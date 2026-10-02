@@ -87,4 +87,30 @@ class WindshieldTrafficLightBatcherTest {
     fun keyFallsBackToPosition() {
         assertEquals("ws:#pos2", WindshieldTrafficLight.keyFor("", 2))
     }
+
+    @Test
+    fun parsesDistanceTypesAndRejectsInvalidValues() {
+        assertEquals(12.5, WindshieldTrafficLightBatcher.parseDistanceMeters(12.5f)!!, 0.001)
+        assertEquals(42.0, WindshieldTrafficLightBatcher.parseDistanceMeters(42L)!!, 0.001)
+        assertEquals(20.5, WindshieldTrafficLightBatcher.parseDistanceMeters("20,5")!!, 0.001)
+        assertNull(WindshieldTrafficLightBatcher.parseDistanceMeters(-1))
+        assertNull(WindshieldTrafficLightBatcher.parseDistanceMeters(Double.NaN))
+        assertNull(WindshieldTrafficLightBatcher.parseDistanceMeters(null))
+    }
+
+    @Test
+    fun distanceFilterPreservesNearestPositionOrderBeforeLimiting() {
+        val lights = listOf(
+            light("far", 0).copy(distanceMeters = 501.0),
+            light("third", 2).copy(distanceMeters = 40.0),
+            light("second", 1).copy(distanceMeters = 100.0),
+            light("nearest", 0).copy(distanceMeters = 20.0),
+            light("unknown", 3)
+        )
+        val merged = WindshieldTrafficLightBatcher.merge(emptyMap(), lights, now = 100).values.toList()
+        val visible = WindshieldTrafficLightBatcher.visibleWithin(merged, maxDistanceMeters = 100, maxActive = 2)
+        assertEquals(listOf(0, 1), visible.map { it.position })
+        assertEquals(listOf(20.0, 100.0), visible.map { it.distanceMeters })
+        assertTrue(WindshieldTrafficLightBatcher.visibleWithin(merged, 20, 3).single().distanceMeters == 20.0)
+    }
 }

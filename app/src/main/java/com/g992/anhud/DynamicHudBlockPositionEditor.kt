@@ -35,10 +35,11 @@ fun MainActivity.showDynamicHudBlockPositionEditor(
     config: DynamicHudBlockPositionConfig,
     onSave: (DynamicHudBlockPositionResult) -> Unit
 ) {
-    val previewHeightDp = 180
+    val compactScreen = resources.configuration.screenHeightDp <= 540
+    val previewHeightDp = if (compactScreen) 120 else 180
     val root = LinearLayout(this).apply {
         orientation = LinearLayout.VERTICAL
-        setPadding(dynamicDp(20), dynamicDp(8), dynamicDp(20), dynamicDp(8))
+        setPadding(dynamicDp(if (compactScreen) 12 else 20), dynamicDp(8), dynamicDp(if (compactScreen) 12 else 20), dynamicDp(8))
     }
     val preview = FrameLayout(this).apply {
         setBackgroundColor(Color.BLACK)
@@ -77,9 +78,23 @@ fun MainActivity.showDynamicHudBlockPositionEditor(
         alphaLabel.text = getString(R.string.custom_block_alpha, alphaSeek.progress)
         previewView.scaleX = scale
         previewView.scaleY = scale
+        previewView.pivotX = 0f
+        previewView.pivotY = 0f
         previewView.alpha = alphaSeek.progress / 100f
-        previewView.x = (xSeek.progress / config.containerSizeDp.x.coerceAtLeast(1f)) * preview.width
-        previewView.y = (ySeek.progress / config.containerSizeDp.y.coerceAtLeast(1f)) * preview.height
+        previewView.x = OverlayPositionMath.previewStartPx(
+            positionPx = xSeek.progress.toFloat(),
+            boundsPx = config.containerSizeDp.x,
+            previewContainerPx = preview.width.toFloat(),
+            contentPx = previewView.width * scale,
+            anchorFraction = 0f
+        )
+        previewView.y = OverlayPositionMath.previewStartPx(
+            positionPx = ySeek.progress.toFloat(),
+            boundsPx = config.containerSizeDp.y,
+            previewContainerPx = preview.height.toFloat(),
+            contentPx = previewView.height * scale,
+            anchorFraction = 0f
+        )
     }
 
     val listener = object : SeekBar.OnSeekBarChangeListener {

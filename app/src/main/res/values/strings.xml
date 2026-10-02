@@ -50,7 +50,7 @@
     <string name="overlay_permission_granted">Разрешение на оверлей: есть</string>
     <string name="overlay_permission_missing">Разрешение на оверлей: нет</string>
     <string name="overlay_permission_button">Разрешить оверлей</string>
-    <string name="location_permission_missing">GPS: нет доступа к геопозиции. Карта и GPS-скорость не смогут получать координаты.</string>
+    <string name="location_permission_missing">GPS: нет доступа к геопозиции. Карта не сможет получать координаты.</string>
     <string name="location_permission_button">Разрешить геопозицию</string>
     <string name="background_location_permission_missing">GPS в фоне: сейчас разрешено только при использовании приложения. После старта HUD не получит координаты, пока ANHUD не открыт. Выберите «Разрешать всегда».</string>
     <string name="background_location_permission_button">Разрешить всегда</string>
@@ -69,13 +69,14 @@
     <string name="overlay_position_label">Позиции HUD</string>
     <string name="position_blocks_hint">Нажмите блок, чтобы открыть настройку положения.</string>
     <string name="position_container_label">Контейнер HUD</string>
-    <string name="position_map_block_label">Блок карты</string>
+    <string name="position_map_block_label">Мини-карта Яндекс</string>
+    <string name="position_map_jams">Полоса пробок под картой</string>
     <string name="map_road_events_button">Дорожные события</string>
     <string name="map_trip_status_button">Статус поездки</string>
     <string name="map_lane_guidance_button">Подсказки перестроения</string>
     <string name="position_lane_guidance_show_distance">Показывать расстояние</string>
     <string name="background_render_label">Отрисовка на заднем плане</string>
-    <string name="background_render_hint">HUD рисуется через демон ghudbridgelited на QNX под штатной картинкой, а не поверх дисплея Android. При ошибке HUD возвращается на дисплей Android, повторная попытка — при следующем запуске приложения.</string>
+    <string name="background_render_hint">После переключения перезапустите ГУ и приборную панель (долгое удержание крутилки громкости и кнопки голосового ассистента) или заглушите машину, закройте её и отойдите на 15+ минут. Иначе на HUD может остаться старая картинка.</string>
     <string name="background_render_running">Работает (%1$s)</string>
     <string name="background_render_reconnecting">Переподключение: %1$s</string>
     <string name="background_render_error">Ошибка: %1$s</string>
@@ -84,6 +85,7 @@
     <string name="common_configure">Настроить</string>
     <string name="position_nav_block_label">Блок навигации</string>
     <string name="position_lane_guidance_block_label">Блок подсказок перестроения</string>
+    <string name="preview_lane_guidance_distance">50 м</string>
     <string name="position_arrow_block_label">Блок стрелки</string>
     <string name="position_speed_block_label">Ограничитель скорости</string>
     <string name="position_hudspeed_block_label">Блок HUD Speed</string>
@@ -91,6 +93,8 @@
     <string name="position_strelka_block_label">Блок Strelka</string>
     <string name="position_road_camera_block_label">Блок камер Яндекс Навигатора</string>
     <string name="position_traffic_light_block_label">Блок светофоров</string>
+    <string name="position_traffic_light_display_distance">Расстояние отображения</string>
+    <string name="position_traffic_light_display_distance_value">%1$d м</string>
     <string name="position_speedometer_block_label">Спидометр</string>
     <string name="position_turn_signals_block_label">Блок поворотников</string>
     <string name="position_turn_signals_tested_note">Функционал протестирован только на Geely Atlas (2024) и Geely Monjaro</string>
@@ -173,8 +177,9 @@
     <string name="tab_debug">Отладка</string>
     <string name="tab_help">Помощь</string>
 
-    <string name="map_settings_title">Настройки карты</string>
-    <string name="map_settings_subtitle">Параметры карты.</string>
+    <string name="map_settings_title">Мини-карта Яндекс</string>
+    <string name="map_settings_subtitle">Мини-карта Яндекс Навигатора.</string>
+    <string name="map_settings_yandex_hint">Кадры карты поступают из Яндекс Навигатора 30.3.0 ANHUD при активном маршруте. Включение и размер блока настраиваются в расположении HUD. Полоса пробок показывается под мини-картой.</string>
     <string name="map_settings_zoom">Масштаб</string>
     <string name="map_settings_auto_zoom">Автомасштаб</string>
     <string name="map_settings_auto_zoom_hint">При включении масштаб карты считается автоматически по скорости, с шагом 10 км/ч.</string>
@@ -254,7 +259,7 @@
 
     <string name="settings_timeouts_section_title">Таймауты</string>
     <string name="settings_timeouts_section_hint">Камеры, светофоры и завершение поездки</string>
-    <string name="settings_legacy_experimental_visibility_title">Видимость устаревших и экспериментальных блоков</string>
+    <string name="settings_legacy_experimental_visibility_title">Видимость экспериментальных блоков</string>
     <string name="main_menu_custom_blocks_visible_label">Пользовательский вывод</string>
     <string name="custom_blocks_title">Пользовательский вывод</string>
     <string name="custom_blocks_add">Добавить субблок</string>

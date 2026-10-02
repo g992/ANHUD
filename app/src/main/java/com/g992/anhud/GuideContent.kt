@@ -63,11 +63,6 @@ object GuideContent {
             R.string.guide_main_hudspeed_body
         ),
         GuideItem(
-            R.id.positionRoadCameraCard,
-            R.string.guide_main_road_camera_title,
-            R.string.guide_main_road_camera_body
-        ),
-        GuideItem(
             R.id.positionTrafficLightCard,
             R.string.guide_main_traffic_light_title,
             R.string.guide_main_traffic_light_body
@@ -140,41 +135,6 @@ object GuideContent {
         GuideSection(
             R.string.help_section_settings,
             listOf(
-                GuideItem(
-                    null,
-                    R.string.guide_settings_timeout_near_title,
-                    R.string.guide_settings_timeout_near_body
-                ),
-                GuideItem(
-                    null,
-                    R.string.guide_settings_timeout_far_title,
-                    R.string.guide_settings_timeout_far_body
-                ),
-                GuideItem(
-                    null,
-                    R.string.guide_settings_road_camera_timeout_title,
-                    R.string.guide_settings_road_camera_timeout_body
-                ),
-                GuideItem(
-                    null,
-                    R.string.guide_settings_nav_notification_timeout_title,
-                    R.string.guide_settings_nav_notification_timeout_body
-                ),
-                GuideItem(
-                    null,
-                    R.string.guide_settings_nav_updates_timeout_title,
-                    R.string.guide_settings_nav_updates_timeout_body
-                ),
-                GuideItem(
-                    null,
-                    R.string.guide_settings_speed_correction_title,
-                    R.string.guide_settings_speed_correction_body
-                ),
-                GuideItem(
-                    null,
-                    R.string.guide_settings_speed_source_title,
-                    R.string.guide_settings_speed_source_body
-                ),
                 GuideItem(
                     null,
                     R.string.guide_settings_maneuver_title,

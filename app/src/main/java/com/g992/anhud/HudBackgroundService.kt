@@ -22,8 +22,8 @@ class HudBackgroundService : Service() {
             overlayController.updateCustomBlocks(document, states)
         }
     }
-    private val mapRouteListener: (MapRouteTelemetrySnapshot) -> Unit = {
-        if (overlayController.shouldRefreshForMapRouteTelemetry()) {
+    private val visualListener: () -> Unit = {
+        if (overlayController.shouldRefreshForYandexVisuals()) {
             overlayController.refresh()
         }
     }
@@ -406,7 +406,7 @@ class HudBackgroundService : Service() {
         super.onCreate()
         UiLogStore.append(LogCategory.SYSTEM, "HudBackgroundService: создан")
         NavigationHudStore.registerListener(navListener)
-        MapRouteTelemetryStore.addListener(mapRouteListener)
+        YandexVisualStore.addListener(visualListener)
         customBlockCoordinator.start()
         HudBridgeManager.setRenderTargetListener { overlayController.refresh() }
         val filter = android.content.IntentFilter().apply {
@@ -477,7 +477,7 @@ class HudBackgroundService : Service() {
 
     override fun onDestroy() {
         NavigationHudStore.unregisterListener(navListener)
-        MapRouteTelemetryStore.removeListener(mapRouteListener)
+        YandexVisualStore.removeListener(visualListener)
         customBlockCoordinator.close()
         HudBridgeManager.setRenderTargetListener(null)
         HudBridgeManager.stop()

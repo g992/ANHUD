@@ -43,6 +43,15 @@ internal object OverlayPositionMath {
     ): Float {
         val safePreviewContainerPx = previewContainerPx.coerceAtLeast(1f)
         val clampedPreviewStartPx = clampStartPx(previewStartPx, safePreviewContainerPx, contentPx)
+        val maxPreviewStartPx = (safePreviewContainerPx - contentPx.coerceAtLeast(0f)).coerceAtLeast(0f)
+        // A preview uses a different scale and sometimes different content than the live HUD.
+        // Save the physical edge itself so runtime clamping can align the live view exactly.
+        if (maxPreviewStartPx > 0f) {
+            if (clampedPreviewStartPx <= EDGE_SNAP_TOLERANCE_PX) return 0f
+            if (maxPreviewStartPx - clampedPreviewStartPx <= EDGE_SNAP_TOLERANCE_PX) {
+                return boundsPx.coerceAtLeast(0f)
+            }
+        }
         val anchorOffsetPx = contentPx.coerceAtLeast(0f) * anchorFraction.coerceIn(0f, 1f)
         val previewAnchorPx = clampedPreviewStartPx + anchorOffsetPx
         return (previewAnchorPx / safePreviewContainerPx) * boundsPx.coerceAtLeast(0f)
@@ -58,4 +67,6 @@ internal object OverlayPositionMath {
         val maxStartPx = (containerPx.coerceAtLeast(0f) - contentPx.coerceAtLeast(0f)).coerceAtLeast(0f)
         return startPx.coerceIn(0f, maxStartPx)
     }
+
+    private const val EDGE_SNAP_TOLERANCE_PX = 1f
 }

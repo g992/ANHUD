@@ -129,6 +129,13 @@
                 <action android:name="com.g992.anhud.DEBUG_OFFLINE" />
             </intent-filter>
         </receiver>
+        <receiver
+            android:name=".NavTestReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.g992.anhud.NAV_TEST" />
+            </intent-filter>
+        </receiver>
 
         <provider
             android:name="androidx.core.content.FileProvider"

@@ -11,6 +11,8 @@ import android.os.HandlerThread
 import android.os.SystemClock
 import android.util.Log
 import android.view.Display
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 
 /**
  * Private 800x480 VirtualDisplay whose frames are read back as RGBA and handed to [sender]
@@ -120,6 +122,18 @@ class HudBridgeFrameSink(
         }
     }
 
+    /**
+     * Stops sending for good and waits until a send already in progress has finished, so nothing
+     * can reach the daemon after the caller's final frame. The display keeps running until [close].
+     */
+    fun stopSending(timeoutMs: Long = STOP_WAIT_MS) {
+        closed = true
+        val idle = CountDownLatch(1)
+        if (handler.post { idle.countDown() }) {
+            idle.await(timeoutMs, TimeUnit.MILLISECONDS)
+        }
+    }
+
     override fun close() {
         closed = true
         handler.removeCallbacks(sendLatest)
@@ -146,5 +160,6 @@ class HudBridgeFrameSink(
         const val VIRTUAL_DISPLAY_NAME = "anhud-hud-bridge"
         const val MAX_FPS = 20
         private const val MIN_SEND_INTERVAL_MS = 1000L / MAX_FPS
+        private const val STOP_WAIT_MS = 500L
     }
 }

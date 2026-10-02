@@ -128,6 +128,7 @@ object OverlayPrefs {
     private const val KEY_MAP_ALPHA = "overlay_map_alpha"
     private const val KEY_NAV_ENABLED = "overlay_nav_enabled"
     private const val KEY_NAV_HIDE_WHEN_MAP_ACTIVE = "overlay_nav_hide_when_map_active"
+    private const val KEY_MAP_JAMS_ENABLED = "overlay_map_jams_enabled"
     private const val KEY_NAV_SHOW_DISTANCE = "overlay_nav_show_distance"
     private const val KEY_LANE_GUIDANCE_ENABLED = "overlay_lane_guidance_enabled"
     private const val KEY_LANE_GUIDANCE_HIDE_WHEN_MAP_ACTIVE = "overlay_lane_guidance_hide_when_map_active"
@@ -158,6 +159,7 @@ object OverlayPrefs {
     private const val KEY_CLOCK_ENABLED = "overlay_clock_enabled"
     private const val KEY_CLOCK_HIDE_WHEN_MAP_ACTIVE = "overlay_clock_hide_when_map_active"
     private const val KEY_TRAFFIC_LIGHT_MAX_ACTIVE = "overlay_traffic_light_max_active"
+    private const val KEY_TRAFFIC_LIGHT_DISPLAY_DISTANCE_M = "overlay_traffic_light_display_distance_m"
     private const val KEY_MAIN_MENU_ROAD_CAMERA_VISIBLE = "main_menu_road_camera_visible"
     private const val KEY_MAIN_MENU_TRAFFIC_LIGHT_VISIBLE = "main_menu_traffic_light_visible"
     private const val KEY_NATIVE_NAV_ENABLED = "native_nav_enabled"
@@ -168,9 +170,7 @@ object OverlayPrefs {
     private const val KEY_NAV_NOTIFICATION_END_TIMEOUT = "nav_notification_end_timeout"
     private const val KEY_NAV_UPDATES_END_TIMEOUT = "nav_updates_end_timeout"
     private const val KEY_ROAD_CAMERA_TIMEOUT = "road_camera_timeout"
-    private const val KEY_SPEED_CORRECTION = "speed_correction"
     private const val KEY_SPEEDOMETER_FREEZE_TIMEOUT = "speedometer_freeze_timeout"
-    private const val KEY_SPEED_FROM_GPS = "speed_from_gps"
     private const val KEY_INFO_MIRROR_STARSHEEP7 = "info_mirror_starsheep7"
     private const val KEY_INFO_MIRROR_GALAXY = "info_mirror_galaxy"
     private const val KEY_HIDE_TURN_WHEN_FAR_ENABLED = "hide_turn_when_far_enabled"
@@ -192,8 +192,6 @@ object OverlayPrefs {
     const val MAP_MIN_SIZE_DP = 48f
     const val SPEED_LIMIT_ALERT_THRESHOLD_MAX = 20
     const val TIMEOUT_MAX = 360
-    const val SPEED_CORRECTION_MIN = -10
-    const val SPEED_CORRECTION_MAX = 10
     const val HIDE_TURN_DISTANCE_DEFAULT_METERS = 1000
     const val HIDE_TURN_DYNAMIC_DISTANCE_MIN_METERS = 100
     const val HIDE_TURN_DYNAMIC_DISTANCE_MAX_METERS = 10_000
@@ -901,6 +899,16 @@ object OverlayPrefs {
             .apply()
     }
 
+    fun mapJamsEnabled(context: Context): Boolean {
+        return prefs(context).getBoolean(KEY_MAP_JAMS_ENABLED, true)
+    }
+
+    fun setMapJamsEnabled(context: Context, enabled: Boolean) {
+        prefs(context).edit()
+            .putBoolean(KEY_MAP_JAMS_ENABLED, enabled)
+            .apply()
+    }
+
     fun navHideWhenMapActive(context: Context): Boolean {
         return prefs(context).getBoolean(KEY_NAV_HIDE_WHEN_MAP_ACTIVE, false)
     }
@@ -1053,7 +1061,7 @@ object OverlayPrefs {
     }
 
     fun roadCameraEnabled(context: Context): Boolean {
-        return prefs(context).getBoolean(KEY_ROAD_CAMERA_ENABLED, true)
+        return false
     }
 
     fun setRoadCameraEnabled(context: Context, enabled: Boolean) {
@@ -1115,6 +1123,15 @@ object OverlayPrefs {
     fun trafficLightMaxActive(context: Context): Int {
         val value = prefs(context).getInt(KEY_TRAFFIC_LIGHT_MAX_ACTIVE, 3)
         return value.coerceAtLeast(1)
+    }
+
+    fun trafficLightDisplayDistanceMeters(context: Context): Int =
+        prefs(context).getInt(KEY_TRAFFIC_LIGHT_DISPLAY_DISTANCE_M, 500).coerceIn(20, 500)
+
+    fun setTrafficLightDisplayDistanceMeters(context: Context, distanceMeters: Int) {
+        prefs(context).edit()
+            .putInt(KEY_TRAFFIC_LIGHT_DISPLAY_DISTANCE_M, distanceMeters.coerceIn(20, 500))
+            .apply()
     }
 
     fun setTrafficLightMaxActive(context: Context, maxActive: Int) {
@@ -1320,17 +1337,6 @@ object OverlayPrefs {
             .apply()
     }
 
-    fun speedCorrection(context: Context): Int {
-        return prefs(context).getInt(KEY_SPEED_CORRECTION, 0)
-            .coerceIn(SPEED_CORRECTION_MIN, SPEED_CORRECTION_MAX)
-    }
-
-    fun setSpeedCorrection(context: Context, correction: Int) {
-        prefs(context).edit()
-            .putInt(KEY_SPEED_CORRECTION, correction.coerceIn(SPEED_CORRECTION_MIN, SPEED_CORRECTION_MAX))
-            .apply()
-    }
-
     fun speedometerFreezeTimeout(context: Context): Int {
         return prefs(context).getInt(KEY_SPEEDOMETER_FREEZE_TIMEOUT, 0)
             .coerceIn(0, TIMEOUT_MAX)
@@ -1339,16 +1345,6 @@ object OverlayPrefs {
     fun setSpeedometerFreezeTimeout(context: Context, timeout: Int) {
         prefs(context).edit()
             .putInt(KEY_SPEEDOMETER_FREEZE_TIMEOUT, timeout.coerceIn(0, TIMEOUT_MAX))
-            .apply()
-    }
-
-    fun speedFromGps(context: Context): Boolean {
-        return prefs(context).getBoolean(KEY_SPEED_FROM_GPS, false)
-    }
-
-    fun setSpeedFromGps(context: Context, enabled: Boolean) {
-        prefs(context).edit()
-            .putBoolean(KEY_SPEED_FROM_GPS, enabled)
             .apply()
     }
 

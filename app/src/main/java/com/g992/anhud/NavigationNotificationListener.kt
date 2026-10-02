@@ -166,6 +166,7 @@ class NavigationNotificationListener : NotificationListenerService() {
     }
 
     private fun endNavigation() {
+        YandexVisualStore.endRoute()
         Log.d(TAG, "Navigation ended via notification removal")
         UiLogStore.append(LogCategory.NAVIGATION, "навигация по уведомлению: стоп")
         NavigationReceiver.clearNavigatorIntentTimeout()

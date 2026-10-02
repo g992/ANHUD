@@ -13,25 +13,39 @@ object NativeNavigationController {
     private val mainHandler = Handler(Looper.getMainLooper())
     private var dimInteraction: Any? = null
     private var naviInteraction: Any? = null
+    private var n155: DesaySvDimNavi? = null           // N155 (DesaySV DimNaviService) backend
+    private var backendName: String = "none"
     private var isNavigationActive = false
     private var dimUnavailableLogged = false
 
     fun isActive(): Boolean = isNavigationActive
 
+    /** Which stock backend was auto-detected: "gly" (FX11 Geely), "ecarx" (FX11 ecarx), "n155", or "none". */
+    fun activeBackend(): String = backendName
+
+    private fun hasBackend(): Boolean = naviInteraction != null || n155 != null
+
     fun ensureInitialized(context: Context): Boolean {
-        if (naviInteraction != null) {
+        if (hasBackend()) {
             return true
         }
         if (tryInitGlyDimInteraction(context)) {
-            dimUnavailableLogged = false
+            backendName = "gly"; dimUnavailableLogged = false
+            Log.d(TAG, "Stock nav backend: FX11 GlyDimInteraction")
             return true
         }
         if (tryInitEcarxDimInteraction(context)) {
-            dimUnavailableLogged = false
+            backendName = "ecarx"; dimUnavailableLogged = false
+            Log.d(TAG, "Stock nav backend: FX11 ecarx DimInteraction")
+            return true
+        }
+        DesaySvDimNavi.tryCreate()?.let {
+            n155 = it; backendName = "n155"; dimUnavailableLogged = false
+            Log.d(TAG, "Stock nav backend: N155 DimNaviService")
             return true
         }
         if (!dimUnavailableLogged) {
-            Log.w(TAG, "DIM interaction not available")
+            Log.w(TAG, "DIM interaction not available (no FX11 adaptapi/Gly, no N155 DimNaviService)")
             dimUnavailableLogged = true
         }
         return false
@@ -39,6 +53,12 @@ object NativeNavigationController {
 
     fun startNavigation(context: Context) {
         if (!ensureInitialized(context) || isNavigationActive) {
+            return
+        }
+        n155?.let {
+            it.start()
+            isNavigationActive = true
+            Log.d(TAG, "Native navigation started (n155)")
             return
         }
         invokeMethod("notifyTurnByTurnStarted")
@@ -52,6 +72,12 @@ object NativeNavigationController {
 
     fun stopNavigation(context: Context) {
         if (!ensureInitialized(context)) {
+            return
+        }
+        n155?.let {
+            it.stop()
+            isNavigationActive = false
+            Log.d(TAG, "Native navigation stopped (n155)")
             return
         }
         invokeMethod("notifyNavigationStatus", 0)
@@ -74,6 +100,16 @@ object NativeNavigationController {
                     "destDistM=$distanceToDestinationMeters totalDestDistM=$totalDistanceToDestinationMeters etaSec=$etaSeconds"
         )
         if (!ensureInitialized(context)) {
+            return
+        }
+        n155?.let {
+            it.update(
+                turnId = turnId,
+                streetName = streetName,
+                distanceToManeuverMeters = distanceToManeuverMeters,
+                distanceToDestinationMeters = distanceToDestinationMeters,
+                etaSeconds = etaSeconds
+            )
             return
         }
         val navi = naviInteraction ?: return
