@@ -43,6 +43,7 @@ class NavigationService : Service() {
             addAction(NavigationReceiver.ACTION_STRELKA_EVENT_START)
             addAction(NavigationReceiver.ACTION_STRELKA_EVENT_END)
             addAction(NavigationReceiver.ACTION_STRELKA_OVERLAY_BITMAP)
+            addAction(NavigationReceiver.ACTION_HEADUNIT_NAVIGATION_UPDATE)
         }
         ContextCompat.registerReceiver(
             this,
