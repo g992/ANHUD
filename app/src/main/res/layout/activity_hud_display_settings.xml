@@ -408,6 +408,15 @@
                     android:textColor="@color/white" />
             </LinearLayout>
 
+            <TextView
+                android:id="@+id/navDataSourceSummary"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:textColor="#B0FFFFFF"
+                android:textSize="12sp"
+                android:visibility="gone" />
+
             <LinearLayout
                 android:layout_width="158dp"
                 android:layout_height="wrap_content"
@@ -557,6 +566,15 @@
                     android:text="@string/projection_toggle_label"
                     android:textColor="@color/white" />
             </LinearLayout>
+
+            <TextView
+                android:id="@+id/arrowDataSourceSummary"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:textColor="#B0FFFFFF"
+                android:textSize="12sp"
+                android:visibility="gone" />
 
             <FrameLayout
                 android:layout_width="48dp"

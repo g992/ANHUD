@@ -378,6 +378,7 @@ object PrefsJson {
         putBoolean("native_nav_enabled", OverlayPrefs.nativeNavEnabled(context))
         putBoolean("overlay_map_enabled", OverlayPrefs.mapEnabled(context))
         putBoolean("overlay_map_jams_enabled", OverlayPrefs.mapJamsEnabled(context))
+        putFloat("overlay_map_minimap_zoom", OverlayPrefs.mapMinimapZoom(context))
         putBoolean("overlay_lane_guidance_show_distance", OverlayPrefs.laneGuidanceShowDistance(context))
         putInt("camera_timeout_near", OverlayPrefs.cameraTimeoutNear(context))
         putInt("camera_timeout_far", OverlayPrefs.cameraTimeoutFar(context))

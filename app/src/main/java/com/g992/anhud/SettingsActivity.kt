@@ -97,6 +97,12 @@ class SettingsActivity : ScaledActivity() {
     private lateinit var legacyExperimentalVisibilityContent: View
     private lateinit var legacyExperimentalVisibilityToggleLabel: TextView
     private lateinit var mainMenuCustomBlocksVisibleSwitch: SwitchCompat
+    private lateinit var carPlayDataSwitch: SwitchCompat
+    private lateinit var carPlayPatchPanel: View
+    private lateinit var carPlayPatchButton: Button
+    private lateinit var carPlayPatchStatus: TextView
+    private val carPlayPatchListener: () -> Unit = { renderCarPlayPatchState() }
+    private lateinit var androidAutoDataSwitch: SwitchCompat
     private lateinit var useStrelkaSwitch: SwitchCompat
     private lateinit var infoMirrorStarsheep7Switch: SwitchCompat
     private lateinit var infoMirrorGalaxySwitch: SwitchCompat
@@ -268,6 +274,11 @@ class SettingsActivity : ScaledActivity() {
         legacyExperimentalVisibilityContent = findViewById(R.id.legacyExperimentalVisibilityContent)
         legacyExperimentalVisibilityToggleLabel = findViewById(R.id.legacyExperimentalVisibilityToggleLabel)
         mainMenuCustomBlocksVisibleSwitch = findViewById(R.id.mainMenuCustomBlocksVisibleSwitch)
+        carPlayDataSwitch = findViewById(R.id.carPlayDataSwitch)
+        carPlayPatchPanel = findViewById(R.id.carPlayPatchPanel)
+        carPlayPatchButton = findViewById(R.id.carPlayPatchButton)
+        carPlayPatchStatus = findViewById(R.id.carPlayPatchStatus)
+        androidAutoDataSwitch = findViewById(R.id.androidAutoDataSwitch)
         useStrelkaSwitch = findViewById(R.id.useStrelkaSwitch)
         infoMirrorStarsheep7Switch = findViewById(R.id.infoMirrorStarsheep7Switch)
         infoMirrorGalaxySwitch = findViewById(R.id.infoMirrorGalaxySwitch)
@@ -322,6 +333,8 @@ class SettingsActivity : ScaledActivity() {
 
     override fun onStart() {
         super.onStart()
+        CarPlayPatchState.addListener(carPlayPatchListener)
+        renderCarPlayPatchState()
         ContextCompat.registerReceiver(
             this,
             updateReceiver,
@@ -341,6 +354,7 @@ class SettingsActivity : ScaledActivity() {
     }
 
     override fun onStop() {
+        CarPlayPatchState.removeListener(carPlayPatchListener)
         offlineCachePreviewSession?.dismiss()
         HudBridgeManager.removeListener(hudBridgeListener)
         try {
@@ -383,6 +397,13 @@ class SettingsActivity : ScaledActivity() {
     }
 
     private fun setupGeneralSettings() {
+        carPlayDataSwitch.setOnCheckedChangeListener { _, checked ->
+            selectNavDataSource(NavDataSource.CARPLAY, checked)
+        }
+        androidAutoDataSwitch.setOnCheckedChangeListener { _, checked ->
+            selectNavDataSource(NavDataSource.ANDROID_AUTO, checked)
+        }
+        carPlayPatchButton.setOnClickListener { retryCarPlayPatch() }
         useStrelkaSwitch.setOnCheckedChangeListener { _, isChecked ->
             if (isSyncingUi) return@setOnCheckedChangeListener
             val source = if (isChecked) OverlayPrefs.HudAlertSource.STRELKA else OverlayPrefs.HudAlertSource.HUDSPEED
@@ -2811,6 +2832,9 @@ class SettingsActivity : ScaledActivity() {
     private fun syncUiFromPrefs() {
         isSyncingUi = true
         try {
+            carPlayDataSwitch.isChecked = NavDataSourcePrefs.source(this) == NavDataSource.CARPLAY
+            renderCarPlayPatchState()
+            androidAutoDataSwitch.isChecked = NavDataSourcePrefs.source(this) == NavDataSource.ANDROID_AUTO
             useStrelkaSwitch.isChecked = OverlayPrefs.hudAlertSource(this) == OverlayPrefs.HudAlertSource.STRELKA
             mainMenuCustomBlocksVisibleSwitch.isChecked = CustomBlockRepository(this).load().menuVisible
             infoMirrorStarsheep7Switch.isChecked = OverlayPrefs.infoMirrorStarsheep7Enabled(this)
@@ -2844,6 +2868,31 @@ class SettingsActivity : ScaledActivity() {
                 R.string.settings_section_expand
             }
         )
+    }
+
+    private fun selectNavDataSource(source: NavDataSource, enabled: Boolean) {
+        if (isSyncingUi) return
+        val current = NavDataSourcePrefs.source(this)
+        val selected = if (enabled) source else if (current == source) NavDataSource.NONE else current
+        NavDataSourcePrefs.setSource(this, selected)
+        syncUiFromPrefs()
+        startService(Intent(this, NavigationService::class.java))
+    }
+
+    private fun retryCarPlayPatch() {
+        if (NavDataSourcePrefs.source(this) == NavDataSource.CARPLAY) {
+            startService(Intent(this, NavigationService::class.java)
+                .setAction(NavigationService.ACTION_RETRY_CARPLAY_PATCH))
+        }
+    }
+
+    private fun renderCarPlayPatchState() {
+        val selected = NavDataSourcePrefs.source(this) == NavDataSource.CARPLAY
+        carPlayPatchPanel.visibility = if (selected) View.VISIBLE else View.GONE
+        val state = CarPlayPatchState.state
+        carPlayPatchButton.isEnabled = selected && !state.busy
+        carPlayPatchStatus.text = state.message.ifBlank { getString(R.string.carplay_patch_waiting) }
+        carPlayPatchStatus.setTextColor(Color.parseColor(if (state.failed) "#FF7777" else "#c0c0c0"))
     }
 
     private fun updateHideTurnDistanceControls(enabled: Boolean) {

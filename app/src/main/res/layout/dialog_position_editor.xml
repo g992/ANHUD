@@ -695,6 +695,51 @@
         android:textSize="16sp"
         android:visibility="gone" />
 
+    <LinearLayout
+        android:id="@+id/dialogMinimapZoomRow"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:orientation="vertical"
+        android:visibility="gone">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/position_minimap_zoom"
+                android:textColor="@color/white"
+                android:textSize="16sp" />
+
+            <TextView
+                android:id="@+id/dialogMinimapZoomValue"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textColor="@color/white"
+                android:textSize="14sp" />
+        </LinearLayout>
+
+        <SeekBar
+            android:id="@+id/dialogMinimapZoomSeek"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/position_minimap_zoom_hint"
+            android:textColor="@color/white"
+            android:alpha="0.7"
+            android:textSize="12sp" />
+    </LinearLayout>
+
     <CheckBox
         android:id="@+id/dialogHideWhenMapActive"
         android:layout_width="wrap_content"

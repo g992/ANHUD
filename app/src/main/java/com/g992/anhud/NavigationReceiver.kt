@@ -15,7 +15,12 @@ private const val MIN_ARROW_NATIVE_UPDATE_INTERVAL_MS = 3000L
 class NavigationReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val action = intent.action.orEmpty()
-        touchNavigatorIntentTimeout(context, action)
+        val externalSource = NavDataSourcePrefs.source(context) != NavDataSource.NONE
+        if (externalSource && (isRouteFieldAction(action) || isYandexVisualAction(action))) {
+            Log.d(TAG, "Ignored $action: route is owned by an external data provider")
+            return
+        }
+        if (!externalSource) touchNavigatorIntentTimeout(context, action)
         if (action.startsWith("com.yandex.") && shouldSuppressDuplicateYandexIntent(intent, action)) {
             return
         }
@@ -171,7 +176,7 @@ class NavigationReceiver : BroadcastReceiver() {
                 NavigationHudStore.update { state ->
                     state.copy(
                         speedLimit = yandexSpeedLimitAfterUpdate(state.speedLimit, raw, state.routeActive),
-                        source = SOURCE_YANDEX,
+                        source = auxiliarySource(state, SOURCE_YANDEX),
                         lastUpdated = System.currentTimeMillis(),
                         lastAction = action,
                         rawSpeedLimit = raw
@@ -312,69 +317,6 @@ class NavigationReceiver : BroadcastReceiver() {
             ACTION_NATIVE_NAV_STOP -> {
                 endNavigation(context, action, "штатная навигация: стоп")
             }
-            ACTION_HEADUNIT_NAVIGATION_UPDATE -> {
-                try {
-                    val distanceMeters = intent.getIntExtra(EXTRA_HEADUNIT_DISTANCE_METERS, -1)
-                    val totalSeconds = intent.getLongExtra(EXTRA_HEADUNIT_ARRIVAL_TIME_SECONDS, -1)
-                    val rawTotalTime = intent.getStringExtra(EXTRA_HEADUNIT_ARRIVAL_TIME_RAW)
-                    val maneuverTime = intent.getLongExtra(EXTRA_HEADUNIT_STEP_TIME_SECONDS, -1)
-                    val road = normalizeText(intent.getStringExtra(EXTRA_HEADUNIT_ROAD).orEmpty())
-                    val nextEventType = intent.getIntExtra(EXTRA_HEADUNIT_NEXT_EVENT_TYPE, 0)
-                    val turnSide = intent.getIntExtra(EXTRA_HEADUNIT_TURN_SIDE, TURN_SIDE_UNSPECIFIED)
-                    val turnNumber = intent.getIntExtra(EXTRA_HEADUNIT_TURN_NUMBER, -1)
-                    val turnAngle = intent.getIntExtra(EXTRA_HEADUNIT_TURN_ANGLE, -1)
-                    val actionText = normalizeText(intent.getStringExtra(EXTRA_HEADUNIT_ACTION_TEXT).orEmpty())
-                    Log.d(TAG, "Headunit nav: distance=$distanceMeters m time=$totalSeconds s road=\"$road\" eventType=$nextEventType side=$turnSide action=\"$actionText\"")
-                    UiLogStore.append(
-                        LogCategory.NAVIGATION,
-                        "headunit: ${distanceMeters}м ${totalSeconds}с улица=\"$road\" event=$nextEventType side=$turnSide действие=\"$actionText\""
-                    )
-                    if (distanceMeters == -1 && nextEventType == 0) {
-                        endNavigation(context, action, "HUR: стоп")
-                    }
-                    else {
-                        val primaryText = when {
-                            distanceMeters >= 0 && actionText.isNotBlank() -> "$distanceMeters м — $actionText"
-                            distanceMeters >= 0 -> "$distanceMeters м"
-                            actionText.isNotBlank() -> actionText
-                            else -> ""
-                        }
-                        val rawNextText = if (distanceMeters >= 0) "$distanceMeters м" else ""
-                        val distanceUnit = if (distanceMeters >= 0) "м" else ""
-                        val rawTime = rawTotalTime ?: ""
-                        val maneuverTypeKey = headunitEventTypeToManeuverKey(
-                            nextEventType,
-                            turnSide,
-                            turnNumber,
-                            turnAngle
-                        )
-                        NavigationHudStore.update { state ->
-                            state.copy(
-                                // Headunit doesn't provide bitmap; force icon resolution from maneuverType.
-                                maneuverBitmap = null,
-                                primaryText = primaryText.ifBlank { state.primaryText },
-                                secondaryText = road.ifBlank { state.secondaryText },
-                                maneuverType = maneuverTypeKey.ifBlank { state.maneuverType },
-                                source = SOURCE_HEADUNIT,
-                                routeActive = true,
-                                lastUpdated = System.currentTimeMillis(),
-                                lastAction = action,
-                                rawNextText = rawNextText.ifBlank { state.rawNextText },
-                                rawNextStreet = road.ifBlank { state.rawNextStreet },
-                                time = if (maneuverTime > 0) "$maneuverTime" else "",
-                                arrival = rawTime.ifBlank { state.rawTime },
-                                //rawArrival = if (maneuverTime > 0) "$maneuverTime сек" else "",
-                                distanceUnit = distanceUnit.ifBlank { state.distanceUnit },
-                            )
-                        }
-                        val state = NavigationHudStore.snapshot()
-                        maybeUpdateNativeNavigation(context, state, NativeNavUpdateTrigger.DISTANCE)
-                    }
-                } catch (e: Exception) {
-                    Log.e(TAG, "Headunit nav: failed to process broadcast", e)
-                    UiLogStore.append(LogCategory.NAVIGATION, "headunit ошибка: ${e.message}")
-                }
-            }
             ACTION_HUDSPEED_UPDATE -> {
                 val hasCamera = intent.getBooleanExtra(HUDSPEED_HAS_CAMERA, false)
                 val hasGps = intent.getBooleanExtra(HUDSPEED_HAS_GPS, false)
@@ -428,7 +370,7 @@ class NavigationReceiver : BroadcastReceiver() {
                             clearHudSpeedLimit -> ""
                             else -> state.rawSpeedLimit
                         },
-                        source = SOURCE_HUDSPEED,
+                        source = auxiliarySource(state, SOURCE_HUDSPEED),
                         lastUpdated = System.currentTimeMillis(),
                         lastAction = action
                     )
@@ -443,7 +385,7 @@ class NavigationReceiver : BroadcastReceiver() {
                         strelkaActive = true,
                         strelkaBitmap = null,
                         strelkaUpdatedAt = now,
-                        source = SOURCE_STRELKA,
+                        source = auxiliarySource(state, SOURCE_STRELKA),
                         lastUpdated = now,
                         lastAction = action
                     )
@@ -458,7 +400,7 @@ class NavigationReceiver : BroadcastReceiver() {
                         strelkaActive = false,
                         strelkaBitmap = null,
                         strelkaUpdatedAt = now,
-                        source = SOURCE_STRELKA,
+                        source = auxiliarySource(state, SOURCE_STRELKA),
                         lastUpdated = now,
                         lastAction = action
                     )
@@ -485,7 +427,7 @@ class NavigationReceiver : BroadcastReceiver() {
                         strelkaActive = true,
                         strelkaBitmap = bitmap,
                         strelkaUpdatedAt = now,
-                        source = SOURCE_STRELKA,
+                        source = auxiliarySource(state, SOURCE_STRELKA),
                         lastUpdated = now,
                         lastAction = action
                     )
@@ -566,23 +508,7 @@ class NavigationReceiver : BroadcastReceiver() {
         const val ACTION_STRELKA_EVENT_START = "com.aleksan.button.STRELKA_EVENT_START"
         const val ACTION_STRELKA_EVENT_END = "com.aleksan.button.STRELKA_EVENT_END"
         const val ACTION_STRELKA_OVERLAY_BITMAP = "com.aleksan.button.STRELKA_OVERLAY_BITMAP"
-        /** Broadcast from Headunit Revived (Android Auto nav data from any AA nav app). */
-        const val ACTION_HEADUNIT_NAVIGATION_UPDATE = "com.andrerinas.headunitrevived.NAVIGATION_UPDATE"
         private const val ACTION_NAV_UPDATES_TIMEOUT = "nav_updates_timeout"
-
-        private const val EXTRA_HEADUNIT_DISTANCE_METERS = "distance_meters"
-        private const val EXTRA_HEADUNIT_ARRIVAL_TIME_SECONDS = "total_time_seconds"
-        private const val EXTRA_HEADUNIT_STEP_TIME_SECONDS = "time_seconds"
-        private const val EXTRA_HEADUNIT_ARRIVAL_TIME_RAW = "estimated_arrival"
-        private const val EXTRA_HEADUNIT_ROAD = "road"
-        private const val EXTRA_HEADUNIT_NEXT_EVENT_TYPE = "next_event_type"
-        private const val EXTRA_HEADUNIT_ACTION_TEXT = "action_text"
-        private const val EXTRA_HEADUNIT_TURN_SIDE = "turn_side"
-        private const val EXTRA_HEADUNIT_TURN_NUMBER = "turn_number"
-        private const val EXTRA_HEADUNIT_TURN_ANGLE = "turn_angle"
-        private const val TURN_SIDE_LEFT = 1
-        private const val TURN_SIDE_RIGHT = 2
-        private const val TURN_SIDE_UNSPECIFIED = 3
 
         const val EXTRA_MANEUVER_BITMAP = "maneuver_bitmap"
         const val EXTRA_MANEUVER_TYPE = "maneuver_type"
@@ -613,7 +539,6 @@ class NavigationReceiver : BroadcastReceiver() {
         private const val SOURCE_YANDEX = "yandex"
         private const val SOURCE_HUDSPEED = "hudspeed"
         private const val SOURCE_STRELKA = "strelka"
-        private const val SOURCE_HEADUNIT = "headunit"
         const val DEFAULT_NATIVE_TURN_ID = 101
         private const val MAX_SUPPORTED_TURN_ID = 150
 
@@ -626,6 +551,100 @@ class NavigationReceiver : BroadcastReceiver() {
 
         fun clearNavigatorIntentTimeout() {
             cancelNavigatorIntentTimeout()
+        }
+
+        /**
+         * Writes a full route snapshot from an external provider (CarPlay / Android Auto).
+         * [touchTimeout] keeps the "no updates" timeout armed for providers that stream continuously.
+         */
+        internal fun applyProviderUpdate(
+            context: Context,
+            source: NavDataSource,
+            action: String,
+            update: ProviderNavUpdate,
+            touchTimeout: Boolean
+        ) {
+            val appContext = context.applicationContext
+            if (touchTimeout) {
+                navigatorIntentTimeoutContext = appContext
+                lastNavigatorIntentAt = System.currentTimeMillis()
+                scheduleNavigatorIntentTimeout(appContext)
+            } else {
+                cancelNavigatorIntentTimeout()
+            }
+            val bitmap = ProviderNavFormat.maneuverBitmap(appContext, update.maneuverType, update.exitNumber)
+            var updated: NavigationHudState? = null
+            NavigationHudStore.update { state ->
+                val next = state.copy(
+                    primaryText = update.maneuverDistance,
+                    secondaryText = update.street,
+                    arrival = update.arrival,
+                    distance = update.remainingDistance,
+                    time = update.remainingTime,
+                    maneuverBitmap = bitmap,
+                    maneuverType = update.maneuverType,
+                    source = source.storeSource,
+                    routeActive = true,
+                    lastUpdated = System.currentTimeMillis(),
+                    lastAction = action,
+                    rawNextText = update.maneuverDistance,
+                    rawNextStreet = update.street,
+                    rawArrival = update.arrival,
+                    rawDistance = update.remainingDistance,
+                    rawTime = update.remainingTime,
+                    tripStatusBitmap = null,
+                    nativeTurnId = null,
+                    distanceUnit = ProviderNavFormat.unitOf(update.maneuverDistance)
+                )
+                updated = next
+                next
+            }
+            updated?.let { maybeUpdateNativeNavigation(appContext, it, NativeNavUpdateTrigger.DISTANCE) }
+        }
+
+        /** Unconditional wipe on a data-source switch: route fields, Yandex visuals, traffic lights. */
+        internal fun clearRouteForSourceSwitch(context: Context, preserveSpeedLimit: Boolean) {
+            endNavigation(
+                context.applicationContext,
+                "nav_source_switch",
+                "смена источника навигации: экран очищен",
+                preserveSpeedLimit = preserveSpeedLimit
+            )
+            context.applicationContext.sendBroadcast(
+                Intent(OverlayBroadcasts.ACTION_CLEAR_NAVIGATION).setPackage(context.packageName)
+            )
+        }
+
+        /** Ends the route only if it still belongs to [source], so a stop never wipes Yandex data. */
+        internal fun endProviderNavigation(context: Context, source: NavDataSource, reason: String) {
+            if (NavigationHudStore.snapshot().source != source.storeSource) {
+                return
+            }
+            endNavigation(context.applicationContext, "provider_${source.prefValue}_end", reason)
+        }
+
+        private fun auxiliarySource(state: NavigationHudState, fallback: String): String =
+            if (NavDataSource.fromStoreSource(state.source) != null) state.source else fallback
+
+        /** Yandex/monjaro actions that write turn-by-turn fields owned by an external provider. */
+        private fun isYandexVisualAction(action: String): Boolean = action in setOf(
+            ACTION_YANDEX_LANE_SIGN, ACTION_YANDEX_LANES, ACTION_YANDEX_LANE_DIST,
+            ACTION_YANDEX_LANES_BITMAP, ACTION_YANDEX_LANES_BITMAP_CLEAR,
+            ACTION_YANDEX_MINIMAP, ACTION_YANDEX_JAM_IMAGE
+        )
+
+        private fun isRouteFieldAction(action: String): Boolean {
+            return action == ACTION_NAV_UPDATE ||
+                action == ACTION_NAV_UPDATE_DEBUG ||
+                action == ACTION_YANDEX_SPEEDLIMIT ||
+                action == ACTION_YANDEX_MANEUVER ||
+                action == ACTION_YANDEX_NEXT_TEXT ||
+                action == ACTION_YANDEX_NEXT_STREET ||
+                action == ACTION_YANDEX_ARRIVAL ||
+                action == ACTION_YANDEX_DISTANCE ||
+                action == ACTION_YANDEX_TIME ||
+                action == ACTION_YANDEX_TRIP_STATUS_BITMAP ||
+                action == ACTION_YANDEX_NAVIGATION_ENDED
         }
 
         private fun touchNavigatorIntentTimeout(context: Context, action: String) {
@@ -650,90 +669,7 @@ class NavigationReceiver : BroadcastReceiver() {
                 action == ACTION_YANDEX_TIME ||
                 action == ACTION_YANDEX_TRIP_STATUS_BITMAP ||
                 action == ACTION_YANDEX_NAV_ACTIVE ||
-                action == ACTION_WINDSHIELD_TRAFFIC_LIGHT ||
-                action == ACTION_HEADUNIT_NAVIGATION_UPDATE
-        }
-
-        /** Маппинг next_event_type + side + номер/угол в максимально точные context_ra_* ключи ANHUD. */
-        private fun headunitEventTypeToManeuverKey(
-            nextEventType: Int,
-            turnSide: Int,
-            turnNumber: Int,
-            turnAngle: Int
-        ): String {
-            val isLeft = turnSide == TURN_SIDE_LEFT
-            val isRight = turnSide == TURN_SIDE_RIGHT
-            val shape = resolveTurnShape(nextEventType, turnAngle)
-            return when (nextEventType.coerceIn(0, 31)) {
-                0 -> "context_ra_via"
-                1, 2 -> "context_ra_forward"
-                3, 4, 5 -> when (shape) {
-                    TurnShape.SLIGHT -> when {
-                        isLeft -> "context_ra_take_left"
-                        isRight -> "context_ra_take_right"
-                        else -> "context_ra_forward"
-                    }
-                    TurnShape.SHARP -> when {
-                        isLeft -> "context_ra_hard_turn_left"
-                        isRight -> "context_ra_hard_turn_right"
-                        else -> "context_ra_hard_turn_right"
-                    }
-                    TurnShape.NORMAL -> when {
-                        isLeft -> "context_ra_turn_left"
-                        isRight -> "context_ra_turn_right"
-                        else -> "context_ra_turn_right"
-                    }
-                }
-                6 -> when {
-                    isLeft -> "context_ra_turn_back_left"
-                    isRight -> "context_ra_turn_back_right"
-                    else -> "context_ra_turn_back_right"
-                }
-                7, 8, 9 -> when { //Заезд/съезд на эстакаду + съезд
-                    isLeft -> "context_ra_exit_left"
-                    isRight -> "context_ra_exit_right"
-                    else -> "context_ra_exit_right"
-                }
-                10 -> when { //вклинивание в основную полосу
-                    isLeft -> "context_ra_take_left"
-                    isRight -> "context_ra_take_right"
-                    else -> "context_ra_take_left"
-                }
-                11 -> "context_ra_in_circular_movement" //въезд на кольцо
-                12 -> "context_ra_out_circular_movement" //выезд с кольца
-                13 -> if (turnNumber > 0) "context_ra_out_circular_movement" else "context_ra_in_circular_movement" //въезд и сразу выезд с кольца
-                14 -> "context_ra_forward" //прямо
-                16, 17 -> "context_ra_boardferry" //паром
-                18 -> "context_ra_finish" //пункт назначения
-                else -> "context_lane_unknowndirection_large"
-            }
-        }
-
-        private enum class TurnShape {
-            SLIGHT,
-            NORMAL,
-            SHARP
-        }
-
-        private fun resolveTurnShape(nextEventType: Int, turnAngle: Int): TurnShape {
-            return when (nextEventType) {
-                3 -> TurnShape.SLIGHT
-                5 -> TurnShape.SHARP
-                else -> TurnShape.NORMAL
-//                else -> {
-//                    if (turnAngle < 0) {
-//                        TurnShape.NORMAL
-//                    } else {
-//                        val normalized = ((turnAngle % 360) + 360) % 360
-//                        val deflection = if (normalized > 180) 360 - normalized else normalized
-//                        when {
-//                            deflection <= 35 -> TurnShape.SLIGHT
-//                            deflection >= 120 -> TurnShape.SHARP
-//                            else -> TurnShape.NORMAL
-//                        }
-//                    }
-//                }
-            }
+                action == ACTION_WINDSHIELD_TRAFFIC_LIGHT
         }
 
         private fun scheduleNavigatorIntentTimeout(context: Context) {
@@ -767,6 +703,11 @@ class NavigationReceiver : BroadcastReceiver() {
             val elapsed = System.currentTimeMillis() - lastAt
             if (elapsed < timeoutMs) {
                 scheduleNavigatorIntentTimeout(context)
+                return
+            }
+            if (NavigationHudStore.snapshot().source == NavDataSource.CARPLAY.storeSource) {
+                // CarPlay only reports on change and signals route end itself; idle at a light is not a stop.
+                cancelNavigatorIntentTimeout()
                 return
             }
             if (!isNavigationActiveForTimeout()) {
@@ -1108,7 +1049,7 @@ class NavigationReceiver : BroadcastReceiver() {
             TIME
         }
 
-        private fun endNavigation(context: Context, action: String, reason: String) {
+        private fun endNavigation(context: Context, action: String, reason: String, preserveSpeedLimit: Boolean = true) {
             YandexVisualStore.endRoute()
             Log.d(TAG, "Navigation ended: $reason")
             UiLogStore.append(LogCategory.NAVIGATION, reason)
@@ -1122,7 +1063,7 @@ class NavigationReceiver : BroadcastReceiver() {
             dynamicHideTurnSpeedBucket = null
             NavigationHudStore.reset(
                 action,
-                preserveSpeedLimit = true,
+                preserveSpeedLimit = preserveSpeedLimit,
                 preserveRoadCamera = true,
                 preserveHudSpeed = true,
                 preserveStrelka = true
@@ -1243,7 +1184,7 @@ class NavigationReceiver : BroadcastReceiver() {
             NavigationHudStore.update { state ->
                 state.copy(
                     trafficLights = resolved,
-                    source = SOURCE_YANDEX,
+                    source = auxiliarySource(state, SOURCE_YANDEX),
                     lastUpdated = now,
                     lastAction = action
                 )
@@ -1314,18 +1255,8 @@ class NavigationReceiver : BroadcastReceiver() {
             return resolved
         }
 
-        private fun parseDistanceMeters(text: String): Int? {
-            val normalized = text.lowercase(Locale.getDefault())
-                .replace(',', '.')
-            val numberMatch = Regex("([0-9]+(?:\\.[0-9]+)?)").find(normalized) ?: return null
-            val value = numberMatch.groupValues[1].toDoubleOrNull() ?: return null
-            val meters = when {
-                normalized.contains("км") || normalized.contains("km") -> value * 1000.0
-                normalized.contains("м") || normalized.contains("m") -> value
-                else -> value
-            }
-            return meters.toInt().coerceAtLeast(0)
-        }
+        private fun parseDistanceMeters(text: String): Int? =
+            ProviderNavFormat.distanceMeters(text, allowUnitless = true)
 
         private fun parseEtaSeconds(text: String): Int? {
             val normalized = text.lowercase(Locale.getDefault())

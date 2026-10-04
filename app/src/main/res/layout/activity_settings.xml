@@ -120,6 +120,55 @@
                             android:text="@string/main_menu_custom_blocks_visible_label"
                             android:textColor="@color/white"
                             android:textSize="14sp" />
+                        <androidx.appcompat.widget.SwitchCompat
+                            android:id="@+id/carPlayDataSwitch"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="12dp"
+                            android:minHeight="48dp"
+                            android:text="@string/nav_data_source_carplay"
+                            android:textColor="@color/white"
+                            android:textSize="14sp" />
+
+                        <LinearLayout
+                            android:id="@+id/carPlayPatchPanel"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="vertical"
+                            android:visibility="gone">
+
+                            <Button
+                                android:id="@+id/carPlayPatchButton"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:minHeight="48dp"
+                                android:text="@string/carplay_patch_retry" />
+
+                            <TextView
+                                android:id="@+id/carPlayPatchStatus"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:text="@string/carplay_patch_waiting"
+                                android:textColor="#c0c0c0"
+                                android:textSize="12sp" />
+                        </LinearLayout>
+
+                        <androidx.appcompat.widget.SwitchCompat
+                            android:id="@+id/androidAutoDataSwitch"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="12dp"
+                            android:minHeight="48dp"
+                            android:text="@string/nav_data_source_android_auto"
+                            android:textColor="@color/white"
+                            android:textSize="14sp" />
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="@string/nav_data_source_android_auto_hint"
+                            android:textColor="#c0c0c0"
+                            android:textSize="12sp" />
                     </LinearLayout>
                 </LinearLayout>
 

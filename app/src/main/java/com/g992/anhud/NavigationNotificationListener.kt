@@ -148,6 +148,7 @@ class NavigationNotificationListener : NotificationListenerService() {
     }
 
     private fun startNavigation() {
+        if (NavDataSourcePrefs.source(this) != NavDataSource.NONE) return
         Log.d(TAG, "Navigation active via notification")
         UiLogStore.append(LogCategory.NAVIGATION, "навигация по уведомлению: старт")
         NavigationReceiver.onNavigationStartedFromNotification(applicationContext)
@@ -166,11 +167,10 @@ class NavigationNotificationListener : NotificationListenerService() {
     }
 
     private fun endNavigation() {
-        // Do not clear navigation if current data is from Headunit (Android Auto).
-        // Yandex notification removal should not wipe Headunit nav from the display.
+        // Yandex notification removal must not wipe a route coming from CarPlay / Android Auto.
         val currentSource = NavigationHudStore.snapshot().source
-        if (currentSource == SOURCE_HEADUNIT) {
-            Log.d(TAG, "Navigation end skipped: current source is Headunit, not Yandex")
+        if (NavDataSource.fromStoreSource(currentSource) != null) {
+            Log.d(TAG, "Navigation end skipped: current source is $currentSource, not Yandex")
             return
         }
 
@@ -205,7 +205,6 @@ class NavigationNotificationListener : NotificationListenerService() {
         private const val ACTION_NAV_NOTIFICATION_ACTIVE = "notification.NAVIGATION_ACTIVE"
         private const val ACTION_NAV_NOTIFICATION_ENDED = "notification.NAVIGATION_ENDED"
         private const val SOURCE_YANDEX = "yandex"
-        private const val SOURCE_HEADUNIT = "headunit"
         private const val YANDEX_STATIC_NOTIFICATION_ID = 2
 
         // Yandex packages to listen for (same as PLUS_MONJ)
