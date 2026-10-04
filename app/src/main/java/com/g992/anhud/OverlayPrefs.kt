@@ -129,6 +129,7 @@ object OverlayPrefs {
     private const val KEY_NAV_ENABLED = "overlay_nav_enabled"
     private const val KEY_NAV_HIDE_WHEN_MAP_ACTIVE = "overlay_nav_hide_when_map_active"
     private const val KEY_MAP_JAMS_ENABLED = "overlay_map_jams_enabled"
+    private const val KEY_MAP_MINIMAP_ZOOM = "overlay_map_minimap_zoom"
     private const val KEY_NAV_SHOW_DISTANCE = "overlay_nav_show_distance"
     private const val KEY_LANE_GUIDANCE_ENABLED = "overlay_lane_guidance_enabled"
     private const val KEY_LANE_GUIDANCE_HIDE_WHEN_MAP_ACTIVE = "overlay_lane_guidance_hide_when_map_active"
@@ -190,6 +191,11 @@ object OverlayPrefs {
     const val NAV_WIDTH_MIN_DP = ICON_SIZE_DP * 2
     const val CONTAINER_MIN_SIZE_PX = 100f
     const val MAP_MIN_SIZE_DP = 48f
+    // MapKit zoom level for the Yandex minimap (`minimap_zoom`); navigator's own default is 16.
+    const val MINIMAP_ZOOM_MIN = 12f
+    const val MINIMAP_ZOOM_MAX = 17.5f
+    const val MINIMAP_ZOOM_STEP = 0.5f
+    const val MINIMAP_ZOOM_DEFAULT = 15f
     const val SPEED_LIMIT_ALERT_THRESHOLD_MAX = 20
     const val TIMEOUT_MAX = 360
     const val HIDE_TURN_DISTANCE_DEFAULT_METERS = 1000
@@ -906,6 +912,17 @@ object OverlayPrefs {
     fun setMapJamsEnabled(context: Context, enabled: Boolean) {
         prefs(context).edit()
             .putBoolean(KEY_MAP_JAMS_ENABLED, enabled)
+            .apply()
+    }
+
+    fun mapMinimapZoom(context: Context): Float {
+        return prefs(context).getFloat(KEY_MAP_MINIMAP_ZOOM, MINIMAP_ZOOM_DEFAULT)
+            .coerceIn(MINIMAP_ZOOM_MIN, MINIMAP_ZOOM_MAX)
+    }
+
+    fun setMapMinimapZoom(context: Context, zoom: Float) {
+        prefs(context).edit()
+            .putFloat(KEY_MAP_MINIMAP_ZOOM, zoom.coerceIn(MINIMAP_ZOOM_MIN, MINIMAP_ZOOM_MAX))
             .apply()
     }
 

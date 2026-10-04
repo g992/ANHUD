@@ -13,6 +13,12 @@ class NavigationService : Service() {
 
     override fun onBind(intent: Intent?): IBinder? = null
 
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        NavDataProviders.apply(this)
+        if (intent?.action == ACTION_RETRY_CARPLAY_PATCH) NavDataProviders.retryCarPlayPatch()
+        return START_STICKY
+    }
+
     override fun onCreate() {
         super.onCreate()
         val receiver = NavigationReceiver()
@@ -51,6 +57,7 @@ class NavigationService : Service() {
             ContextCompat.RECEIVER_EXPORTED
         )
         Log.d(TAG, "Navigation receiver registered")
+        NavDataProviders.apply(this)
         UiLogStore.append(LogCategory.SYSTEM, "NavigationService: ресивер зарегистрирован")
     }
 
@@ -64,10 +71,12 @@ class NavigationService : Service() {
             navigationReceiver = null
         }
         NavigationReceiver.clearNavigatorIntentTimeout()
+        NavDataProviders.stopAll(this)
         UiLogStore.append(LogCategory.SYSTEM, "NavigationService: остановлен")
     }
 
     companion object {
+        const val ACTION_RETRY_CARPLAY_PATCH = "com.g992.anhud.RETRY_CARPLAY_PATCH"
         private const val TAG = "NavigationService"
     }
 }

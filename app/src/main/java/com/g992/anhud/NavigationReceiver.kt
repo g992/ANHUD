@@ -15,7 +15,12 @@ private const val MIN_ARROW_NATIVE_UPDATE_INTERVAL_MS = 3000L
 class NavigationReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val action = intent.action.orEmpty()
-        touchNavigatorIntentTimeout(context, action)
+        val externalSource = NavDataSourcePrefs.source(context) != NavDataSource.NONE
+        if (externalSource && (isRouteFieldAction(action) || isYandexVisualAction(action))) {
+            Log.d(TAG, "Ignored $action: route is owned by an external data provider")
+            return
+        }
+        if (!externalSource) touchNavigatorIntentTimeout(context, action)
         if (action.startsWith("com.yandex.") && shouldSuppressDuplicateYandexIntent(intent, action)) {
             return
         }
@@ -171,7 +176,7 @@ class NavigationReceiver : BroadcastReceiver() {
                 NavigationHudStore.update { state ->
                     state.copy(
                         speedLimit = yandexSpeedLimitAfterUpdate(state.speedLimit, raw, state.routeActive),
-                        source = SOURCE_YANDEX,
+                        source = auxiliarySource(state, SOURCE_YANDEX),
                         lastUpdated = System.currentTimeMillis(),
                         lastAction = action,
                         rawSpeedLimit = raw
@@ -365,7 +370,7 @@ class NavigationReceiver : BroadcastReceiver() {
                             clearHudSpeedLimit -> ""
                             else -> state.rawSpeedLimit
                         },
-                        source = SOURCE_HUDSPEED,
+                        source = auxiliarySource(state, SOURCE_HUDSPEED),
                         lastUpdated = System.currentTimeMillis(),
                         lastAction = action
                     )
@@ -380,7 +385,7 @@ class NavigationReceiver : BroadcastReceiver() {
                         strelkaActive = true,
                         strelkaBitmap = null,
                         strelkaUpdatedAt = now,
-                        source = SOURCE_STRELKA,
+                        source = auxiliarySource(state, SOURCE_STRELKA),
                         lastUpdated = now,
                         lastAction = action
                     )
@@ -395,7 +400,7 @@ class NavigationReceiver : BroadcastReceiver() {
                         strelkaActive = false,
                         strelkaBitmap = null,
                         strelkaUpdatedAt = now,
-                        source = SOURCE_STRELKA,
+                        source = auxiliarySource(state, SOURCE_STRELKA),
                         lastUpdated = now,
                         lastAction = action
                     )
@@ -422,7 +427,7 @@ class NavigationReceiver : BroadcastReceiver() {
                         strelkaActive = true,
                         strelkaBitmap = bitmap,
                         strelkaUpdatedAt = now,
-                        source = SOURCE_STRELKA,
+                        source = auxiliarySource(state, SOURCE_STRELKA),
                         lastUpdated = now,
                         lastAction = action
                     )
@@ -548,6 +553,100 @@ class NavigationReceiver : BroadcastReceiver() {
             cancelNavigatorIntentTimeout()
         }
 
+        /**
+         * Writes a full route snapshot from an external provider (CarPlay / Android Auto).
+         * [touchTimeout] keeps the "no updates" timeout armed for providers that stream continuously.
+         */
+        internal fun applyProviderUpdate(
+            context: Context,
+            source: NavDataSource,
+            action: String,
+            update: ProviderNavUpdate,
+            touchTimeout: Boolean
+        ) {
+            val appContext = context.applicationContext
+            if (touchTimeout) {
+                navigatorIntentTimeoutContext = appContext
+                lastNavigatorIntentAt = System.currentTimeMillis()
+                scheduleNavigatorIntentTimeout(appContext)
+            } else {
+                cancelNavigatorIntentTimeout()
+            }
+            val bitmap = ProviderNavFormat.maneuverBitmap(appContext, update.maneuverType, update.exitNumber)
+            var updated: NavigationHudState? = null
+            NavigationHudStore.update { state ->
+                val next = state.copy(
+                    primaryText = update.maneuverDistance,
+                    secondaryText = update.street,
+                    arrival = update.arrival,
+                    distance = update.remainingDistance,
+                    time = update.remainingTime,
+                    maneuverBitmap = bitmap,
+                    maneuverType = update.maneuverType,
+                    source = source.storeSource,
+                    routeActive = true,
+                    lastUpdated = System.currentTimeMillis(),
+                    lastAction = action,
+                    rawNextText = update.maneuverDistance,
+                    rawNextStreet = update.street,
+                    rawArrival = update.arrival,
+                    rawDistance = update.remainingDistance,
+                    rawTime = update.remainingTime,
+                    tripStatusBitmap = null,
+                    nativeTurnId = null,
+                    distanceUnit = ProviderNavFormat.unitOf(update.maneuverDistance)
+                )
+                updated = next
+                next
+            }
+            updated?.let { maybeUpdateNativeNavigation(appContext, it, NativeNavUpdateTrigger.DISTANCE) }
+        }
+
+        /** Unconditional wipe on a data-source switch: route fields, Yandex visuals, traffic lights. */
+        internal fun clearRouteForSourceSwitch(context: Context, preserveSpeedLimit: Boolean) {
+            endNavigation(
+                context.applicationContext,
+                "nav_source_switch",
+                "смена источника навигации: экран очищен",
+                preserveSpeedLimit = preserveSpeedLimit
+            )
+            context.applicationContext.sendBroadcast(
+                Intent(OverlayBroadcasts.ACTION_CLEAR_NAVIGATION).setPackage(context.packageName)
+            )
+        }
+
+        /** Ends the route only if it still belongs to [source], so a stop never wipes Yandex data. */
+        internal fun endProviderNavigation(context: Context, source: NavDataSource, reason: String) {
+            if (NavigationHudStore.snapshot().source != source.storeSource) {
+                return
+            }
+            endNavigation(context.applicationContext, "provider_${source.prefValue}_end", reason)
+        }
+
+        private fun auxiliarySource(state: NavigationHudState, fallback: String): String =
+            if (NavDataSource.fromStoreSource(state.source) != null) state.source else fallback
+
+        /** Yandex/monjaro actions that write turn-by-turn fields owned by an external provider. */
+        private fun isYandexVisualAction(action: String): Boolean = action in setOf(
+            ACTION_YANDEX_LANE_SIGN, ACTION_YANDEX_LANES, ACTION_YANDEX_LANE_DIST,
+            ACTION_YANDEX_LANES_BITMAP, ACTION_YANDEX_LANES_BITMAP_CLEAR,
+            ACTION_YANDEX_MINIMAP, ACTION_YANDEX_JAM_IMAGE
+        )
+
+        private fun isRouteFieldAction(action: String): Boolean {
+            return action == ACTION_NAV_UPDATE ||
+                action == ACTION_NAV_UPDATE_DEBUG ||
+                action == ACTION_YANDEX_SPEEDLIMIT ||
+                action == ACTION_YANDEX_MANEUVER ||
+                action == ACTION_YANDEX_NEXT_TEXT ||
+                action == ACTION_YANDEX_NEXT_STREET ||
+                action == ACTION_YANDEX_ARRIVAL ||
+                action == ACTION_YANDEX_DISTANCE ||
+                action == ACTION_YANDEX_TIME ||
+                action == ACTION_YANDEX_TRIP_STATUS_BITMAP ||
+                action == ACTION_YANDEX_NAVIGATION_ENDED
+        }
+
         private fun touchNavigatorIntentTimeout(context: Context, action: String) {
             if (!isNavigatorIntentAction(action)) {
                 return
@@ -604,6 +703,11 @@ class NavigationReceiver : BroadcastReceiver() {
             val elapsed = System.currentTimeMillis() - lastAt
             if (elapsed < timeoutMs) {
                 scheduleNavigatorIntentTimeout(context)
+                return
+            }
+            if (NavigationHudStore.snapshot().source == NavDataSource.CARPLAY.storeSource) {
+                // CarPlay only reports on change and signals route end itself; idle at a light is not a stop.
+                cancelNavigatorIntentTimeout()
                 return
             }
             if (!isNavigationActiveForTimeout()) {
@@ -945,7 +1049,7 @@ class NavigationReceiver : BroadcastReceiver() {
             TIME
         }
 
-        private fun endNavigation(context: Context, action: String, reason: String) {
+        private fun endNavigation(context: Context, action: String, reason: String, preserveSpeedLimit: Boolean = true) {
             YandexVisualStore.endRoute()
             Log.d(TAG, "Navigation ended: $reason")
             UiLogStore.append(LogCategory.NAVIGATION, reason)
@@ -959,7 +1063,7 @@ class NavigationReceiver : BroadcastReceiver() {
             dynamicHideTurnSpeedBucket = null
             NavigationHudStore.reset(
                 action,
-                preserveSpeedLimit = true,
+                preserveSpeedLimit = preserveSpeedLimit,
                 preserveRoadCamera = true,
                 preserveHudSpeed = true,
                 preserveStrelka = true
@@ -1080,7 +1184,7 @@ class NavigationReceiver : BroadcastReceiver() {
             NavigationHudStore.update { state ->
                 state.copy(
                     trafficLights = resolved,
-                    source = SOURCE_YANDEX,
+                    source = auxiliarySource(state, SOURCE_YANDEX),
                     lastUpdated = now,
                     lastAction = action
                 )
@@ -1151,18 +1255,8 @@ class NavigationReceiver : BroadcastReceiver() {
             return resolved
         }
 
-        private fun parseDistanceMeters(text: String): Int? {
-            val normalized = text.lowercase(Locale.getDefault())
-                .replace(',', '.')
-            val numberMatch = Regex("([0-9]+(?:\\.[0-9]+)?)").find(normalized) ?: return null
-            val value = numberMatch.groupValues[1].toDoubleOrNull() ?: return null
-            val meters = when {
-                normalized.contains("км") || normalized.contains("km") -> value * 1000.0
-                normalized.contains("м") || normalized.contains("m") -> value
-                else -> value
-            }
-            return meters.toInt().coerceAtLeast(0)
-        }
+        private fun parseDistanceMeters(text: String): Int? =
+            ProviderNavFormat.distanceMeters(text, allowUnitless = true)
 
         private fun parseEtaSeconds(text: String): Int? {
             val normalized = text.lowercase(Locale.getDefault())

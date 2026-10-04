@@ -20,6 +20,7 @@ object YandexVisualStore {
     private val decoder = Executors.newSingleThreadExecutor { task ->
         Thread(task, "YandexMinimapDecoder").apply { isDaemon = true }
     }
+    private var sourceEnabled = true
     private var value = YandexVisualSnapshot()
     private var frameVersion = 0L
     private var pendingFrame: Pair<Long, ByteArray>? = null
@@ -27,23 +28,43 @@ object YandexVisualStore {
 
     @Synchronized fun snapshot(): YandexVisualSnapshot = value
 
+    fun setSourceEnabled(enabled: Boolean) {
+        val changed = synchronized(this) {
+            if (enabled == sourceEnabled) false else {
+                sourceEnabled = enabled
+                ++frameVersion
+                pendingFrame = null
+                value = YandexVisualSnapshot()
+                true
+            }
+        }
+        if (changed) listeners.forEach { it() }
+    }
+
     fun addListener(listener: () -> Unit) { listeners.add(listener) }
     fun removeListener(listener: () -> Unit) { listeners.remove(listener) }
 
     private fun change(update: (YandexVisualSnapshot) -> YandexVisualSnapshot) {
-        synchronized(this) { value = update(value) }
+        synchronized(this) { if (!sourceEnabled) return; value = update(value) }
         listeners.forEach { it() }
     }
 
     fun acceptMinimap(jpeg: ByteArray?, hasRoute: Boolean) {
-        val version = synchronized(this) { ++frameVersion }
+        val version = synchronized(this) { if (!sourceEnabled) return; ++frameVersion }
         if (jpeg == null || jpeg.isEmpty() || !hasRoute) {
-            synchronized(this) { pendingFrame = null }
-            change { it.copy(minimap = null, jams = if (hasRoute) it.jams else null, hasRoute = hasRoute) }
+            val accepted = synchronized(this) {
+                if (!sourceEnabled || version != frameVersion) false else {
+                    pendingFrame = null
+                    value = value.copy(minimap = null, jams = if (hasRoute) value.jams else null, hasRoute = hasRoute)
+                    true
+                }
+            }
+            if (accepted) listeners.forEach { it() }
             return
         }
         if (jpeg.size > MAX_JPEG_BYTES) return
         val shouldStart = synchronized(this) {
+            if (!sourceEnabled || version != frameVersion) return
             pendingFrame = version to jpeg
             if (decoderRunning) false else { decoderRunning = true; true }
         }
@@ -66,7 +87,7 @@ object YandexVisualStore {
             if (bounds.outWidth !in 1..MAX_DIMENSION || bounds.outHeight !in 1..MAX_DIMENSION) continue
             val bitmap = BitmapFactory.decodeByteArray(jpeg, 0, jpeg.size) ?: continue
             val accepted = synchronized(this) {
-                if (version != frameVersion) false
+                if (!sourceEnabled || version != frameVersion) false
                 else { value = value.copy(minimap = bitmap, hasRoute = true); true }
             }
             if (accepted) listeners.forEach { it() }

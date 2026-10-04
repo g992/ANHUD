@@ -83,6 +83,9 @@ internal fun MainActivity.openPositionDialog(
     val showOthersCheck = dialogView.findViewById<CheckBox>(R.id.dialogShowOthers)
     val hideWhenMapActiveCheck = dialogView.findViewById<CheckBox>(R.id.dialogHideWhenMapActive)
     val mapJamsCheck = dialogView.findViewById<CheckBox>(R.id.dialogMapJamsCheck)
+    val minimapZoomRow = dialogView.findViewById<View>(R.id.dialogMinimapZoomRow)
+    val minimapZoomSeek = dialogView.findViewById<SeekBar>(R.id.dialogMinimapZoomSeek)
+    val minimapZoomValue = dialogView.findViewById<TextView>(R.id.dialogMinimapZoomValue)
     val hudSpeedGpsStatusCheck = dialogView.findViewById<CheckBox>(R.id.dialogHudSpeedShowGpsStatus)
     val laneGuidanceShowDistanceCheck = dialogView.findViewById<CheckBox>(R.id.dialogLaneGuidanceShowDistance)
     val trafficLightDistanceRow = dialogView.findViewById<View>(R.id.dialogTrafficLightDistanceRow)
@@ -439,6 +442,32 @@ internal fun MainActivity.openPositionDialog(
                 previewShowOthers = showOthersCheck.isChecked
             )
         }
+        minimapZoomRow.visibility = View.VISIBLE
+        fun minimapZoomFromProgress(progress: Int): Float =
+            OverlayPrefs.MINIMAP_ZOOM_MIN + progress * OverlayPrefs.MINIMAP_ZOOM_STEP
+        minimapZoomSeek.max = ((OverlayPrefs.MINIMAP_ZOOM_MAX - OverlayPrefs.MINIMAP_ZOOM_MIN) /
+            OverlayPrefs.MINIMAP_ZOOM_STEP).roundToInt()
+        val currentMinimapZoom = OverlayPrefs.mapMinimapZoom(activity)
+        minimapZoomSeek.progress = ((currentMinimapZoom - OverlayPrefs.MINIMAP_ZOOM_MIN) /
+            OverlayPrefs.MINIMAP_ZOOM_STEP).roundToInt()
+        minimapZoomValue.text = getString(R.string.position_minimap_zoom_value, currentMinimapZoom)
+        minimapZoomSeek.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                val zoom = minimapZoomFromProgress(progress)
+                minimapZoomValue.text = getString(R.string.position_minimap_zoom_value, zoom)
+                if (!fromUser || zoom == OverlayPrefs.mapMinimapZoom(activity)) return
+                OverlayPrefs.setMapMinimapZoom(activity, zoom)
+                notifyOverlaySettingsChanged(
+                    preview = true,
+                    previewTarget = target,
+                    previewShowOthers = showOthersCheck.isChecked
+                )
+            }
+
+            override fun onStartTrackingTouch(seekBar: SeekBar?) = Unit
+
+            override fun onStopTrackingTouch(seekBar: SeekBar?) = Unit
+        })
     } else {
         roadEventsRow.visibility = View.GONE
         tripStatusRow.visibility = View.GONE

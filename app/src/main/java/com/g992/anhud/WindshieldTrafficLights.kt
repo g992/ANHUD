@@ -84,13 +84,17 @@ class WindshieldTrafficLightBatcher(
             return parsed?.takeIf { it.isFinite() && it >= 0.0 }
         }
 
-        /** Position 0 is nearest. Filter before limiting so a distant item never takes a slot. */
+        /**
+         * Position 0 is nearest. Filter before limiting so a distant item never takes a slot.
+         * ЯН 30.3.0 never sends a real distance (no `tl_dist_m` globally, `-1` in the addressed copy),
+         * so a light with unknown distance is kept: the distance limit applies only when it is known.
+         */
         fun visibleWithin(
             lights: List<TrafficLightInfo>,
             maxDistanceMeters: Int,
             maxActive: Int
         ): List<TrafficLightInfo> = lights
-            .filter { light -> light.distanceMeters?.let { it <= maxDistanceMeters } == true }
+            .filter { light -> light.distanceMeters?.let { it <= maxDistanceMeters } ?: true }
             .sortedWith(compareBy<TrafficLightInfo>({ it.position }, { it.distanceMeters }, { it.id }))
             .take(maxActive.coerceAtLeast(1))
 

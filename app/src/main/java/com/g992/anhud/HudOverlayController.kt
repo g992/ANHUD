@@ -149,12 +149,13 @@ class HudOverlayController(private val context: Context) {
     private var minimapImageView: ImageView? = null
     private var jamImageView: JamsBarView? = null
     private var requestedMinimapSize: Pair<Int, Int>? = null
+    private var requestedMinimapZoom = 0f
     private var lastJamLayoutKey: String? = null
     private val minimapRetry = object : Runnable {
         override fun run() {
             val size = requestedMinimapSize ?: return
             // Navigator stops capturing when ENABLE is not repeated within 20 s, so this is a heartbeat.
-            sendMinimapEnable(size)
+            sendMinimapEnable(size, requestedMinimapZoom)
             handler.postDelayed(this, 5_000L)
         }
     }
@@ -2206,7 +2207,7 @@ class HudOverlayController(private val context: Context) {
         updateTrafficLights(displayTrafficLights, trafficLightAllowed)
         updateLaneGuidance(
             bitmap = laneGuidanceManeuver,
-            distanceText = visual.laneDistance,
+            distanceText = ProviderNavFormat.roundedDistance(visual.laneDistance),
             queue = visual.laneQueue,
             preview = previewLaneGuidance,
             fillTransparentBackground = laneGuidanceTransparentFillVisible
@@ -2454,10 +2455,6 @@ class HudOverlayController(private val context: Context) {
         placeholder.visibility = if (placeholder.text.isNotBlank()) View.VISIBLE else View.GONE
         distance.text = distanceText
         distance.visibility = if (showDistance && distanceText.isNotBlank()) View.VISIBLE else View.GONE
-    }
-
-    private fun formatLaneGuidanceDistance(distanceMeters: Int): String {
-        return LaneGuidanceHudRenderHelper.formatDistance(distanceMeters)
     }
 
     private fun resolveLaneGuidanceHudBitmap(source: Bitmap): Bitmap {
@@ -3224,20 +3221,7 @@ class HudOverlayController(private val context: Context) {
         return null
     }
 
-    private fun parseDistanceMeters(text: String): Int? {
-        val normalized = text.lowercase(Locale.getDefault()).replace(',', '.')
-        val kilometerMatch = Regex("([0-9]+(?:\\.[0-9]+)?)\\s*(км|km)\\b").find(normalized)
-        if (kilometerMatch != null) {
-            val km = kilometerMatch.groupValues[1].toDoubleOrNull() ?: return null
-            return (km * 1000.0).toInt().coerceAtLeast(0)
-        }
-        val meterMatch = Regex("([0-9]+(?:\\.[0-9]+)?)\\s*(м|m)\\b").find(normalized)
-        if (meterMatch != null) {
-            val meters = meterMatch.groupValues[1].toDoubleOrNull() ?: return null
-            return meters.toInt().coerceAtLeast(0)
-        }
-        return null
-    }
+    private fun parseDistanceMeters(text: String): Int? = ProviderNavFormat.distanceMeters(text)
 
     private fun appendUnitIfMissing(text: String, unit: String): String {
         val trimmed = text.trim()
@@ -3579,22 +3563,27 @@ class HudOverlayController(private val context: Context) {
         val rounded = size?.let { (width, height) ->
             (width.coerceIn(96, 1920) / 8 * 8) to (height.coerceIn(96, 1920) / 8 * 8)
         }
-        if (rounded == requestedMinimapSize) return
+        val zoom = OverlayPrefs.mapMinimapZoom(context)
+        if (rounded == requestedMinimapSize && (rounded == null || zoom == requestedMinimapZoom)) return
         requestedMinimapSize = rounded
+        requestedMinimapZoom = zoom
         handler.removeCallbacks(minimapRetry)
         if (rounded == null) {
             context.sendBroadcast(Intent("com.yandex.MINIMAP_DISABLE").setPackage("ru.yandex.yandexnavi"))
         } else {
-            sendMinimapEnable(rounded)
+            sendMinimapEnable(rounded, zoom)
             handler.postDelayed(minimapRetry, 5_000L)
         }
     }
 
-    private fun sendMinimapEnable(size: Pair<Int, Int>) {
+    private fun sendMinimapEnable(size: Pair<Int, Int>, zoom: Float) {
+        // ENABLE resets every style extra it does not carry: minimap_view defaults to 0 (3D, tilt 40),
+        // minimap_zoom 0 means the navigator's fixed zoom 16 in that mode.
         context.sendBroadcast(Intent("com.yandex.MINIMAP_ENABLE")
             .setPackage("ru.yandex.yandexnavi")
             .putExtra("minimap_width", size.first)
             .putExtra("minimap_height", size.second)
+            .putExtra("minimap_zoom", zoom)
             .putExtra("minimap_hide_on_route_end", true))
     }
 

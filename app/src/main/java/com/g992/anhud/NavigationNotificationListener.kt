@@ -148,6 +148,7 @@ class NavigationNotificationListener : NotificationListenerService() {
     }
 
     private fun startNavigation() {
+        if (NavDataSourcePrefs.source(this) != NavDataSource.NONE) return
         Log.d(TAG, "Navigation active via notification")
         UiLogStore.append(LogCategory.NAVIGATION, "навигация по уведомлению: старт")
         NavigationReceiver.onNavigationStartedFromNotification(applicationContext)
@@ -166,6 +167,13 @@ class NavigationNotificationListener : NotificationListenerService() {
     }
 
     private fun endNavigation() {
+        // Yandex notification removal must not wipe a route coming from CarPlay / Android Auto.
+        val currentSource = NavigationHudStore.snapshot().source
+        if (NavDataSource.fromStoreSource(currentSource) != null) {
+            Log.d(TAG, "Navigation end skipped: current source is $currentSource, not Yandex")
+            return
+        }
+
         YandexVisualStore.endRoute()
         Log.d(TAG, "Navigation ended via notification removal")
         UiLogStore.append(LogCategory.NAVIGATION, "навигация по уведомлению: стоп")

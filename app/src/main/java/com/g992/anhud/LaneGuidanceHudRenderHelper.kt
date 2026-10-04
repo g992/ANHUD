@@ -66,31 +66,6 @@ internal object LaneGuidanceHudRenderHelper {
         return Bitmap.createBitmap(croppedPixels, croppedWidth, croppedHeight, Bitmap.Config.ARGB_8888)
     }
 
-    fun formatDistance(distanceMeters: Int): String {
-        val roundedMeters = roundDistance(distanceMeters.coerceAtLeast(0))
-        return if (roundedMeters >= 1000) {
-            "1км"
-        } else {
-            "${roundedMeters}м"
-        }
-    }
-
-    private fun roundDistance(distanceMeters: Int): Int {
-        val cappedDistance = distanceMeters.coerceAtMost(1000)
-        val stepMeters = when {
-            cappedDistance > 600 -> 200
-            cappedDistance > 300 -> 100
-            cappedDistance > 50 -> 50
-            else -> 10
-        }
-        return ceilToStep(cappedDistance, stepMeters).coerceAtMost(1000)
-    }
-
-    private fun ceilToStep(value: Int, step: Int): Int {
-        if (value <= 0) return 0
-        return ((value + step - 1) / step) * step
-    }
-
     private fun detectBackgroundColor(pixels: IntArray, width: Int, height: Int): Int? {
         if (pixels.isEmpty() || width <= 0 || height <= 0) return null
         val band = (minOf(width, height) * 0.06f).roundToInt().coerceIn(1, 8)

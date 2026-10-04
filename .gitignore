@@ -42,3 +42,4 @@ captures/
 /tmp/
 __pycache__/
 *.pyc
+/com/android/builder/

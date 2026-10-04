@@ -111,6 +111,22 @@ class WindshieldTrafficLightBatcherTest {
         val visible = WindshieldTrafficLightBatcher.visibleWithin(merged, maxDistanceMeters = 100, maxActive = 2)
         assertEquals(listOf(0, 1), visible.map { it.position })
         assertEquals(listOf(20.0, 100.0), visible.map { it.distanceMeters })
-        assertTrue(WindshieldTrafficLightBatcher.visibleWithin(merged, 20, 3).single().distanceMeters == 20.0)
+        assertEquals(
+            listOf("ws:nearest", "ws:unknown"),
+            WindshieldTrafficLightBatcher.visibleWithin(merged, 20, 3).map { light ->
+                lights.first { it.key.hashCode() == light.id }.key
+            }
+        )
+    }
+
+    @Test
+    fun unknownDistanceLightsAreShown() {
+        val merged = WindshieldTrafficLightBatcher.merge(
+            emptyMap(),
+            listOf(light("a", 0), light("b", 1)),
+            now = 100
+        ).values.toList()
+        val visible = WindshieldTrafficLightBatcher.visibleWithin(merged, maxDistanceMeters = 225, maxActive = 3)
+        assertEquals(listOf(0, 1), visible.map { it.position })
     }
 }

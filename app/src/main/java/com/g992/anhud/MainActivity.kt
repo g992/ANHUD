@@ -130,6 +130,13 @@ class MainActivity : ScaledActivity() {
     private lateinit var positionContainerCard: View
     private lateinit var positionMapCard: View
     private lateinit var positionNavCard: View
+    private lateinit var navDataSourceSummary: TextView
+    private lateinit var arrowDataSourceSummary: TextView
+    private val navDataListener = object : NavigationHudStore.Listener {
+        override fun onStateUpdated(state: NavigationHudState) {
+            runOnUiThread { updateNavDataSourceSummary(state) }
+        }
+    }
     private lateinit var positionLaneGuidanceCard: View
     private lateinit var positionArrowCard: View
     private lateinit var positionSpeedCard: View
@@ -247,6 +254,8 @@ class MainActivity : ScaledActivity() {
         positionContainerCard = findViewById(R.id.positionContainerCard)
         positionMapCard = findViewById(R.id.positionMapCard)
         positionNavCard = findViewById(R.id.positionNavCard)
+        navDataSourceSummary = findViewById(R.id.navDataSourceSummary)
+        arrowDataSourceSummary = findViewById(R.id.arrowDataSourceSummary)
         positionLaneGuidanceCard = findViewById(R.id.positionLaneGuidanceCard)
         positionArrowCard = findViewById(R.id.positionArrowCard)
         positionSpeedCard = findViewById(R.id.positionSpeedCard)
@@ -688,6 +697,7 @@ class MainActivity : ScaledActivity() {
     }
 
     override fun onStop() {
+        NavigationHudStore.unregisterListener(navDataListener)
         try {
             unregisterReceiver(settingsChangedReceiver)
         } catch (_: Exception) {
@@ -714,9 +724,24 @@ class MainActivity : ScaledActivity() {
 
     override fun onResume() {
         super.onResume()
+        NavigationHudStore.registerListener(navDataListener)
         updatePermissionStatus()
         refreshPresets(keepSelection = true)
         refreshCustomBlocksUi()
+    }
+
+    private fun updateNavDataSourceSummary(state: NavigationHudState) {
+        val selected = NavDataSourcePrefs.source(this)
+        val active = NavDataSource.fromStoreSource(state.source).takeIf { state.routeActive == true }
+        val label = active?.badgeRes ?: when (selected) {
+            NavDataSource.CARPLAY -> R.string.nav_data_source_waiting_carplay
+            NavDataSource.ANDROID_AUTO -> R.string.nav_data_source_waiting_android_auto
+            NavDataSource.NONE -> 0
+        }
+        for (view in listOf(navDataSourceSummary, arrowDataSourceSummary)) {
+            view.visibility = if (label == 0) View.GONE else View.VISIBLE
+            if (label != 0) view.setText(label)
+        }
     }
 
     internal fun syncLegacyExperimentalBlockVisibility() {
