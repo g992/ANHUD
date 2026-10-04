@@ -147,6 +147,7 @@ class HudOverlayController(private val context: Context) {
     private var mapContainerView: FrameLayout? = null
     private var mapContentView: FrameLayout? = null
     private var minimapImageView: ImageView? = null
+    private var minimapFrameView: FrameLayout? = null
     private var jamImageView: JamsBarView? = null
     private var requestedMinimapSize: Pair<Int, Int>? = null
     private var requestedMinimapZoom = 0f
@@ -1534,11 +1535,25 @@ class HudOverlayController(private val context: Context) {
             setBackgroundColor(Color.TRANSPARENT)
         }
         val minimapImage = ImageView(displayContext).apply {
+            layoutParams = FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT
+            )
+            scaleType = ImageView.ScaleType.FIT_XY
+        }
+        // Vignette covers only the minimap picture, not the jams bar below it.
+        val minimapFrame = FrameLayout(displayContext).apply {
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.MATCH_PARENT
             )
-            scaleType = ImageView.ScaleType.FIT_XY
+            addView(minimapImage)
+            addView(MapVignetteView(displayContext).apply {
+                layoutParams = FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.MATCH_PARENT,
+                    FrameLayout.LayoutParams.MATCH_PARENT
+                )
+            })
         }
         val jamsImage = JamsBarView(displayContext).apply {
             layoutParams = LinearLayout.LayoutParams(
@@ -1551,7 +1566,7 @@ class HudOverlayController(private val context: Context) {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
             layoutParams = FrameLayout.LayoutParams(-1, -1)
-            addView(minimapImage)
+            addView(minimapFrame)
             addView(jamsImage)
         })
         val initialMapHeightPx = (mapHeightDp * metrics.density).roundToInt().coerceAtLeast(1)
@@ -1671,6 +1686,7 @@ class HudOverlayController(private val context: Context) {
             mapContainerView = mapBlock
             mapContentView = mapContent
             minimapImageView = minimapImage
+            minimapFrameView = minimapFrame
             jamImageView = jamsImage
             mapTripStatusView = mapTripStatus
             mapPlaceholderView = mapPlaceholder
@@ -3545,7 +3561,7 @@ class HudOverlayController(private val context: Context) {
             }
         }
         jamImageView?.barHeightPx = (jamBarHeight * JAM_BAR_THICKNESS).roundToInt().coerceAtLeast(1)
-        minimapImageView?.let { image ->
+        minimapFrameView?.let { image ->
             val params = image.layoutParams as LinearLayout.LayoutParams
             if (params.width != contentWidth || params.height != mapHeight) {
                 image.layoutParams = params.apply { width = contentWidth; height = mapHeight }
