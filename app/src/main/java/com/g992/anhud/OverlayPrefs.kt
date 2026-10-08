@@ -130,6 +130,11 @@ object OverlayPrefs {
     private const val KEY_NAV_HIDE_WHEN_MAP_ACTIVE = "overlay_nav_hide_when_map_active"
     private const val KEY_MAP_JAMS_ENABLED = "overlay_map_jams_enabled"
     private const val KEY_MAP_MINIMAP_ZOOM = "overlay_map_minimap_zoom"
+    private const val KEY_MAP_MINIMAP_VIEW = "overlay_map_minimap_view"
+    private const val KEY_MAP_MINIMAP_ROADS_ONLY = "overlay_map_minimap_roads_only"
+    private const val KEY_MAP_MINIMAP_LABELS = "overlay_map_minimap_labels"
+    private const val KEY_MAP_MINIMAP_CURSOR_SCALE = "overlay_map_minimap_cursor_scale"
+    private const val KEY_MAP_MINIMAP_ROUTE_SCALE = "overlay_map_minimap_route_scale"
     private const val KEY_NAV_SHOW_DISTANCE = "overlay_nav_show_distance"
     private const val KEY_LANE_GUIDANCE_ENABLED = "overlay_lane_guidance_enabled"
     private const val KEY_LANE_GUIDANCE_HIDE_WHEN_MAP_ACTIVE = "overlay_lane_guidance_hide_when_map_active"
@@ -196,6 +201,16 @@ object OverlayPrefs {
     const val MINIMAP_ZOOM_MAX = 17.5f
     const val MINIMAP_ZOOM_STEP = 0.5f
     const val MINIMAP_ZOOM_DEFAULT = 15f
+    // Navigator `minimap_view`: 0 = 3D tilt 40, 1 = 2D speed auto-zoom, 4 = perspective tilt 72 + auto-zoom.
+    // 2 equals 1 once `minimap_zoom` is sent; 3 latches roads-only inside the navigator, so neither is offered.
+    const val MINIMAP_VIEW_3D = 0
+    const val MINIMAP_VIEW_2D = 1
+    const val MINIMAP_VIEW_PERSPECTIVE = 4
+    // Navigator clamps `minimap_overlay` / `minimap_route` to 0.25..2.5.
+    const val MINIMAP_SCALE_MIN = 0.25f
+    const val MINIMAP_SCALE_MAX = 2.5f
+    const val MINIMAP_SCALE_STEP = 0.25f
+    const val MINIMAP_SCALE_DEFAULT = 1f
     const val SPEED_LIMIT_ALERT_THRESHOLD_MAX = 20
     const val TIMEOUT_MAX = 360
     const val HIDE_TURN_DISTANCE_DEFAULT_METERS = 1000
@@ -923,6 +938,66 @@ object OverlayPrefs {
     fun setMapMinimapZoom(context: Context, zoom: Float) {
         prefs(context).edit()
             .putFloat(KEY_MAP_MINIMAP_ZOOM, zoom.coerceIn(MINIMAP_ZOOM_MIN, MINIMAP_ZOOM_MAX))
+            .apply()
+    }
+
+    data class MinimapStyle(
+        val zoom: Float,
+        val view: Int,
+        val roadsOnly: Boolean,
+        val labels: Boolean,
+        val cursorScale: Float,
+        val routeScale: Float
+    )
+
+    fun minimapStyle(context: Context) = MinimapStyle(
+        zoom = mapMinimapZoom(context),
+        view = mapMinimapView(context),
+        roadsOnly = mapMinimapRoadsOnly(context),
+        labels = mapMinimapLabels(context),
+        cursorScale = mapMinimapCursorScale(context),
+        routeScale = mapMinimapRouteScale(context)
+    )
+
+    fun mapMinimapView(context: Context): Int =
+        prefs(context).getInt(KEY_MAP_MINIMAP_VIEW, MINIMAP_VIEW_3D)
+            .takeIf { it in setOf(MINIMAP_VIEW_3D, MINIMAP_VIEW_2D, MINIMAP_VIEW_PERSPECTIVE) } ?: MINIMAP_VIEW_3D
+
+    fun setMapMinimapView(context: Context, view: Int) {
+        prefs(context).edit().putInt(KEY_MAP_MINIMAP_VIEW, view).apply()
+    }
+
+    fun mapMinimapRoadsOnly(context: Context): Boolean =
+        prefs(context).getBoolean(KEY_MAP_MINIMAP_ROADS_ONLY, false)
+
+    fun setMapMinimapRoadsOnly(context: Context, enabled: Boolean) {
+        prefs(context).edit().putBoolean(KEY_MAP_MINIMAP_ROADS_ONLY, enabled).apply()
+    }
+
+    fun mapMinimapLabels(context: Context): Boolean =
+        prefs(context).getBoolean(KEY_MAP_MINIMAP_LABELS, true)
+
+    fun setMapMinimapLabels(context: Context, enabled: Boolean) {
+        prefs(context).edit().putBoolean(KEY_MAP_MINIMAP_LABELS, enabled).apply()
+    }
+
+    fun mapMinimapCursorScale(context: Context): Float =
+        prefs(context).getFloat(KEY_MAP_MINIMAP_CURSOR_SCALE, MINIMAP_SCALE_DEFAULT)
+            .coerceIn(MINIMAP_SCALE_MIN, MINIMAP_SCALE_MAX)
+
+    fun setMapMinimapCursorScale(context: Context, scale: Float) {
+        prefs(context).edit()
+            .putFloat(KEY_MAP_MINIMAP_CURSOR_SCALE, scale.coerceIn(MINIMAP_SCALE_MIN, MINIMAP_SCALE_MAX))
+            .apply()
+    }
+
+    fun mapMinimapRouteScale(context: Context): Float =
+        prefs(context).getFloat(KEY_MAP_MINIMAP_ROUTE_SCALE, MINIMAP_SCALE_DEFAULT)
+            .coerceIn(MINIMAP_SCALE_MIN, MINIMAP_SCALE_MAX)
+
+    fun setMapMinimapRouteScale(context: Context, scale: Float) {
+        prefs(context).edit()
+            .putFloat(KEY_MAP_MINIMAP_ROUTE_SCALE, scale.coerceIn(MINIMAP_SCALE_MIN, MINIMAP_SCALE_MAX))
             .apply()
     }
 
