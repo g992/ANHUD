@@ -150,13 +150,13 @@ class HudOverlayController(private val context: Context) {
     private var minimapFrameView: FrameLayout? = null
     private var jamImageView: JamsBarView? = null
     private var requestedMinimapSize: Pair<Int, Int>? = null
-    private var requestedMinimapZoom = 0f
+    private var requestedMinimapStyle: OverlayPrefs.MinimapStyle? = null
     private var lastJamLayoutKey: String? = null
     private val minimapRetry = object : Runnable {
         override fun run() {
             val size = requestedMinimapSize ?: return
             // Navigator stops capturing when ENABLE is not repeated within 20 s, so this is a heartbeat.
-            sendMinimapEnable(size, requestedMinimapZoom)
+            sendMinimapEnable(size, requestedMinimapStyle ?: return)
             handler.postDelayed(this, 5_000L)
         }
     }
@@ -3579,27 +3579,32 @@ class HudOverlayController(private val context: Context) {
         val rounded = size?.let { (width, height) ->
             (width.coerceIn(96, 1920) / 8 * 8) to (height.coerceIn(96, 1920) / 8 * 8)
         }
-        val zoom = OverlayPrefs.mapMinimapZoom(context)
-        if (rounded == requestedMinimapSize && (rounded == null || zoom == requestedMinimapZoom)) return
+        val style = OverlayPrefs.minimapStyle(context)
+        if (rounded == requestedMinimapSize && (rounded == null || style == requestedMinimapStyle)) return
         requestedMinimapSize = rounded
-        requestedMinimapZoom = zoom
+        requestedMinimapStyle = style
         handler.removeCallbacks(minimapRetry)
         if (rounded == null) {
             context.sendBroadcast(Intent("com.yandex.MINIMAP_DISABLE").setPackage("ru.yandex.yandexnavi"))
         } else {
-            sendMinimapEnable(rounded, zoom)
+            sendMinimapEnable(rounded, style)
             handler.postDelayed(minimapRetry, 5_000L)
         }
     }
 
-    private fun sendMinimapEnable(size: Pair<Int, Int>, zoom: Float) {
-        // ENABLE resets every style extra it does not carry: minimap_view defaults to 0 (3D, tilt 40),
-        // minimap_zoom 0 means the navigator's fixed zoom 16 in that mode.
+    private fun sendMinimapEnable(size: Pair<Int, Int>, style: OverlayPrefs.MinimapStyle) {
+        // ENABLE resets view/zoom/overlay/route when absent but keeps labels/roads, so send everything.
+        // Navigator reads zoom/overlay/route only as float (see NAVIGATOR_MINIMAP.md).
         context.sendBroadcast(Intent("com.yandex.MINIMAP_ENABLE")
             .setPackage("ru.yandex.yandexnavi")
             .putExtra("minimap_width", size.first)
             .putExtra("minimap_height", size.second)
-            .putExtra("minimap_zoom", zoom)
+            .putExtra("minimap_view", style.view)
+            .putExtra("minimap_zoom", style.zoom)
+            .putExtra("minimap_roads", style.roadsOnly)
+            .putExtra("minimap_labels", style.labels)
+            .putExtra("minimap_overlay", style.cursorScale)
+            .putExtra("minimap_route", style.routeScale)
             .putExtra("minimap_hide_on_route_end", true))
     }
 

@@ -12,6 +12,7 @@ import android.widget.CheckBox
 import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
+import android.widget.RadioGroup
 import android.widget.SeekBar
 import android.widget.Button
 import android.widget.TextView
@@ -86,6 +87,13 @@ internal fun MainActivity.openPositionDialog(
     val minimapZoomRow = dialogView.findViewById<View>(R.id.dialogMinimapZoomRow)
     val minimapZoomSeek = dialogView.findViewById<SeekBar>(R.id.dialogMinimapZoomSeek)
     val minimapZoomValue = dialogView.findViewById<TextView>(R.id.dialogMinimapZoomValue)
+    val minimapViewGroup = dialogView.findViewById<RadioGroup>(R.id.dialogMinimapViewGroup)
+    val minimapRoadsOnly = dialogView.findViewById<CheckBox>(R.id.dialogMinimapRoadsOnly)
+    val minimapLabels = dialogView.findViewById<CheckBox>(R.id.dialogMinimapLabels)
+    val minimapCursorSeek = dialogView.findViewById<SeekBar>(R.id.dialogMinimapCursorSeek)
+    val minimapCursorValue = dialogView.findViewById<TextView>(R.id.dialogMinimapCursorValue)
+    val minimapRouteSeek = dialogView.findViewById<SeekBar>(R.id.dialogMinimapRouteSeek)
+    val minimapRouteValue = dialogView.findViewById<TextView>(R.id.dialogMinimapRouteValue)
     val hudSpeedGpsStatusCheck = dialogView.findViewById<CheckBox>(R.id.dialogHudSpeedShowGpsStatus)
     val laneGuidanceShowDistanceCheck = dialogView.findViewById<CheckBox>(R.id.dialogLaneGuidanceShowDistance)
     val trafficLightDistanceRow = dialogView.findViewById<View>(R.id.dialogTrafficLightDistanceRow)
@@ -468,6 +476,62 @@ internal fun MainActivity.openPositionDialog(
 
             override fun onStopTrackingTouch(seekBar: SeekBar?) = Unit
         })
+        fun minimapChanged() = notifyOverlaySettingsChanged(
+            preview = true,
+            previewTarget = target,
+            previewShowOthers = showOthersCheck.isChecked
+        )
+        val minimapViews = mapOf(
+            R.id.dialogMinimapView3d to OverlayPrefs.MINIMAP_VIEW_3D,
+            R.id.dialogMinimapView2d to OverlayPrefs.MINIMAP_VIEW_2D,
+            R.id.dialogMinimapViewPerspective to OverlayPrefs.MINIMAP_VIEW_PERSPECTIVE
+        )
+        minimapViewGroup.check(minimapViews.entries.first { it.value == OverlayPrefs.mapMinimapView(activity) }.key)
+        minimapViewGroup.setOnCheckedChangeListener { _, checkedId ->
+            val view = minimapViews[checkedId] ?: return@setOnCheckedChangeListener
+            if (view == OverlayPrefs.mapMinimapView(activity)) return@setOnCheckedChangeListener
+            OverlayPrefs.setMapMinimapView(activity, view)
+            minimapChanged()
+        }
+        minimapRoadsOnly.isChecked = OverlayPrefs.mapMinimapRoadsOnly(activity)
+        minimapRoadsOnly.setOnCheckedChangeListener { _, isChecked ->
+            if (isChecked == OverlayPrefs.mapMinimapRoadsOnly(activity)) return@setOnCheckedChangeListener
+            OverlayPrefs.setMapMinimapRoadsOnly(activity, isChecked)
+            minimapChanged()
+        }
+        minimapLabels.isChecked = OverlayPrefs.mapMinimapLabels(activity)
+        minimapLabels.setOnCheckedChangeListener { _, isChecked ->
+            if (isChecked == OverlayPrefs.mapMinimapLabels(activity)) return@setOnCheckedChangeListener
+            OverlayPrefs.setMapMinimapLabels(activity, isChecked)
+            minimapChanged()
+        }
+        fun bindMinimapScale(seek: SeekBar, value: TextView, current: Float, save: (Float) -> Unit) {
+            seek.max = ((OverlayPrefs.MINIMAP_SCALE_MAX - OverlayPrefs.MINIMAP_SCALE_MIN) /
+                OverlayPrefs.MINIMAP_SCALE_STEP).roundToInt()
+            seek.progress = ((current - OverlayPrefs.MINIMAP_SCALE_MIN) / OverlayPrefs.MINIMAP_SCALE_STEP).roundToInt()
+            value.text = getString(R.string.position_minimap_scale_value, current)
+            var saved = current
+            seek.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                    val scale = OverlayPrefs.MINIMAP_SCALE_MIN + progress * OverlayPrefs.MINIMAP_SCALE_STEP
+                    value.text = getString(R.string.position_minimap_scale_value, scale)
+                    if (!fromUser || scale == saved) return
+                    saved = scale
+                    save(scale)
+                    minimapChanged()
+                }
+
+                override fun onStartTrackingTouch(seekBar: SeekBar?) = Unit
+
+                override fun onStopTrackingTouch(seekBar: SeekBar?) = Unit
+            })
+        }
+        bindMinimapScale(minimapCursorSeek, minimapCursorValue, OverlayPrefs.mapMinimapCursorScale(activity)) {
+            OverlayPrefs.setMapMinimapCursorScale(activity, it)
+        }
+        bindMinimapScale(minimapRouteSeek, minimapRouteValue, OverlayPrefs.mapMinimapRouteScale(activity)) {
+            OverlayPrefs.setMapMinimapRouteScale(activity, it)
+        }
     } else {
         roadEventsRow.visibility = View.GONE
         tripStatusRow.visibility = View.GONE

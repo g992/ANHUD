@@ -73,6 +73,16 @@
     <string name="position_map_jams">Полоса пробок под картой</string>
     <string name="position_minimap_zoom">Масштаб мини-карты</string>
     <string name="position_minimap_zoom_value">%1$.1f</string>
+    <string name="position_minimap_view">Вид мини-карты</string>
+    <string name="position_minimap_view_3d">3D</string>
+    <string name="position_minimap_view_2d">2D</string>
+    <string name="position_minimap_view_perspective">Перспектива</string>
+    <string name="position_minimap_view_hint">3D — наклон 40°, масштаб фиксированный. 2D и перспектива (наклон 72°) — масштаб меняется от скорости, слайдер задаёт базу.</string>
+    <string name="position_minimap_roads_only">Только дороги</string>
+    <string name="position_minimap_labels">Подписи и POI</string>
+    <string name="position_minimap_cursor">Размер курсора</string>
+    <string name="position_minimap_route">Толщина маршрута</string>
+    <string name="position_minimap_scale_value">×%1$.2f</string>
     <string name="position_minimap_zoom_hint">Меньше — карта отдалена. 16 — как в навигаторе по умолчанию. Применяется после закрытия окна.</string>
     <string name="map_road_events_button">Дорожные события</string>
     <string name="map_trip_status_button">Статус поездки</string>
