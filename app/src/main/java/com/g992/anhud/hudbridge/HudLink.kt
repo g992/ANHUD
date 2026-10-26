@@ -8,6 +8,12 @@ import java.io.OutputStream
 import java.net.InetSocketAddress
 import java.net.Socket
 import java.net.SocketTimeoutException
+import java.util.concurrent.CompletableFuture
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.ExecutionException
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.TimeoutException
+import java.util.concurrent.atomic.AtomicInteger
 
 /** Another app is drawing on the HUD; [holder] is its name as the daemon reports it. */
 class BusyException(val holder: String) : IOException("HUD занят приложением $holder")
@@ -40,6 +46,30 @@ class HudLink private constructor(
     @Volatile
     private var closing = false
 
+    @Volatile
+    private var cameraMessageSent = false
+
+    /** The daemon answered a camera message with BAD_TYPE: it predates CAMCFG/VEHSTATE. */
+    @Volatile
+    var cameraRejected = false
+        private set
+
+    /** HELLO_ACK's server id, e.g. "ghudbridgelited/0.4.0". */
+    val serverId: String
+
+    /** The daemon answers CAMSNAP (0.4.0 and later); older ones would end the session on it. */
+    val supportsCameraSnapshot: Boolean
+        get() = Gcp.supportsCamSnap(serverId)
+
+    /** HELLO_ACK's caps: with [Gcp.CAP_LAYER_OVER] the daemon has the over-stock layer (0.5.0+). */
+    val caps: Int
+
+    val supportsOverLayer: Boolean
+        get() = (caps and Gcp.CAP_LAYER_OVER) != 0
+
+    private val snapRequestIds = AtomicInteger()
+    private val snapWaiters = ConcurrentHashMap<Int, CompletableFuture<Gcp.CamSnapDone>>()
+
     init {
         send(Gcp.T_HELLO, 0, Gcp.hello(appName))
         socket.soTimeout = HANDSHAKE_TIMEOUT_MS
@@ -54,6 +84,8 @@ class HudLink private constructor(
         if (type != Gcp.T_HELLO_ACK) {
             throw IOException("неожиданный ответ на HELLO: 0x" + Integer.toHexString(type))
         }
+        serverId = Gcp.helloAckServerId(answer)
+        caps = Gcp.helloAckCaps(answer)
         socket.soTimeout = 0
         reader = Thread(::readLoop, "hud-link-read")
         pinger = Thread(::pingLoop, "hud-link-ping")
@@ -67,8 +99,66 @@ class HudLink private constructor(
         send(Gcp.T_FRAME, Gcp.FRAME_LAST, Gcp.frame(rgba, Gcp.WIDTH, rect))
     }
 
+    /**
+     * Sends [parts] as one frame: FRAME_LAST only on the last one, so the daemon posts every
+     * layer's window together. Layer-1 parts only when [supportsOverLayer].
+     */
+    @Throws(IOException::class)
+    fun sendFrames(parts: List<Gcp.FramePart>) {
+        parts.forEachIndexed { i, part ->
+            val flags = if (i == parts.lastIndex) Gcp.FRAME_LAST else 0
+            send(Gcp.T_FRAME, flags, Gcp.frame(part.rgba, Gcp.WIDTH, part.rect, part.layer))
+        }
+    }
+
+    /** LAYER_OFF: the daemon clears and removes the over-stock window. */
+    @Throws(IOException::class)
+    fun sendOverLayerOff() {
+        send(Gcp.T_LAYER_OFF, 0, Gcp.layerOff())
+    }
+
+    /** CAMCFG: camera views (rear, side) with window placement and undistortion parameters. */
+    @Throws(IOException::class)
+    fun sendCameraConfig(config: Gcp.CameraConfig) {
+        cameraMessageSent = true
+        send(Gcp.T_CAMCFG, 0, Gcp.camCfg(config))
+    }
+
+    /** VEHSTATE: current gear, speed and turn signals for the daemon's camera selection. */
+    @Throws(IOException::class)
+    fun sendVehicleState(gear: Int, speedKmh: Float, flags: Int) {
+        cameraMessageSent = true
+        send(Gcp.T_VEHSTATE, 0, Gcp.vehState(gear, speedKmh, flags))
+    }
+
+    /**
+     * CAMSNAP: one live frame of camera [inputId] into [Gcp.camSnapPath], waited for up to
+     * [timeoutMs]. Only for a daemon with [supportsCameraSnapshot]. IOException when no answer comes
+     * in time or the link goes away meanwhile; a daemon-side failure is the answer's status.
+     */
+    @Throws(IOException::class)
+    fun requestCameraSnapshot(inputId: Int, timeoutMs: Long): Gcp.CamSnapDone {
+        val id = snapRequestIds.incrementAndGet()
+        val answer = CompletableFuture<Gcp.CamSnapDone>()
+        snapWaiters[id] = answer
+        try {
+            send(Gcp.T_CAMSNAP, 0, Gcp.camSnap(inputId, id))
+            return answer.get(timeoutMs, TimeUnit.MILLISECONDS)
+        } catch (_: TimeoutException) {
+            throw IOException("демон не прислал кадр вовремя")
+        } catch (e: ExecutionException) {
+            throw e.cause as? IOException ?: IOException(e.cause?.message ?: "связь потеряна")
+        } catch (e: InterruptedException) {
+            Thread.currentThread().interrupt()
+            throw InterruptedIOException("прервано").apply { initCause(e) }
+        } finally {
+            snapWaiters.remove(id)
+        }
+    }
+
     override fun close() {
         closing = true
+        failSnapWaiters("связь закрыта")
         try {
             send(Gcp.T_BYE, 0, ByteArray(0))
         } catch (_: IOException) {
@@ -100,8 +190,16 @@ class HudLink private constructor(
         try {
             while (true) {
                 val (type, payload) = readMessage()
+                if (type == Gcp.T_CAMSNAP_DONE) {
+                    Gcp.CamSnapDone.parse(payload)?.let { snapWaiters[it.requestId]?.complete(it) }
+                    continue
+                }
                 if (type == Gcp.T_ERROR) {
-                    why = "ошибка демона: " + Gcp.Error(payload).message
+                    val error = Gcp.Error(payload)
+                    if (error.code == Gcp.ERR_BAD_TYPE && cameraMessageSent) {
+                        cameraRejected = true
+                    }
+                    why = "ошибка демона: " + error.message
                     break
                 }
                 if (type == Gcp.T_BYE) {
@@ -116,10 +214,15 @@ class HudLink private constructor(
         } catch (e: IllegalArgumentException) {
             why = "связь потеряна: ${e.message}"
         }
+        failSnapWaiters(why)
         if (!closing) {
             Log.w(TAG, "link lost: $why")
             listener.onLinkLost(why)
         }
+    }
+
+    private fun failSnapWaiters(why: String) {
+        snapWaiters.values.forEach { it.completeExceptionally(IOException(why)) }
     }
 
     private fun pingLoop() {

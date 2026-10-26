@@ -41,6 +41,8 @@ class MainActivity : ScaledActivity() {
         internal const val CONTAINER_OUTLINE_PREVIEW_MIN_ALPHA = 0.35f
         internal const val SPEEDOMETER_UNIT_RELATIVE_SIZE = 1f / 3f
         const val EXTRA_START_GUIDE = "extra_start_guide"
+        /** From the camera settings dialog: open the "Контейнер камер" position editor. */
+        const val EXTRA_OPEN_CAMERA_CONTAINER_EDITOR = "extra_open_camera_container_editor"
     }
 
     internal var isSyncingUi = false
@@ -664,13 +666,25 @@ class MainActivity : ScaledActivity() {
         updatePermissionStatus()
         startCoreServices()
         UpdateManager.checkForUpdates(this)
-        settingsRoot.post { maybeStartGuideFromIntent() }
+        settingsRoot.post {
+            maybeStartGuideFromIntent()
+            maybeOpenCameraContainerEditor()
+        }
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        settingsRoot.post { maybeStartGuideFromIntent() }
+        settingsRoot.post {
+            maybeStartGuideFromIntent()
+            maybeOpenCameraContainerEditor()
+        }
+    }
+
+    private fun maybeOpenCameraContainerEditor() {
+        if (intent?.getBooleanExtra(EXTRA_OPEN_CAMERA_CONTAINER_EDITOR, false) != true) return
+        intent?.removeExtra(EXTRA_OPEN_CAMERA_CONTAINER_EDITOR)
+        openPositionDialog(OverlayTarget.CAMERA_CONTAINER)
     }
 
     override fun onStart() {
@@ -929,6 +943,9 @@ class MainActivity : ScaledActivity() {
         mapPosition: PointF? = null,
         mapWidthDp: Float? = null,
         mapHeightDp: Float? = null,
+        cameraContainerPosition: PointF? = null,
+        cameraContainerWidthDp: Float? = null,
+        cameraContainerHeightDp: Float? = null,
         navPosition: PointF? = null,
         navWidthDp: Float? = null,
         laneGuidancePosition: PointF? = null,
@@ -1014,6 +1031,16 @@ class MainActivity : ScaledActivity() {
         }
         if (mapHeightDp != null) {
             intent.putExtra(OverlayBroadcasts.EXTRA_MAP_HEIGHT_DP, mapHeightDp)
+        }
+        if (cameraContainerPosition != null) {
+            intent.putExtra(OverlayBroadcasts.EXTRA_CAMERA_CONTAINER_X_DP, cameraContainerPosition.x)
+            intent.putExtra(OverlayBroadcasts.EXTRA_CAMERA_CONTAINER_Y_DP, cameraContainerPosition.y)
+        }
+        if (cameraContainerWidthDp != null) {
+            intent.putExtra(OverlayBroadcasts.EXTRA_CAMERA_CONTAINER_WIDTH_DP, cameraContainerWidthDp)
+        }
+        if (cameraContainerHeightDp != null) {
+            intent.putExtra(OverlayBroadcasts.EXTRA_CAMERA_CONTAINER_HEIGHT_DP, cameraContainerHeightDp)
         }
         if (navPosition != null) {
             intent.putExtra(OverlayBroadcasts.EXTRA_NAV_X_DP, navPosition.x)

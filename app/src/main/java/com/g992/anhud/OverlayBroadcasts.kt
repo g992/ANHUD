@@ -35,6 +35,10 @@ object OverlayBroadcasts {
     const val EXTRA_MAP_Y_DP = "extra_map_y_dp"
     const val EXTRA_MAP_WIDTH_DP = "extra_map_width_dp"
     const val EXTRA_MAP_HEIGHT_DP = "extra_map_height_dp"
+    const val EXTRA_CAMERA_CONTAINER_X_DP = "extra_camera_container_x_dp"
+    const val EXTRA_CAMERA_CONTAINER_Y_DP = "extra_camera_container_y_dp"
+    const val EXTRA_CAMERA_CONTAINER_WIDTH_DP = "extra_camera_container_width_dp"
+    const val EXTRA_CAMERA_CONTAINER_HEIGHT_DP = "extra_camera_container_height_dp"
     const val EXTRA_NAV_SCALE = "extra_nav_scale"
     const val EXTRA_LANE_GUIDANCE_SCALE = "extra_lane_guidance_scale"
     const val EXTRA_NAV_TEXT_SCALE = "extra_nav_text_scale"
@@ -101,4 +105,5 @@ object OverlayBroadcasts {
     const val PREVIEW_TARGET_CLOCK = "clock"
     const val PREVIEW_TARGET_CONTAINER = "container"
     const val PREVIEW_TARGET_MAP = "map"
+    const val PREVIEW_TARGET_CAMERA_CONTAINER = "camera_container"
 }

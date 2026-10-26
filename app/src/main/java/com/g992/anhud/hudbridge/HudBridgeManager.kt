@@ -69,6 +69,16 @@ object HudBridgeManager {
     @Volatile
     private var daemonBuildId: String? = null
 
+    /** Per-car camera calibration, checked once per bridge session (see [CameraCalibrationCheck]). */
+    @Volatile
+    var cameraCalibration: CameraCalibrationCheck.Result = CameraCalibrationCheck.NOT_CHECKED
+        private set
+
+    /** The running daemon answered CAMCFG/VEHSTATE with BAD_TYPE; camera messages stay off until restart. */
+    @Volatile
+    var cameraUnsupported = false
+        private set
+
     /** The display the overlay must be attached to while bridging, or null for the regular HUD display. */
     fun renderDisplay(): Display? {
         val current = state
@@ -76,6 +86,81 @@ object HudBridgeManager {
             return null
         }
         return sink?.display
+    }
+
+    /** This session's calibration, or the last one cached for the car while no session has checked yet. */
+    fun cameraCalibration(context: Context): CameraCalibrationCheck.Result {
+        val current = cameraCalibration
+        if (current.state != CameraCalibrationCheck.State.NOT_CHECKED) return current
+        return CameraCalibrationStore(context).last() ?: current
+    }
+
+    /** A root shell on QNX for one-off jobs (camera snapshots); the caller closes it. */
+    @Throws(IOException::class)
+    fun openQnxShell(): QnxShell = QnxShell.open(BuildConfig.QNX_HOST, QNX_USER, BuildConfig.QNX_ROOT_PASSWORD)
+
+    /** True while a gcp session is up and frames/control messages can be sent. */
+    fun isLinkUp(): Boolean = state is HudBridgeState.Running && link != null
+
+    /** Sends CAMCFG on the current session; false when there is none or the write failed. */
+    fun sendCameraConfig(config: Gcp.CameraConfig): Boolean = sendControl { it.sendCameraConfig(config) }
+
+    /** Sends VEHSTATE on the current session; false when there is none or the write failed. */
+    fun sendVehicleState(gear: Int, speedKmh: Float, flags: Int): Boolean =
+        sendControl { it.sendVehicleState(gear, speedKmh, flags) }
+
+    /** The current session's daemon answers CAMSNAP (live camera frames for the view editor). */
+    fun supportsCameraSnapshot(): Boolean = isLinkUp() && link?.supportsCameraSnapshot == true
+
+    @Volatile
+    private var overStockRects: List<Gcp.Rect>? = null
+
+    /**
+     * Display-pixel container rectangles of the blocks drawn over the stock HUD ("Блоки поверх
+     * штатной отрисовки"); null when none are selected. Set by the overlay on every draw.
+     */
+    fun setOverStockRects(rects: List<Gcp.Rect>?) {
+        overStockRects = rects
+        sink?.setOverRects(rects)
+    }
+
+    /** False only when the current session's daemon is known to lack the over-stock layer (< 0.5.0). */
+    fun overStockLayerAvailable(): Boolean {
+        val current = link ?: return true
+        return current.supportsOverLayer
+    }
+
+    /** The block selection changed: let the overlay re-publish its rectangles. */
+    fun overStockBlocksChanged() {
+        notifyRenderTarget()
+    }
+
+    /**
+     * CAMSNAP on the current session: the daemon writes one live frame of camera [inputId] to
+     * [Gcp.camSnapPath]. Null when there is no session or its daemon predates CAMSNAP; IOException
+     * when no answer came within [timeoutMs].
+     */
+    @Throws(IOException::class)
+    fun requestCameraSnapshot(inputId: Int, timeoutMs: Long): Gcp.CamSnapDone? {
+        if (state !is HudBridgeState.Running) return null
+        val current = link ?: return null
+        if (!current.supportsCameraSnapshot) return null
+        return current.requestCameraSnapshot(inputId, timeoutMs)
+    }
+
+    private inline fun sendControl(block: (HudLink) -> Unit): Boolean {
+        if (cameraUnsupported || state !is HudBridgeState.Running) {
+            return false
+        }
+        val current = link ?: return false
+        return try {
+            block(current)
+            true
+        } catch (e: IOException) {
+            // The reader thread notices the dead socket and reconnects.
+            Log.d(TAG, "control send failed: ${e.message}")
+            false
+        }
     }
 
     fun isBusy(): Boolean {
@@ -136,12 +221,15 @@ object HudBridgeManager {
             val newSink = HudBridgeFrameSink(
                 context = context,
                 dpi = resolveDpi(context),
-                sender = { rgba, rect ->
+                sender = { parts, dropOver ->
                     val current = link ?: throw IOException("нет связи с демоном")
-                    current.sendFrame(rgba, rect)
+                    if (parts.isNotEmpty()) current.sendFrames(parts)
+                    if (dropOver) current.sendOverLayerOff()
                 },
-                onSendFailed = { onLinkLost(context, "ошибка отправки: ${it.message}") }
+                onSendFailed = { onLinkLost(context, "ошибка отправки: ${it.message}") },
+                overLayerAvailable = { link?.supportsOverLayer == true }
             )
+            newSink.setOverRects(overStockRects)
             sink = newSink
             if (!isCurrent(gen)) {
                 teardown()
@@ -174,7 +262,9 @@ object HudBridgeManager {
 
         val qnx = openQnx(gen, qnxWaitMs)
         val installed = qnx.use { shell ->
-            DaemonInstaller.ensureRunning(context, shell) { step(gen, it) }
+            val result = DaemonInstaller.ensureRunning(context, shell) { step(gen, it) }
+            checkCameraCalibration(context, shell)
+            result
         }
         if (installed.reused && installed.buildId != null &&
             BuildConfig.HUD_BRIDGE_BUILD_ID.isNotBlank() && installed.buildId != BuildConfig.HUD_BRIDGE_BUILD_ID
@@ -184,6 +274,40 @@ object HudBridgeManager {
         step(gen, "Жду связи с демоном…")
         link = HudLink.openWithRetry(BuildConfig.QNX_HOST, appName(context), linkListener(context))
         return installed.buildId ?: BuildConfig.HUD_BRIDGE_BUILD_ID.ifBlank { null }
+    }
+
+    /** Never throws: a failed check only turns the camera correction off. */
+    private fun checkCameraCalibration(context: Context, shell: QnxShell) {
+        val store = CameraCalibrationStore(context)
+        val checked = CameraCalibrationCheck.check(shell, store)
+        val before = cameraCalibration
+        if (checked.state != before.state || checked.fits.keys != before.fits.keys) {
+            log("данные коррекции камер: " + describeCalibration(checked))
+        }
+        if (checked.state == CameraCalibrationCheck.State.MISSING) {
+            store.save(checked)
+        }
+        cameraCalibration = checked
+    }
+
+    private fun describeCalibration(result: CameraCalibrationCheck.Result): String {
+        if (result.state == CameraCalibrationCheck.State.CHECK_FAILED) {
+            val why = result.notes.values.firstOrNull().orEmpty()
+            return "не удалось проверить ($why) — картинка без выравнивания"
+        }
+        return CameraCalibrationCheck.CAMERAS.keys.joinToString(", ") { role ->
+            val name = when (role) {
+                Gcp.CAM_ROLE_REAR -> "задняя"
+                Gcp.CAM_ROLE_LEFT -> "левая"
+                else -> "правая"
+            }
+            val fit = result.fit(role)
+            if (fit != null) {
+                "$name — есть (f=%.1f, ошибка %.2f px)".format(fit.f, fit.rms)
+            } else {
+                "$name — нет (${result.notes[role] ?: "?"}), без выравнивания"
+            }
+        }
     }
 
     private fun openQnx(gen: Int, waitMs: Long): QnxShell {
@@ -213,6 +337,10 @@ object HudBridgeManager {
             }
             val gen = generation.get()
             log("связь с HUD потеряна: $reason")
+            if (link?.cameraRejected == true && !cameraUnsupported) {
+                cameraUnsupported = true
+                log("демон не поддерживает камеру заднего вида — обновите демон")
+            }
             publish(HudBridgeState.Reconnecting(reason))
             link?.close()
             link = null
@@ -289,6 +417,12 @@ object HudBridgeManager {
             notifyRenderTarget()
         }
         if (oldLink != null) {
+            if (oldSink?.overLayerActive == true) {
+                try {
+                    oldLink.sendOverLayerOff()
+                } catch (_: IOException) {
+                }
+            }
             // The HUD keeps the last posted frame; leave it transparent rather than frozen.
             try {
                 oldLink.sendFrame(ByteArray(Gcp.WIDTH * Gcp.HEIGHT * 4), Gcp.Rect(0, 0, Gcp.WIDTH, Gcp.HEIGHT))

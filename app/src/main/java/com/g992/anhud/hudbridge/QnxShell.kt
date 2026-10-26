@@ -92,12 +92,18 @@ class QnxShell private constructor(private val socket: Socket) : Closeable {
         val deadline = System.currentTimeMillis() + timeoutMs
         var seenAt = -1L
         val sb = StringBuilder()
+        // Only the new tail is searched: base64 transfers are megabytes long.
+        var searchFrom = 0
         while (System.currentTimeMillis() < deadline) {
             if (read(sb) < 0) {
                 break
             }
-            if (seenAt < 0 && completedMarker(sb.toString(), marker) >= 0) {
-                seenAt = System.currentTimeMillis()
+            if (seenAt < 0) {
+                val from = searchFrom
+                searchFrom = (sb.length - marker.length - 1).coerceAtLeast(0)
+                if (completedMarker(sb.substring(from), marker) >= 0) {
+                    seenAt = System.currentTimeMillis()
+                }
             }
             if (seenAt >= 0 && System.currentTimeMillis() - seenAt > QUIET_MS) {
                 break

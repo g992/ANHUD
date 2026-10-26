@@ -61,6 +61,9 @@ import androidx.appcompat.widget.SwitchCompat
 import com.g992.anhud.hudbridge.HudBridgeManager
 import com.g992.anhud.hudbridge.HudBridgePrefs
 import com.g992.anhud.hudbridge.HudBridgeState
+import com.g992.anhud.hudbridge.CameraCalibrationCheck
+import com.g992.anhud.hudbridge.Gcp
+import com.g992.anhud.hudbridge.CarVehicleStateReader
 import com.google.android.material.tabs.TabLayout
 import org.maplibre.android.camera.CameraUpdateFactory
 import org.maplibre.android.geometry.LatLng
@@ -106,6 +109,9 @@ class SettingsActivity : ScaledActivity() {
     private lateinit var useStrelkaSwitch: SwitchCompat
     private lateinit var infoMirrorStarsheep7Switch: SwitchCompat
     private lateinit var infoMirrorGalaxySwitch: SwitchCompat
+    private lateinit var camerasSwitch: SwitchCompat
+    private lateinit var camerasConfigButton: Button
+    private lateinit var overStockBlocksButton: Button
     private lateinit var backgroundRenderSwitch: SwitchCompat
     private lateinit var backgroundRenderProgress: ProgressBar
     private lateinit var backgroundRenderStatus: TextView
@@ -282,6 +288,11 @@ class SettingsActivity : ScaledActivity() {
         useStrelkaSwitch = findViewById(R.id.useStrelkaSwitch)
         infoMirrorStarsheep7Switch = findViewById(R.id.infoMirrorStarsheep7Switch)
         infoMirrorGalaxySwitch = findViewById(R.id.infoMirrorGalaxySwitch)
+        camerasSwitch = findViewById(R.id.camerasSwitch)
+        camerasConfigButton = findViewById(R.id.camerasConfigButton)
+        styleSettingsButton(camerasConfigButton, SETTINGS_BUTTON_SECONDARY)
+        overStockBlocksButton = findViewById(R.id.overStockBlocksButton)
+        styleSettingsButton(overStockBlocksButton, SETTINGS_BUTTON_SECONDARY)
         backgroundRenderSwitch = findViewById(R.id.backgroundRenderSwitch)
         backgroundRenderProgress = findViewById(R.id.backgroundRenderProgress)
         backgroundRenderStatus = findViewById(R.id.backgroundRenderStatus)
@@ -443,6 +454,21 @@ class SettingsActivity : ScaledActivity() {
             HudBridgePrefs.setEnabled(this, isChecked)
             HudBridgeManager.sync(this)
             renderBackgroundRenderState(HudBridgeManager.state)
+        }
+
+        camerasSwitch.setOnCheckedChangeListener { _, isChecked ->
+            camerasConfigButton.visibility = if (isChecked) View.VISIBLE else View.GONE
+            if (isSyncingUi) return@setOnCheckedChangeListener
+            OverlayPrefs.setCamerasEnabled(this, isChecked)
+            if (isChecked) {
+                requestCarSpeedPermissionIfNeeded()
+            }
+        }
+        overStockBlocksButton.setOnClickListener {
+            showOverStockBlocksDialog()
+        }
+        camerasConfigButton.setOnClickListener {
+            showCamerasSettingsDialog()
         }
 
         infoMirrorGalaxySwitch.setOnCheckedChangeListener { _, isChecked ->
@@ -2283,6 +2309,12 @@ class SettingsActivity : ScaledActivity() {
         intent.putExtra(OverlayBroadcasts.EXTRA_CONTAINER_Y_DP, containerPos.y)
         intent.putExtra(OverlayBroadcasts.EXTRA_CONTAINER_WIDTH_DP, containerSize.x)
         intent.putExtra(OverlayBroadcasts.EXTRA_CONTAINER_HEIGHT_DP, containerSize.y)
+        val cameraContainerPos = OverlayPrefs.cameraContainerPositionDp(this)
+        val cameraContainerSize = OverlayPrefs.cameraContainerSizeDp(this)
+        intent.putExtra(OverlayBroadcasts.EXTRA_CAMERA_CONTAINER_X_DP, cameraContainerPos.x)
+        intent.putExtra(OverlayBroadcasts.EXTRA_CAMERA_CONTAINER_Y_DP, cameraContainerPos.y)
+        intent.putExtra(OverlayBroadcasts.EXTRA_CAMERA_CONTAINER_WIDTH_DP, cameraContainerSize.x)
+        intent.putExtra(OverlayBroadcasts.EXTRA_CAMERA_CONTAINER_HEIGHT_DP, cameraContainerSize.y)
         intent.putExtra(OverlayBroadcasts.EXTRA_NAV_SCALE, OverlayPrefs.navScale(this))
         intent.putExtra(OverlayBroadcasts.EXTRA_NAV_TEXT_SCALE, OverlayPrefs.navTextScale(this))
         intent.putExtra(OverlayBroadcasts.EXTRA_SPEED_TEXT_SCALE, OverlayPrefs.speedTextScale(this))
@@ -2824,8 +2856,19 @@ class SettingsActivity : ScaledActivity() {
             backgroundRenderStatus.text = status
             backgroundRenderStatus.setTextColor(statusColor)
             backgroundRenderStatus.visibility = if (status.isBlank()) View.GONE else View.VISIBLE
+            overStockBlocksButton.visibility = if (busy || backgroundRenderSwitch.isChecked) View.VISIBLE else View.GONE
         } finally {
             isSyncingBackgroundRender = false
+        }
+    }
+
+    /** CAR_SPEED is a runtime permission on some head units; without it the camera ignores the speed limit. */
+    private fun requestCarSpeedPermissionIfNeeded() {
+        val permission = CarVehicleStateReader.PERMISSION_CAR_SPEED
+        if (checkSelfPermission(permission) == PackageManager.PERMISSION_GRANTED) return
+        try {
+            requestPermissions(arrayOf(permission), REQUEST_CAR_SPEED_PERMISSION)
+        } catch (_: Exception) {
         }
     }
 
@@ -2839,6 +2882,8 @@ class SettingsActivity : ScaledActivity() {
             mainMenuCustomBlocksVisibleSwitch.isChecked = CustomBlockRepository(this).load().menuVisible
             infoMirrorStarsheep7Switch.isChecked = OverlayPrefs.infoMirrorStarsheep7Enabled(this)
             infoMirrorGalaxySwitch.isChecked = OverlayPrefs.infoMirrorGalaxyEnabled(this)
+            camerasSwitch.isChecked = OverlayPrefs.camerasEnabled(this)
+            camerasConfigButton.visibility = if (camerasSwitch.isChecked) View.VISIBLE else View.GONE
             val hideTurnWhenFarEnabled = OverlayPrefs.hideTurnWhenFarEnabled(this)
             hideTurnWhenFarSwitch.isChecked = hideTurnWhenFarEnabled
             val hideDistance = OverlayPrefs.hideTurnWhenFarDistanceMeters(this)
@@ -2908,6 +2953,354 @@ class SettingsActivity : ScaledActivity() {
         hideTurnDynamicHideMapSwitch.alpha = if (hideTurnEnabled && dynamicEnabled) 1f else 0.5f
         hideTurnDynamicConfigButton.isEnabled = hideTurnEnabled && dynamicEnabled
         hideTurnDynamicConfigButton.alpha = if (hideTurnEnabled && dynamicEnabled) 1f else 0.5f
+    }
+
+    /** "Настроить камеры на проекцию": every switch/slider is saved at once, the controller picks it up. */
+    /** Checkbox list of the blocks drawn over the stock HUD picture (on black) while rendering in the background. */
+    private fun showOverStockBlocksDialog() {
+        var dialog: AlertDialog? = null
+        val selected = OverlayPrefs.overStockBlocks(this)
+        val white = ContextCompat.getColor(this, R.color.white)
+        val contentColumn = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            background = roundedDrawable(
+                fill = Color.parseColor("#101010"),
+                stroke = ContextCompat.getColor(this@SettingsActivity, R.color.hud_blue),
+                radiusDp = 12
+            )
+            setPadding(dp(20), dp(20), dp(20), dp(20))
+        }
+        contentColumn.addView(TextView(this).apply {
+            text = getString(R.string.over_stock_blocks_title)
+            setTextColor(white)
+            textSize = 20f
+            setTypeface(typeface, android.graphics.Typeface.BOLD)
+        })
+        contentColumn.addView(TextView(this).apply {
+            text = getString(R.string.over_stock_blocks_hint)
+            setTextColor(Color.parseColor("#808080"))
+            textSize = 12f
+        }, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        ).apply { topMargin = dp(8) })
+        if (!HudBridgeManager.overStockLayerAvailable()) {
+            contentColumn.addView(TextView(this).apply {
+                text = getString(R.string.over_stock_blocks_unsupported)
+                setTextColor(Color.parseColor("#FF5252"))
+                textSize = 12f
+            }, LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { topMargin = dp(8) })
+        }
+        val checkBoxes = OverlayPrefs.OVER_STOCK_BLOCK_KEYS.map { key ->
+            key to CheckBox(this).apply {
+                text = getString(overStockBlockLabel(key))
+                textSize = 16f
+                setTextColor(white)
+                isChecked = key in selected
+            }
+        }
+        checkBoxes.forEachIndexed { index, (_, box) ->
+            contentColumn.addView(box, LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { topMargin = dp(if (index == 0) 14 else 4) })
+        }
+        val cancelButton = createSettingsButton(
+            getString(android.R.string.cancel),
+            SETTINGS_BUTTON_SECONDARY
+        ).apply {
+            minHeight = dp(36)
+            minimumHeight = dp(36)
+        }
+        val confirmButton = createSettingsButton(
+            getString(android.R.string.ok),
+            SETTINGS_BUTTON_PRIMARY
+        ).apply {
+            minHeight = dp(36)
+            minimumHeight = dp(36)
+        }
+        contentColumn.addView(LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.END
+            addView(cancelButton)
+            addView(confirmButton, LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { marginStart = dp(10) })
+        }, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        ).apply { topMargin = dp(18) })
+        val container = ScrollView(this).apply {
+            isFillViewport = true
+            overScrollMode = View.OVER_SCROLL_IF_CONTENT_SCROLLS
+            setPadding(dp(12), dp(12), dp(12), dp(12))
+            addView(contentColumn, ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ))
+        }
+        cancelButton.setOnClickListener { dialog?.dismiss() }
+        confirmButton.setOnClickListener {
+            val chosen = checkBoxes.filter { it.second.isChecked }.mapTo(linkedSetOf()) { it.first }
+            OverlayPrefs.setOverStockBlocks(this, chosen)
+            HudBridgeManager.overStockBlocksChanged()
+            dialog?.dismiss()
+        }
+        dialog = AlertDialog.Builder(this, R.style.ThemeOverlay_ANHUD_Dialog)
+            .setView(container)
+            .create()
+        dialog.show()
+        dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
+        dialog.window?.setLayout(
+            (resources.displayMetrics.widthPixels * 0.92f).roundToInt(),
+            ViewGroup.LayoutParams.WRAP_CONTENT
+        )
+    }
+
+    private fun overStockBlockLabel(key: String): Int = when (key) {
+        OverlayBroadcasts.PREVIEW_TARGET_NAV -> R.string.position_nav_block_label
+        OverlayBroadcasts.PREVIEW_TARGET_LANE_GUIDANCE -> R.string.position_lane_guidance_block_label
+        OverlayBroadcasts.PREVIEW_TARGET_ARROW -> R.string.position_arrow_block_label
+        OverlayBroadcasts.PREVIEW_TARGET_SPEED -> R.string.position_speed_block_label
+        OverlayBroadcasts.PREVIEW_TARGET_HUDSPEED -> R.string.position_shared_alert_block_label
+        OverlayBroadcasts.PREVIEW_TARGET_ROAD_CAMERA -> R.string.position_road_camera_block_label
+        OverlayBroadcasts.PREVIEW_TARGET_TRAFFIC_LIGHT -> R.string.position_traffic_light_block_label
+        OverlayBroadcasts.PREVIEW_TARGET_SPEEDOMETER -> R.string.position_speedometer_block_label
+        OverlayBroadcasts.PREVIEW_TARGET_TURN_SIGNALS -> R.string.position_turn_signals_block_label
+        OverlayBroadcasts.PREVIEW_TARGET_CLOCK -> R.string.position_clock_block_label
+        OverlayBroadcasts.PREVIEW_TARGET_MAP -> R.string.position_map_block_label
+        else -> R.string.custom_blocks_title
+    }
+
+    private fun showCamerasSettingsDialog() {
+        var dialog: AlertDialog? = null
+        val white = ContextCompat.getColor(this, R.color.white)
+        val contentColumn = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            background = roundedDrawable(
+                fill = Color.parseColor("#101010"),
+                stroke = ContextCompat.getColor(this@SettingsActivity, R.color.hud_blue),
+                radiusDp = 12
+            )
+            setPadding(dp(20), dp(20), dp(20), dp(20))
+        }
+        fun add(view: View, topMarginDp: Int) {
+            contentColumn.addView(view, LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply {
+                topMargin = dp(topMarginDp)
+            })
+        }
+        fun switch(labelRes: Int, checked: Boolean): SwitchCompat = SwitchCompat(this).apply {
+            text = getString(labelRes)
+            setTextColor(white)
+            textSize = 14f
+            isChecked = checked
+        }
+        fun hint(textRes: Int): TextView = TextView(this).apply {
+            text = getString(textRes)
+            setTextColor(Color.parseColor("#808080"))
+            textSize = 12f
+        }
+
+        contentColumn.addView(TextView(this).apply {
+            text = getString(R.string.cameras_setting_label)
+            setTextColor(white)
+            textSize = 20f
+            setTypeface(typeface, android.graphics.Typeface.BOLD)
+        })
+
+        val inContainerSwitch = switch(R.string.cameras_in_container_label, OverlayPrefs.camerasInContainer(this))
+        add(inContainerSwitch, 16)
+        add(hint(R.string.cameras_in_container_hint), 4)
+        val containerButton = createSettingsButton(getString(R.string.camera_container_edit_button)).apply {
+            minHeight = dp(40)
+            minimumHeight = dp(40)
+        }
+        add(containerButton, 8)
+
+        val rearSwitch = switch(R.string.cameras_rear_label, OverlayPrefs.rearCameraEnabled(this))
+        add(rearSwitch, 16)
+
+        val turnSwitch = switch(R.string.cameras_turn_label, OverlayPrefs.sideCamerasEnabled(this))
+        add(turnSwitch, 16)
+        add(hint(R.string.cameras_turn_hint), 4)
+        val turnOptions = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        val speedValue = TextView(this).apply {
+            setTextColor(white)
+            textSize = 14f
+        }
+        turnOptions.addView(LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            addView(TextView(this@SettingsActivity).apply {
+                text = getString(R.string.cameras_turn_speed_label)
+                setTextColor(white)
+                textSize = 14f
+            }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+            addView(speedValue)
+        })
+        val speedMin = OverlayPrefs.SIDE_CAMERA_MAX_SPEED_MIN
+        val speedStep = OverlayPrefs.SIDE_CAMERA_MAX_SPEED_STEP
+        fun speedOf(progress: Int) = speedMin + progress * speedStep
+        val speedSeek = SeekBar(this).apply {
+            max = (OverlayPrefs.SIDE_CAMERA_MAX_SPEED_MAX - speedMin) / speedStep
+            progress = (OverlayPrefs.sideCameraMaxSpeedKmh(this@SettingsActivity) - speedMin) / speedStep
+        }
+        speedValue.text = getString(R.string.cameras_turn_speed_value, speedOf(speedSeek.progress))
+        speedSeek.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                speedValue.text = getString(R.string.cameras_turn_speed_value, speedOf(progress))
+            }
+
+            override fun onStartTrackingTouch(seekBar: SeekBar?) = Unit
+
+            override fun onStopTrackingTouch(seekBar: SeekBar?) {
+                OverlayPrefs.setSideCameraMaxSpeedKmh(this@SettingsActivity, speedOf(seekBar?.progress ?: return))
+            }
+        })
+        turnOptions.addView(speedSeek, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        ).apply {
+            topMargin = dp(6)
+        })
+        val hazardSwitch = switch(R.string.cameras_hazard_label, OverlayPrefs.sideCamerasHazard(this))
+        turnOptions.addView(hazardSwitch, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        ).apply {
+            topMargin = dp(8)
+        })
+        add(turnOptions, 10)
+
+        // No per-car calibration on QNX: the daemon gets plain pictures anyway.
+        val calibration = HudBridgeManager.cameraCalibration(this)
+        val correctionBlocked = CameraCalibrationCheck.correctionBlocked(calibration.state)
+        val correctionSwitch = switch(
+            R.string.cameras_correction_label,
+            OverlayPrefs.camerasCorrection(this) && !correctionBlocked
+        ).apply {
+            isEnabled = !correctionBlocked
+            alpha = if (correctionBlocked) 0.5f else 1f
+        }
+        add(correctionSwitch, 16)
+        add(
+            hint(if (correctionBlocked) R.string.cameras_correction_missing_hint else R.string.cameras_correction_hint),
+            4
+        )
+
+        val vignetteSwitch = switch(R.string.cameras_vignette_label, OverlayPrefs.camerasVignette(this))
+        add(vignetteSwitch, 16)
+        add(hint(R.string.cameras_vignette_hint), 4)
+
+        // View editors: only a corrected view of a calibrated camera has anything to edit.
+        val editorButtons = listOf(
+            Gcp.CAM_ROLE_REAR to R.string.camera_editor_rear_button,
+            Gcp.CAM_ROLE_LEFT to R.string.camera_editor_left_button,
+            Gcp.CAM_ROLE_RIGHT to R.string.camera_editor_right_button
+        ).map { (role, labelRes) ->
+            role to createSettingsButton(getString(labelRes)).apply {
+                minHeight = dp(40)
+                minimumHeight = dp(40)
+                setOnClickListener {
+                    dialog?.dismiss()
+                    startActivity(CameraViewEditorActivity.intent(this@SettingsActivity, role))
+                }
+            }
+        }
+        editorButtons.forEachIndexed { i, (_, button) -> add(button, if (i == 0) 16 else 8) }
+        val editorHint = hint(R.string.camera_editor_needs_correction)
+        add(editorHint, 4)
+        fun syncEditorButtons() {
+            val correctionOn = correctionSwitch.isChecked && !correctionBlocked
+            var anyMissing = false
+            for ((role, button) in editorButtons) {
+                val available = correctionOn && calibration.fit(role) != null
+                if (!available) anyMissing = true
+                button.isEnabled = available
+                button.alpha = if (available) 1f else 0.5f
+            }
+            editorHint.visibility = if (anyMissing) View.VISIBLE else View.GONE
+            editorHint.setText(
+                if (correctionOn) R.string.camera_editor_no_data else R.string.camera_editor_needs_correction
+            )
+        }
+        syncEditorButtons()
+
+        fun syncVisibility() {
+            containerButton.visibility = if (inContainerSwitch.isChecked) View.GONE else View.VISIBLE
+            turnOptions.visibility = if (turnSwitch.isChecked) View.VISIBLE else View.GONE
+        }
+        syncVisibility()
+        inContainerSwitch.setOnCheckedChangeListener { _, isChecked ->
+            OverlayPrefs.setCamerasInContainer(this, isChecked)
+            syncVisibility()
+        }
+        rearSwitch.setOnCheckedChangeListener { _, isChecked -> OverlayPrefs.setRearCameraEnabled(this, isChecked) }
+        turnSwitch.setOnCheckedChangeListener { _, isChecked ->
+            OverlayPrefs.setSideCamerasEnabled(this, isChecked)
+            syncVisibility()
+        }
+        hazardSwitch.setOnCheckedChangeListener { _, isChecked -> OverlayPrefs.setSideCamerasHazard(this, isChecked) }
+        if (!correctionBlocked) {
+            correctionSwitch.setOnCheckedChangeListener { _, isChecked ->
+                OverlayPrefs.setCamerasCorrection(this, isChecked)
+                syncEditorButtons()
+            }
+        }
+        vignetteSwitch.setOnCheckedChangeListener { _, isChecked -> OverlayPrefs.setCamerasVignette(this, isChecked) }
+        containerButton.setOnClickListener {
+            dialog?.dismiss()
+            // The position editor lives on the main screen (singleTask): it opens there.
+            startActivity(
+                Intent(this, MainActivity::class.java)
+                    .putExtra(MainActivity.EXTRA_OPEN_CAMERA_CONTAINER_EDITOR, true)
+            )
+        }
+
+        val closeButton = createSettingsButton(getString(android.R.string.ok), SETTINGS_BUTTON_PRIMARY).apply {
+            minHeight = dp(36)
+            minimumHeight = dp(36)
+        }
+        closeButton.setOnClickListener { dialog?.dismiss() }
+        contentColumn.addView(LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.END
+            addView(closeButton)
+        }, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        ).apply {
+            topMargin = dp(18)
+        })
+
+        val container = ScrollView(this).apply {
+            isFillViewport = true
+            overScrollMode = View.OVER_SCROLL_IF_CONTENT_SCROLLS
+            setPadding(dp(12), dp(12), dp(12), dp(12))
+            addView(
+                contentColumn,
+                ViewGroup.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT
+                )
+            )
+        }
+        dialog = AlertDialog.Builder(this, R.style.ThemeOverlay_ANHUD_Dialog)
+            .setView(container)
+            .create()
+        dialog.show()
+        dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
+        dialog.window?.setLayout(
+            (resources.displayMetrics.widthPixels * 0.92f).roundToInt(),
+            ViewGroup.LayoutParams.WRAP_CONTENT
+        )
     }
 
     private fun showHideTurnDynamicSettingsDialog() {
@@ -3248,5 +3641,6 @@ class SettingsActivity : ScaledActivity() {
         private const val MAX_BASIC_ICON_INDEX = 150
         private const val MANEUVER_PREFS_NAME = "maneuver_match_prefs"
         private const val DEFAULTS_ASSET = "maneuver_match_defaults.properties"
+        private const val REQUEST_CAR_SPEED_PERMISSION = 4107
     }
 }

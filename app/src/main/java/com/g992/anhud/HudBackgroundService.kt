@@ -14,6 +14,7 @@ import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import com.g992.anhud.hudbridge.HudBridgeManager
+import com.g992.anhud.hudbridge.RearCameraController
 
 class HudBackgroundService : Service() {
     private val overlayController by lazy { HudOverlayController(applicationContext) }
@@ -67,6 +68,10 @@ class HudBackgroundService : Service() {
                 val mapY = intent.getFloatExtra(OverlayBroadcasts.EXTRA_MAP_Y_DP, Float.NaN)
                 val mapWidth = intent.getFloatExtra(OverlayBroadcasts.EXTRA_MAP_WIDTH_DP, Float.NaN)
                 val mapHeight = intent.getFloatExtra(OverlayBroadcasts.EXTRA_MAP_HEIGHT_DP, Float.NaN)
+                val cameraContainerX = intent.getFloatExtra(OverlayBroadcasts.EXTRA_CAMERA_CONTAINER_X_DP, Float.NaN)
+                val cameraContainerY = intent.getFloatExtra(OverlayBroadcasts.EXTRA_CAMERA_CONTAINER_Y_DP, Float.NaN)
+                val cameraContainerWidth = intent.getFloatExtra(OverlayBroadcasts.EXTRA_CAMERA_CONTAINER_WIDTH_DP, Float.NaN)
+                val cameraContainerHeight = intent.getFloatExtra(OverlayBroadcasts.EXTRA_CAMERA_CONTAINER_HEIGHT_DP, Float.NaN)
                 val navScale = intent.getFloatExtra(OverlayBroadcasts.EXTRA_NAV_SCALE, Float.NaN)
                 val laneGuidanceScale = intent.getFloatExtra(OverlayBroadcasts.EXTRA_LANE_GUIDANCE_SCALE, Float.NaN)
                 val navTextScale = intent.getFloatExtra(OverlayBroadcasts.EXTRA_NAV_TEXT_SCALE, Float.NaN)
@@ -314,6 +319,15 @@ class HudBackgroundService : Service() {
                 val clockAlphaValue = clockAlpha.takeIf { !it.isNaN() }
                 val containerAlphaValue = containerAlpha.takeIf { !it.isNaN() }
                 val mapAlphaValue = mapAlpha.takeIf { !it.isNaN() }
+                overlayController.updateCameraContainerLayout(
+                    position = if (!cameraContainerX.isNaN() && !cameraContainerY.isNaN()) {
+                        android.graphics.PointF(cameraContainerX, cameraContainerY)
+                    } else {
+                        null
+                    },
+                    widthDp = cameraContainerWidth.takeIf { !it.isNaN() },
+                    heightDp = cameraContainerHeight.takeIf { !it.isNaN() }
+                )
                 overlayController.updateLayout(
                     containerPosition,
                     containerWidthValue,
@@ -409,6 +423,7 @@ class HudBackgroundService : Service() {
         YandexVisualStore.addListener(visualListener)
         customBlockCoordinator.start()
         HudBridgeManager.setRenderTargetListener { overlayController.refresh() }
+        RearCameraController.start(this)
         val filter = android.content.IntentFilter().apply {
             addAction(OverlayBroadcasts.ACTION_OVERLAY_SETTINGS_CHANGED)
             addAction(OverlayBroadcasts.ACTION_CLEAR_NAVIGATION)
@@ -480,6 +495,7 @@ class HudBackgroundService : Service() {
         YandexVisualStore.removeListener(visualListener)
         customBlockCoordinator.close()
         HudBridgeManager.setRenderTargetListener(null)
+        RearCameraController.stop()
         HudBridgeManager.stop()
         try {
             unregisterReceiver(settingsReceiver)

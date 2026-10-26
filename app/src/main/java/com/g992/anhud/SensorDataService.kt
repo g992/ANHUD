@@ -82,6 +82,7 @@ class SensorDataService : Service() {
 
     private fun clearTurnSignalState() {
         lastTurnSignalRaw = null
+        turnSignalReadAtMs = 0L
         NavigationHudStore.update { current ->
             if (!current.turnSignalLeft && !current.turnSignalRight && !current.turnSignalHazard) {
                 current
@@ -233,6 +234,7 @@ class SensorDataService : Service() {
             UiLogStore.append(LogCategory.SENSORS, "Поворотники: CarProxy raw=$raw проигнорирован")
             return
         }
+        turnSignalReadAtMs = SystemClock.elapsedRealtime()
         publishTurnSignalState(state)
     }
 
@@ -307,6 +309,10 @@ class SensorDataService : Service() {
     )
 
     companion object {
+        /** elapsedRealtime of the last good turn signal read (0 = none): side cameras trust the state only while fresh. */
+        @Volatile
+        var turnSignalReadAtMs = 0L
+            private set
         private const val CAR_PROXY_PACKAGE = "com.autolink.carproxyservice"
         private const val CAR_PROXY_SERVICE = "com.autolink.carproxyservice.CarProxyService"
         private const val CAR_PROXY_DESCRIPTOR = "com.autolink.adapterbinder.ICarProxyService"

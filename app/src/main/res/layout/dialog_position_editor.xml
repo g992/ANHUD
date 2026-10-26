@@ -361,6 +361,68 @@
                 android:textSize="16sp"
                 android:textStyle="bold" />
         </FrameLayout>
+
+        <!-- Camera container: on the display level, like the HUD container itself. -->
+        <FrameLayout
+            android:id="@+id/dialogPreviewCameraContainerBlock"
+            android:layout_width="112dp"
+            android:layout_height="70dp"
+            android:background="#E0101418"
+            android:visibility="gone">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:gravity="center"
+                android:orientation="vertical">
+
+                <ImageView
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:contentDescription="@string/position_camera_container_label"
+                    android:scaleType="fitCenter"
+                    android:src="@drawable/ic_rear_camera_24" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:gravity="center"
+                    android:text="@string/position_camera_container_label"
+                    android:textColor="@color/white"
+                    android:textSize="9sp" />
+            </LinearLayout>
+
+            <FrameLayout
+                android:id="@+id/dialogPreviewCameraSplit"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:visibility="gone">
+
+                <View
+                    android:layout_width="1dp"
+                    android:layout_height="match_parent"
+                    android:layout_gravity="center_horizontal"
+                    android:background="#80FFFFFF" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="start|top"
+                    android:layout_margin="2dp"
+                    android:text="@string/camera_preview_left"
+                    android:textColor="@color/white"
+                    android:textSize="9sp" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="end|top"
+                    android:layout_margin="2dp"
+                    android:text="@string/camera_preview_right"
+                    android:textColor="@color/white"
+                    android:textSize="9sp" />
+            </FrameLayout>
+        </FrameLayout>
     </FrameLayout>
 
     <TextView
@@ -544,6 +606,7 @@
         android:textSize="16sp" />
 
     <LinearLayout
+        android:id="@+id/dialogBrightnessRow"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="6dp"
@@ -675,6 +738,17 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="6dp" />
     </LinearLayout>
+
+    <TextView
+        android:id="@+id/dialogCameraContainerHint"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:alpha="0.7"
+        android:text="@string/camera_container_preview_hint"
+        android:textColor="@color/white"
+        android:textSize="12sp"
+        android:visibility="gone" />
 
     <CheckBox
         android:id="@+id/dialogShowOthers"
@@ -898,6 +972,53 @@
         android:textColor="@color/white"
         android:textSize="16sp"
         android:visibility="gone" />
+
+    <CheckBox
+        android:id="@+id/dialogLaneGuidanceDistanceLimit"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:text="@string/position_lane_guidance_distance_limit"
+        android:textColor="@color/white"
+        android:textSize="16sp"
+        android:visibility="gone" />
+
+    <LinearLayout
+        android:id="@+id/dialogLaneGuidanceMaxDistanceRow"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:orientation="vertical"
+        android:visibility="gone">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/position_lane_guidance_max_distance"
+                android:textColor="@color/white"
+                android:textSize="16sp" />
+
+            <TextView
+                android:id="@+id/dialogLaneGuidanceMaxDistanceValue"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textColor="@color/white"
+                android:textSize="14sp" />
+        </LinearLayout>
+
+        <SeekBar
+            android:id="@+id/dialogLaneGuidanceMaxDistanceSeek"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp" />
+    </LinearLayout>
 
     <LinearLayout
         android:id="@+id/dialogTrafficLightDistanceRow"

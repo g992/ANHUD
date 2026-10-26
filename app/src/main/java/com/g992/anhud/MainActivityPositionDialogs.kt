@@ -35,7 +35,12 @@ internal enum class OverlayTarget(val previewKey: String) {
     SPEEDOMETER(OverlayBroadcasts.PREVIEW_TARGET_SPEEDOMETER),
     TURN_SIGNALS(OverlayBroadcasts.PREVIEW_TARGET_TURN_SIGNALS),
     CLOCK(OverlayBroadcasts.PREVIEW_TARGET_CLOCK),
-    CONTAINER(OverlayBroadcasts.PREVIEW_TARGET_CONTAINER)
+    CONTAINER(OverlayBroadcasts.PREVIEW_TARGET_CONTAINER),
+    CAMERA_CONTAINER(OverlayBroadcasts.PREVIEW_TARGET_CAMERA_CONTAINER);
+
+    /** Positioned on the HUD display itself rather than inside the HUD container. */
+    val onDisplayLevel: Boolean
+        get() = this == CONTAINER || this == CAMERA_CONTAINER
 }
 
 internal fun MainActivity.openPositionDialog(
@@ -60,6 +65,7 @@ internal fun MainActivity.openPositionDialog(
     val previewHudContainer = dialogView.findViewById<FrameLayout>(R.id.dialogPreviewHudContainer)
     val previewMapBlock = dialogView.findViewById<View>(R.id.dialogPreviewMapBlock)
     val previewMapTripStatus = dialogView.findViewById<MapTripStatusView>(R.id.dialogPreviewMapTripStatus)
+    val previewCameraContainerBlock = dialogView.findViewById<View>(R.id.dialogPreviewCameraContainerBlock)
     val previewNavBlock = dialogView.findViewById<View>(R.id.dialogPreviewNavBlock)
     val previewLaneGuidanceBlock = dialogView.findViewById<View>(R.id.dialogPreviewLaneGuidanceBlock)
     val previewLaneGuidanceImage = dialogView.findViewById<ImageView>(R.id.dialogPreviewLaneGuidanceImage)
@@ -96,6 +102,10 @@ internal fun MainActivity.openPositionDialog(
     val minimapRouteValue = dialogView.findViewById<TextView>(R.id.dialogMinimapRouteValue)
     val hudSpeedGpsStatusCheck = dialogView.findViewById<CheckBox>(R.id.dialogHudSpeedShowGpsStatus)
     val laneGuidanceShowDistanceCheck = dialogView.findViewById<CheckBox>(R.id.dialogLaneGuidanceShowDistance)
+    val laneGuidanceDistanceLimitCheck = dialogView.findViewById<CheckBox>(R.id.dialogLaneGuidanceDistanceLimit)
+    val laneGuidanceMaxDistanceRow = dialogView.findViewById<View>(R.id.dialogLaneGuidanceMaxDistanceRow)
+    val laneGuidanceMaxDistanceSeek = dialogView.findViewById<SeekBar>(R.id.dialogLaneGuidanceMaxDistanceSeek)
+    val laneGuidanceMaxDistanceValue = dialogView.findViewById<TextView>(R.id.dialogLaneGuidanceMaxDistanceValue)
     val trafficLightDistanceRow = dialogView.findViewById<View>(R.id.dialogTrafficLightDistanceRow)
     val trafficLightDistanceSeek = dialogView.findViewById<SeekBar>(R.id.dialogTrafficLightDistanceSeek)
     val trafficLightDistanceValue = dialogView.findViewById<TextView>(R.id.dialogTrafficLightDistanceValue)
@@ -133,6 +143,10 @@ internal fun MainActivity.openPositionDialog(
     val turnSignalsSpacingValue = dialogView.findViewById<TextView>(R.id.dialogTurnSignalsSpacingValue)
     val brightnessSeek = dialogView.findViewById<SeekBar>(R.id.dialogBrightnessSeek)
     val brightnessValue = dialogView.findViewById<TextView>(R.id.dialogBrightnessValue)
+    val brightnessLabel = dialogView.findViewById<TextView>(R.id.dialogBrightnessLabel)
+    val brightnessRow = dialogView.findViewById<View>(R.id.dialogBrightnessRow)
+    val cameraContainerHint = dialogView.findViewById<View>(R.id.dialogCameraContainerHint)
+    val previewCameraSplit = dialogView.findViewById<View>(R.id.dialogPreviewCameraSplit)
 
     val navPosition = OverlayPrefs.navPositionDp(this)
     val arrowPosition = OverlayPrefs.arrowPositionDp(this)
@@ -149,6 +163,9 @@ internal fun MainActivity.openPositionDialog(
     val containerSize = OverlayPrefs.containerSizeDp(this)
     val mapPosition = OverlayPrefs.mapPositionDp(this)
     val mapSize = OverlayPrefs.mapSizeDp(this)
+    val cameraContainerPosition = OverlayPrefs.cameraContainerPositionDp(this)
+    val cameraContainerSize = OverlayPrefs.cameraContainerSizeDp(this)
+    val cameraContainerPoint = PointF(cameraContainerPosition.x, cameraContainerPosition.y)
     val laneGuidancePosition = OverlayPrefs.laneGuidancePositionDp(this)
     val mapPoint = PointF(mapPosition.x, mapPosition.y)
     val navPoint = PointF(navPosition.x, navPosition.y)
@@ -167,6 +184,8 @@ internal fun MainActivity.openPositionDialog(
     var containerHeightDp = containerSize.y
     var mapWidthDp = mapSize.x
     var mapHeightDp = mapSize.y
+    var cameraContainerWidthDp = cameraContainerSize.x
+    var cameraContainerHeightDp = cameraContainerSize.y
     var navWidthDp = OverlayPrefs.navWidthDp(this)
     var turnSignalsSpacingDp = OverlayPrefs.turnSignalsSpacingDp(this)
     var currentScale = 1f
@@ -186,6 +205,7 @@ internal fun MainActivity.openPositionDialog(
         OverlayTarget.TURN_SIGNALS -> (OverlayPrefs.turnSignalsScale(this) * 100).toInt()
         OverlayTarget.CLOCK -> (OverlayPrefs.clockScale(this) * 100).toInt()
         OverlayTarget.CONTAINER -> 100
+        OverlayTarget.CAMERA_CONTAINER -> 100
     }
     val brightnessPercent = when (target) {
         OverlayTarget.MAP -> (OverlayPrefs.mapAlpha(this) * 100).toInt()
@@ -201,6 +221,7 @@ internal fun MainActivity.openPositionDialog(
         OverlayTarget.TURN_SIGNALS -> (OverlayPrefs.turnSignalsAlpha(this) * 100).toInt()
         OverlayTarget.CLOCK -> (OverlayPrefs.clockAlpha(this) * 100).toInt()
         OverlayTarget.CONTAINER -> (OverlayPrefs.containerAlpha(this) * 100).toInt()
+        OverlayTarget.CAMERA_CONTAINER -> 100
     }.coerceIn(0, 100)
 
     val navPrimaryBasePx = previewNavPrimary.textSize
@@ -294,6 +315,7 @@ internal fun MainActivity.openPositionDialog(
         OverlayTarget.TURN_SIGNALS -> getString(R.string.position_turn_signals_block_label)
         OverlayTarget.CLOCK -> getString(R.string.position_clock_block_label)
         OverlayTarget.CONTAINER -> getString(R.string.position_container_label)
+        OverlayTarget.CAMERA_CONTAINER -> getString(R.string.position_camera_container_label)
     }
 
     val dialog = AlertDialog.Builder(this, R.style.ThemeOverlay_ANHUD_Dialog)
@@ -312,6 +334,43 @@ internal fun MainActivity.openPositionDialog(
     val showLaneGuidanceDistanceSetting = target == OverlayTarget.LANE_GUIDANCE
     laneGuidanceShowDistanceCheck.visibility = if (showLaneGuidanceDistanceSetting) View.VISIBLE else View.GONE
     laneGuidanceShowDistanceCheck.isChecked = OverlayPrefs.laneGuidanceShowDistance(activity)
+    val laneDistanceSteps = OverlayPrefs.LANE_GUIDANCE_DISTANCE_STEPS_M
+    fun laneDistanceLabel(meters: Int): String = if (meters >= 1000) {
+        getString(R.string.position_lane_guidance_max_distance_km)
+    } else {
+        getString(R.string.position_lane_guidance_max_distance_m, meters)
+    }
+    fun syncLaneDistanceRow() {
+        laneGuidanceMaxDistanceRow.visibility = if (showLaneGuidanceDistanceSetting && laneGuidanceDistanceLimitCheck.isChecked) {
+            View.VISIBLE
+        } else {
+            View.GONE
+        }
+    }
+    laneGuidanceDistanceLimitCheck.visibility = if (showLaneGuidanceDistanceSetting) View.VISIBLE else View.GONE
+    laneGuidanceDistanceLimitCheck.isChecked = OverlayPrefs.laneGuidanceDistanceLimitEnabled(activity)
+    laneGuidanceMaxDistanceSeek.max = laneDistanceSteps.size - 1
+    laneGuidanceMaxDistanceSeek.progress =
+        OverlayPrefs.laneGuidanceDistanceStepIndex(OverlayPrefs.laneGuidanceMaxDistanceMeters(activity))
+    laneGuidanceMaxDistanceValue.text = laneDistanceLabel(laneDistanceSteps[laneGuidanceMaxDistanceSeek.progress])
+    syncLaneDistanceRow()
+    laneGuidanceDistanceLimitCheck.setOnCheckedChangeListener { _, isChecked ->
+        OverlayPrefs.setLaneGuidanceDistanceLimitEnabled(activity, isChecked)
+        syncLaneDistanceRow()
+        notifyOverlaySettingsChanged(preview = true, previewTarget = target, previewShowOthers = showOthersCheck.isChecked)
+    }
+    laneGuidanceMaxDistanceSeek.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+        override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+            val meters = laneDistanceSteps[progress.coerceIn(0, laneDistanceSteps.size - 1)]
+            laneGuidanceMaxDistanceValue.text = laneDistanceLabel(meters)
+            if (fromUser) {
+                OverlayPrefs.setLaneGuidanceMaxDistanceMeters(activity, meters)
+            }
+        }
+
+        override fun onStartTrackingTouch(seekBar: SeekBar?) = Unit
+        override fun onStopTrackingTouch(seekBar: SeekBar?) = Unit
+    })
     trafficLightDistanceRow.visibility = if (target == OverlayTarget.TRAFFIC_LIGHT) View.VISIBLE else View.GONE
     trafficLightDistanceSeek.max = 480
     trafficLightDistanceSeek.progress = OverlayPrefs.trafficLightDisplayDistanceMeters(activity) - 20
@@ -343,7 +402,8 @@ internal fun MainActivity.openPositionDialog(
     previewNavTime.setText(
         if (navShowDistanceCheck.isChecked) R.string.preview_time_text else R.string.preview_time_text_no_distance
     )
-    val showHideWhenMapActiveSetting = target != OverlayTarget.MAP && target != OverlayTarget.CONTAINER
+    val showHideWhenMapActiveSetting = target != OverlayTarget.MAP && target != OverlayTarget.CONTAINER &&
+        target != OverlayTarget.CAMERA_CONTAINER
     hideWhenMapActiveCheck.visibility = if (showHideWhenMapActiveSetting) View.VISIBLE else View.GONE
     hideWhenMapActiveCheck.isChecked = when (target) {
         OverlayTarget.NAVIGATION -> OverlayPrefs.navHideWhenMapActive(activity)
@@ -357,10 +417,12 @@ internal fun MainActivity.openPositionDialog(
         OverlayTarget.SPEEDOMETER -> OverlayPrefs.speedometerHideWhenMapActive(activity)
         OverlayTarget.TURN_SIGNALS -> OverlayPrefs.turnSignalsHideWhenMapActive(activity)
         OverlayTarget.CLOCK -> OverlayPrefs.clockHideWhenMapActive(activity)
-        OverlayTarget.MAP, OverlayTarget.CONTAINER -> false
+        OverlayTarget.MAP, OverlayTarget.CONTAINER, OverlayTarget.CAMERA_CONTAINER -> false
     }
 
-    if (target == OverlayTarget.CONTAINER || target == OverlayTarget.MAP) {
+    val hasOwnSize = target == OverlayTarget.CONTAINER || target == OverlayTarget.MAP ||
+        target == OverlayTarget.CAMERA_CONTAINER
+    if (hasOwnSize) {
         scaleLabel.visibility = View.GONE
         scaleSeek.visibility = View.GONE
         scaleValue.visibility = View.GONE
@@ -373,6 +435,13 @@ internal fun MainActivity.openPositionDialog(
         containerWidthRow.visibility = View.GONE
         containerHeightLabel.visibility = View.GONE
         containerHeightRow.visibility = View.GONE
+    }
+
+    if (target == OverlayTarget.CAMERA_CONTAINER) {
+        // The daemon draws the cameras opaque: no brightness.
+        brightnessLabel.visibility = View.GONE
+        brightnessRow.visibility = View.GONE
+        cameraContainerHint.visibility = View.VISIBLE
     }
 
     if (target == OverlayTarget.MAP) {
@@ -645,6 +714,15 @@ internal fun MainActivity.openPositionDialog(
     fun resolveMapMaxWidthDp(): Float = containerWidthDp.coerceAtLeast(minMapSizeDp)
     fun resolveMapMaxHeightDp(): Float = containerHeightDp.coerceAtLeast(minMapSizeDp)
 
+    // The camera container lives on the display level, like the HUD container.
+    fun resolveCameraContainerMaxWidthDp(): Float = maxWidthDp.coerceAtLeast(OverlayPrefs.CAMERA_CONTAINER_MIN_SIZE_DP)
+    fun resolveCameraContainerMaxHeightDp(): Float = maxHeightDp.coerceAtLeast(OverlayPrefs.CAMERA_CONTAINER_MIN_SIZE_DP)
+
+    fun clampCameraContainerSize() {
+        cameraContainerWidthDp = cameraContainerWidthDp.coerceIn(OverlayPrefs.CAMERA_CONTAINER_MIN_SIZE_DP, resolveCameraContainerMaxWidthDp())
+        cameraContainerHeightDp = cameraContainerHeightDp.coerceIn(OverlayPrefs.CAMERA_CONTAINER_MIN_SIZE_DP, resolveCameraContainerMaxHeightDp())
+    }
+
     fun clampMapSize() {
         mapWidthDp = mapWidthDp.coerceIn(minMapSizeDp, resolveMapMaxWidthDp())
         mapHeightDp = mapHeightDp.coerceIn(minMapSizeDp, resolveMapMaxHeightDp())
@@ -684,6 +762,8 @@ internal fun MainActivity.openPositionDialog(
         val showTurnSignals = target == OverlayTarget.TURN_SIGNALS ||
             (showOthers && OverlayPrefs.turnSignalsEnabled(activity))
         val showClock = target == OverlayTarget.CLOCK || (showOthers && OverlayPrefs.clockEnabled(activity))
+        val showCameraContainer = target == OverlayTarget.CAMERA_CONTAINER ||
+            (showOthers && OverlayPrefs.cameraFeatureEnabled(activity) && !OverlayPrefs.camerasInContainer(activity))
         fun previewScale(view: View, block: OverlayTarget, savedScale: Float): Float {
             val scale = if (target == block) currentScale else savedScale
             view.pivotX = 0f
@@ -707,6 +787,7 @@ internal fun MainActivity.openPositionDialog(
         previewSpeedometer.visibility = if (showSpeedometer) View.VISIBLE else View.GONE
         previewTurnSignals.visibility = if (showTurnSignals) View.VISIBLE else View.GONE
         previewClock.visibility = if (showClock) View.VISIBLE else View.GONE
+        previewCameraContainerBlock.visibility = if (showCameraContainer) View.VISIBLE else View.GONE
         if (target == OverlayTarget.CONTAINER) {
             previewHudContainer.background = ContextCompat.getDrawable(activity, R.drawable.bg_hud_container_outline)
             updatePreviewContainerSize(previewContainer, previewHudContainer, containerWidthDp, containerHeightDp)
@@ -762,6 +843,29 @@ internal fun MainActivity.openPositionDialog(
                     Gravity.BOTTOM
                 )
             previewMapTripStatus.visibility = View.GONE
+        }
+        if (showCameraContainer) {
+            clampCameraContainerSize()
+            updatePreviewContainerSize(
+                previewContainer,
+                previewCameraContainerBlock,
+                cameraContainerWidthDp,
+                cameraContainerHeightDp
+            )
+            previewCameraContainerBlock.foreground = if (target == OverlayTarget.CAMERA_CONTAINER) {
+                ContextCompat.getDrawable(activity, R.drawable.bg_nav_block_outline)
+            } else {
+                null
+            }
+            previewCameraSplit.visibility = if (OverlayPrefs.sideCamerasEnabled(activity)) View.VISIBLE else View.GONE
+            positionPreviewView(
+                previewContainer,
+                previewCameraContainerBlock,
+                cameraContainerPoint.x,
+                cameraContainerPoint.y,
+                displaySize.x.toFloat(),
+                displaySize.y.toFloat()
+            )
         }
         if (showNav) {
             val navPreviewScale = previewScale(previewNavBlock, OverlayTarget.NAVIGATION, OverlayPrefs.navScale(activity))
@@ -993,18 +1097,19 @@ internal fun MainActivity.openPositionDialog(
             OverlayTarget.TURN_SIGNALS -> previewTurnSignals
             OverlayTarget.CLOCK -> previewClock
             OverlayTarget.CONTAINER -> previewHudContainer
+            OverlayTarget.CAMERA_CONTAINER -> previewCameraContainerBlock
         }
-        val boundsWidth = if (target == OverlayTarget.CONTAINER) {
+        val boundsWidth = if (target.onDisplayLevel) {
             displaySize.x.toFloat()
         } else {
             containerWidthDp * density
         }
-        val boundsHeight = if (target == OverlayTarget.CONTAINER) {
+        val boundsHeight = if (target.onDisplayLevel) {
             displaySize.y.toFloat()
         } else {
             containerHeightDp * density
         }
-        val dragContainer = if (target == OverlayTarget.CONTAINER) {
+        val dragContainer = if (target.onDisplayLevel) {
             previewContainer
         } else {
             previewHudContainer
@@ -1177,6 +1282,19 @@ internal fun MainActivity.openPositionDialog(
                     previewShowOthers = showOthersCheck.isChecked
                 )
             }
+            OverlayTarget.CAMERA_CONTAINER -> {
+                if (persist) {
+                    OverlayPrefs.setCameraContainerPositionDp(this, dpX, dpY)
+                    cameraContainerPoint.x = dpX
+                    cameraContainerPoint.y = dpY
+                }
+                notifyOverlaySettingsChanged(
+                    cameraContainerPosition = point,
+                    preview = true,
+                    previewTarget = target,
+                    previewShowOthers = showOthersCheck.isChecked
+                )
+            }
             OverlayTarget.CONTAINER -> {
                 if (persist) {
                     OverlayPrefs.setContainerPositionDp(this, dpX, dpY)
@@ -1275,7 +1393,16 @@ internal fun MainActivity.openPositionDialog(
 
     clampContainerSize()
     clampMapSize()
-    if (target == OverlayTarget.MAP) {
+    clampCameraContainerSize()
+    if (target == OverlayTarget.CAMERA_CONTAINER) {
+        val minInt = OverlayPrefs.CAMERA_CONTAINER_MIN_SIZE_DP.roundToInt()
+        val maxWidth = resolveCameraContainerMaxWidthDp().roundToInt().coerceAtLeast(minInt)
+        val maxHeight = resolveCameraContainerMaxHeightDp().roundToInt().coerceAtLeast(minInt)
+        containerWidthSeek.max = (maxWidth - minInt).coerceAtLeast(0)
+        containerHeightSeek.max = (maxHeight - minInt).coerceAtLeast(0)
+        containerWidthSeek.progress = (cameraContainerWidthDp.roundToInt() - minInt).coerceIn(0, containerWidthSeek.max)
+        containerHeightSeek.progress = (cameraContainerHeightDp.roundToInt() - minInt).coerceIn(0, containerHeightSeek.max)
+    } else if (target == OverlayTarget.MAP) {
         val minMapInt = minMapSizeDp.roundToInt()
         val maxMapWidthInt = resolveMapMaxWidthDp().roundToInt().coerceAtLeast(minMapInt)
         val maxMapHeightInt = resolveMapMaxHeightDp().roundToInt().coerceAtLeast(minMapInt)
@@ -1296,7 +1423,7 @@ internal fun MainActivity.openPositionDialog(
 
 
     setupDialogDrag(
-        if (target == OverlayTarget.CONTAINER) previewContainer else previewHudContainer,
+        if (target.onDisplayLevel) previewContainer else previewHudContainer,
         when (target) {
             OverlayTarget.MAP -> previewMapBlock
             OverlayTarget.NAVIGATION -> previewNavBlock
@@ -1311,6 +1438,7 @@ internal fun MainActivity.openPositionDialog(
             OverlayTarget.TURN_SIGNALS -> previewTurnSignals
             OverlayTarget.CLOCK -> previewClock
             OverlayTarget.CONTAINER -> previewHudContainer
+            OverlayTarget.CAMERA_CONTAINER -> previewCameraContainerBlock
         },
         lockX = false
     ) { previewX, previewY, persist ->
@@ -1319,6 +1447,19 @@ internal fun MainActivity.openPositionDialog(
 
     containerWidthSeek.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
         override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+            if (target == OverlayTarget.CAMERA_CONTAINER) {
+                cameraContainerWidthDp = (progress + OverlayPrefs.CAMERA_CONTAINER_MIN_SIZE_DP.roundToInt()).toFloat()
+                    .coerceIn(OverlayPrefs.CAMERA_CONTAINER_MIN_SIZE_DP, resolveCameraContainerMaxWidthDp())
+                updateDialogVisibility()
+                notifyOverlaySettingsChanged(
+                    cameraContainerWidthDp = cameraContainerWidthDp,
+                    cameraContainerHeightDp = cameraContainerHeightDp,
+                    preview = true,
+                    previewTarget = target,
+                    previewShowOthers = showOthersCheck.isChecked
+                )
+                return
+            }
             if (target != OverlayTarget.CONTAINER && target != OverlayTarget.MAP) {
                 return
             }
@@ -1351,6 +1492,17 @@ internal fun MainActivity.openPositionDialog(
         override fun onStartTrackingTouch(seekBar: SeekBar?) = Unit
 
         override fun onStopTrackingTouch(seekBar: SeekBar?) {
+            if (target == OverlayTarget.CAMERA_CONTAINER) {
+                OverlayPrefs.setCameraContainerSizeDp(activity, cameraContainerWidthDp, cameraContainerHeightDp)
+                notifyOverlaySettingsChanged(
+                    cameraContainerWidthDp = cameraContainerWidthDp,
+                    cameraContainerHeightDp = cameraContainerHeightDp,
+                    preview = true,
+                    previewTarget = target,
+                    previewShowOthers = showOthersCheck.isChecked
+                )
+                return
+            }
             if (target != OverlayTarget.CONTAINER && target != OverlayTarget.MAP) {
                 return
             }
@@ -1378,6 +1530,19 @@ internal fun MainActivity.openPositionDialog(
 
     containerHeightSeek.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
         override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+            if (target == OverlayTarget.CAMERA_CONTAINER) {
+                cameraContainerHeightDp = (progress + OverlayPrefs.CAMERA_CONTAINER_MIN_SIZE_DP.roundToInt()).toFloat()
+                    .coerceIn(OverlayPrefs.CAMERA_CONTAINER_MIN_SIZE_DP, resolveCameraContainerMaxHeightDp())
+                updateDialogVisibility()
+                notifyOverlaySettingsChanged(
+                    cameraContainerWidthDp = cameraContainerWidthDp,
+                    cameraContainerHeightDp = cameraContainerHeightDp,
+                    preview = true,
+                    previewTarget = target,
+                    previewShowOthers = showOthersCheck.isChecked
+                )
+                return
+            }
             if (target != OverlayTarget.CONTAINER && target != OverlayTarget.MAP) {
                 return
             }
@@ -1410,6 +1575,17 @@ internal fun MainActivity.openPositionDialog(
         override fun onStartTrackingTouch(seekBar: SeekBar?) = Unit
 
         override fun onStopTrackingTouch(seekBar: SeekBar?) {
+            if (target == OverlayTarget.CAMERA_CONTAINER) {
+                OverlayPrefs.setCameraContainerSizeDp(activity, cameraContainerWidthDp, cameraContainerHeightDp)
+                notifyOverlaySettingsChanged(
+                    cameraContainerWidthDp = cameraContainerWidthDp,
+                    cameraContainerHeightDp = cameraContainerHeightDp,
+                    preview = true,
+                    previewTarget = target,
+                    previewShowOthers = showOthersCheck.isChecked
+                )
+                return
+            }
             if (target != OverlayTarget.CONTAINER && target != OverlayTarget.MAP) {
                 return
             }
@@ -1450,7 +1626,9 @@ internal fun MainActivity.openPositionDialog(
     scaleValue.text = getString(R.string.scale_percent_format, resolvedScalePercent)
     scaleSeek.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
         override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
-            if (target == OverlayTarget.CONTAINER || target == OverlayTarget.MAP) {
+            if (target == OverlayTarget.CONTAINER || target == OverlayTarget.MAP ||
+                target == OverlayTarget.CAMERA_CONTAINER
+            ) {
                 return
             }
             val percent = (progress + scaleMinPercent).coerceIn(scaleMinPercent, scaleMaxPercent)
@@ -1530,14 +1708,16 @@ internal fun MainActivity.openPositionDialog(
                     previewTarget = target,
                     previewShowOthers = showOthersCheck.isChecked
                 )
-                OverlayTarget.CONTAINER -> Unit
+                OverlayTarget.CONTAINER, OverlayTarget.CAMERA_CONTAINER -> Unit
             }
         }
 
         override fun onStartTrackingTouch(seekBar: SeekBar?) = Unit
 
         override fun onStopTrackingTouch(seekBar: SeekBar?) {
-            if (target == OverlayTarget.CONTAINER || target == OverlayTarget.MAP) {
+            if (target == OverlayTarget.CONTAINER || target == OverlayTarget.MAP ||
+                target == OverlayTarget.CAMERA_CONTAINER
+            ) {
                 return
             }
             val percent = ((seekBar?.progress ?: 0) + scaleMinPercent)
@@ -1651,7 +1831,7 @@ internal fun MainActivity.openPositionDialog(
                         previewShowOthers = showOthersCheck.isChecked
                     )
                 }
-                OverlayTarget.CONTAINER -> Unit
+                OverlayTarget.CONTAINER, OverlayTarget.CAMERA_CONTAINER -> Unit
             }
         }
     })
@@ -1772,6 +1952,7 @@ internal fun MainActivity.openPositionDialog(
                         previewShowOthers = showOthersCheck.isChecked
                     )
                 }
+                OverlayTarget.CAMERA_CONTAINER -> Unit
                 OverlayTarget.CONTAINER -> {
                     updatePreviewContainerAlpha(previewHudContainer, alpha)
                     notifyOverlaySettingsChanged(
@@ -1898,6 +2079,7 @@ internal fun MainActivity.openPositionDialog(
                         previewShowOthers = showOthersCheck.isChecked
                     )
                 }
+                OverlayTarget.CAMERA_CONTAINER -> Unit
                 OverlayTarget.CONTAINER -> {
                     OverlayPrefs.setContainerAlpha(activity, alpha)
                     notifyOverlaySettingsChanged(
@@ -1929,7 +2111,7 @@ internal fun MainActivity.openPositionDialog(
             OverlayTarget.SPEEDOMETER -> OverlayPrefs.setSpeedometerHideWhenMapActive(activity, isChecked)
             OverlayTarget.TURN_SIGNALS -> OverlayPrefs.setTurnSignalsHideWhenMapActive(activity, isChecked)
             OverlayTarget.CLOCK -> OverlayPrefs.setClockHideWhenMapActive(activity, isChecked)
-            OverlayTarget.MAP, OverlayTarget.CONTAINER -> Unit
+            OverlayTarget.MAP, OverlayTarget.CONTAINER, OverlayTarget.CAMERA_CONTAINER -> Unit
         }
         notifyOverlaySettingsChanged(preview = true, previewTarget = target, previewShowOthers = showOthersCheck.isChecked)
     }
@@ -1982,8 +2164,9 @@ internal fun MainActivity.openPositionDialog(
                 OverlayTarget.TURN_SIGNALS -> previewTurnSignals
                 OverlayTarget.CLOCK -> previewClock
                 OverlayTarget.CONTAINER -> previewHudContainer
+                OverlayTarget.CAMERA_CONTAINER -> previewCameraContainerBlock
             }
-            val edgeContainer = if (target == OverlayTarget.CONTAINER) previewContainer else previewHudContainer
+            val edgeContainer = if (target.onDisplayLevel) previewContainer else previewHudContainer
             edgeContainer.post {
                 updateDialogVisibility()
                 // Older coordinates could look flush in the editor while leaving a gap on HUD.
@@ -2383,7 +2566,7 @@ private fun resolveScaledLayoutWidthPx(visibleWidthPx: Float, scale: Float): Int
 
 private fun MainActivity.updatePreviewContainerSize(
     previewContainer: FrameLayout,
-    previewHudContainer: FrameLayout,
+    previewHudContainer: View,
     containerWidthDp: Float,
     containerHeightDp: Float
 ) {

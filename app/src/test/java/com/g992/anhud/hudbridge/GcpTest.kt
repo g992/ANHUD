@@ -189,6 +189,66 @@ class GcpTest {
         assertNull(QnxShell.parseExecOutput("# ls; echo $m\$?\n", m))
     }
 
+    @Test
+    fun camSnapIsInputThenRequestId() {
+        val p = Gcp.camSnap(Gcp.CAM_INPUT_REAR, 0x0A0B0C0D)
+        assertArrayEquals(byteArrayOf(3, 0, 0, 0, 0x0D, 0x0C, 0x0B, 0x0A), p)
+        assertEquals(Gcp.CAMSNAP_SIZE, p.size)
+        val m = Gcp.message(Gcp.T_CAMSNAP, 0, 5, p)
+        val h = Gcp.Header(m.copyOf(Gcp.HEADER_SIZE))
+        assertEquals(0x0052, h.type)
+        assertEquals(Gcp.CAMSNAP_SIZE, h.length)
+        assertEquals("/tmp/ghbl_snap_3.yuv", Gcp.camSnapPath(Gcp.CAM_INPUT_REAR))
+    }
+
+    @Test
+    fun camSnapDoneParsesTheDaemonsBytes() {
+        // The same vector as the daemon's host test (rvc_build_camsnap_done).
+        val p = byteArrayOf(
+            1, 0, 0, 0, 4, 3, 2, 1, 13, 0, 0, 0,
+            0x00, 0x70, 0x17, 0x00, 1, 0, 0, 0, 0x59, 0x01, 0, 0
+        )
+        val d = Gcp.CamSnapDone.parse(p)!!
+        assertEquals(1, d.inputId)
+        assertEquals(0x01020304, d.requestId)
+        assertEquals(Gcp.ERR_TIMEOUT, d.status)
+        assertEquals(1_536_000, d.bytes)
+        assertTrue(d.shared)
+        assertEquals(345, d.elapsedMs)
+        assertFalse(d.ok)
+
+        val ok = Gcp.CamSnapDone.parse(concat(le(ByteArray(24)).putInt(0, 2).putInt(4, 9).putInt(12, 1_536_000).array(), byteArrayOf(7, 7)))!!
+        assertTrue(ok.ok)
+        assertFalse(ok.shared)
+        assertEquals(9, ok.requestId)
+        assertNull(Gcp.CamSnapDone.parse(ByteArray(Gcp.CAMSNAP_DONE_SIZE - 1)))
+    }
+
+    @Test
+    fun serverIdComesFromHelloAck() {
+        val ack = ByteArray(72)
+        "ghudbridgelited/0.4.0".toByteArray().copyInto(ack, 48)
+        assertEquals("ghudbridgelited/0.4.0", Gcp.helloAckServerId(ack))
+        val full = ByteArray(72)
+        "x".repeat(30).toByteArray().copyInto(full, 48, 0, 24)
+        assertEquals("x".repeat(24), Gcp.helloAckServerId(full))
+        assertEquals("", Gcp.helloAckServerId(ByteArray(40)))
+    }
+
+    @Test
+    fun camSnapOnlyFromDaemonZeroFourOn() {
+        assertTrue(Gcp.supportsCamSnap("ghudbridgelited/0.4.0"))
+        assertTrue(Gcp.supportsCamSnap("ghudbridgelited/0.4.12"))
+        assertTrue(Gcp.supportsCamSnap("ghudbridgelited/0.10"))
+        assertTrue(Gcp.supportsCamSnap("ghudbridgelited/1.0.0"))
+        assertFalse(Gcp.supportsCamSnap("ghudbridgelited/0.3.0"))
+        assertFalse(Gcp.supportsCamSnap("ghudbridgelited/0.3.9"))
+        assertFalse(Gcp.supportsCamSnap("ghudbridged/0.9.0"))
+        assertFalse(Gcp.supportsCamSnap("ghudbridgelited/x"))
+        assertFalse(Gcp.supportsCamSnap(""))
+        assertFalse(Gcp.supportsCamSnap(null))
+    }
+
     private fun le(b: ByteArray): ByteBuffer = ByteBuffer.wrap(b).order(ByteOrder.LITTLE_ENDIAN)
 
     private fun decode(data: ByteArray, rawLen: Int): ByteArray {

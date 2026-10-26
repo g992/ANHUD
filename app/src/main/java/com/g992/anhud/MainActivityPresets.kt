@@ -284,6 +284,7 @@ private fun MainActivity.notifyOverlaySettingsChangedFull() {
     val containerSize = OverlayPrefs.containerSizeDp(this)
     val mapPos = OverlayPrefs.mapPositionDp(this)
     val mapSize = OverlayPrefs.mapSizeDp(this)
+    val cameraContainerSize = OverlayPrefs.cameraContainerSizeDp(this)
 
     notifyOverlaySettingsChanged(
         containerPosition = containerPos,
@@ -292,6 +293,9 @@ private fun MainActivity.notifyOverlaySettingsChangedFull() {
         mapPosition = mapPos,
         mapWidthDp = mapSize.x,
         mapHeightDp = mapSize.y,
+        cameraContainerPosition = OverlayPrefs.cameraContainerPositionDp(this),
+        cameraContainerWidthDp = cameraContainerSize.x,
+        cameraContainerHeightDp = cameraContainerSize.y,
         navPosition = navPos,
         navWidthDp = OverlayPrefs.navWidthDp(this),
         arrowPosition = arrowPos,

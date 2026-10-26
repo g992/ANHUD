@@ -331,6 +331,41 @@
                     android:textSize="12sp" />
 
                 <Button
+                    android:id="@+id/overStockBlocksButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:minHeight="40dp"
+                    android:text="@string/over_stock_blocks_button"
+                    android:visibility="gone" />
+
+                <androidx.appcompat.widget.SwitchCompat
+                    android:id="@+id/camerasSwitch"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="20dp"
+                    android:text="@string/cameras_setting_label"
+                    android:textColor="@color/white"
+                    android:textSize="14sp" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:text="@string/cameras_setting_hint"
+                    android:textColor="#808080"
+                    android:textSize="12sp" />
+
+                <Button
+                    android:id="@+id/camerasConfigButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:minHeight="40dp"
+                    android:text="@string/cameras_config_button"
+                    android:visibility="gone" />
+
+                <Button
                     android:id="@+id/exportSettingsButton"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"

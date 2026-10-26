@@ -12,6 +12,9 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <!-- Rear camera on the HUD: gear (GEAR_SELECTION) and speed (PERF_VEHICLE_SPEED) from the car service. -->
+    <uses-permission android:name="android.car.permission.CAR_POWERTRAIN" />
+    <uses-permission android:name="android.car.permission.CAR_SPEED" />
     <uses-permission
         android:name="android.permission.PACKAGE_USAGE_STATS"
         tools:ignore="ProtectedPermissions" />
@@ -53,6 +56,10 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.ANHUD">
+        <!-- android.car.Car is used through reflection; absent on phones and the emulator. -->
+        <uses-library
+            android:name="android.car"
+            android:required="false" />
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -67,6 +74,10 @@
             android:name=".SettingsActivity"
             android:exported="false"
             android:label="Настройки" />
+        <activity
+            android:name=".CameraViewEditorActivity"
+            android:exported="false"
+            android:label="@string/cameras_setting_label" />
         <activity
             android:name=".SensorsActivity"
             android:exported="false"

@@ -1,6 +1,7 @@
 package com.g992.anhud
 
 import android.content.Context
+import android.content.SharedPreferences
 import android.graphics.PointF
 import kotlin.math.abs
 
@@ -171,6 +172,8 @@ object OverlayPrefs {
     private const val KEY_NATIVE_NAV_ENABLED = "native_nav_enabled"
     private const val KEY_MAP_ENABLED = "overlay_map_enabled"
     private const val KEY_LANE_GUIDANCE_SHOW_DISTANCE = "overlay_lane_guidance_show_distance"
+    private const val KEY_LANE_GUIDANCE_DISTANCE_LIMIT_ENABLED = "overlay_lane_guidance_distance_limit_enabled"
+    private const val KEY_LANE_GUIDANCE_MAX_DISTANCE_M = "overlay_lane_guidance_max_distance_m"
     private const val KEY_CAMERA_TIMEOUT_NEAR = "camera_timeout_near"
     private const val KEY_CAMERA_TIMEOUT_FAR = "camera_timeout_far"
     private const val KEY_NAV_NOTIFICATION_END_TIMEOUT = "nav_notification_end_timeout"
@@ -189,6 +192,48 @@ object OverlayPrefs {
     private const val KEY_HIDE_TURN_DYNAMIC_HIDE_MAP_BLOCK = "hide_turn_dynamic_hide_map_block"
     private const val KEY_GUIDE_SHOWN = "guide_shown"
     private const val KEY_NAV_WIDTH_DP = "overlay_nav_width_dp"
+    internal const val KEY_CAMERAS_ENABLED = "overlay_cameras_enabled"
+    internal const val KEY_CAMERAS_IN_CONTAINER = "overlay_cameras_in_container"
+    internal const val KEY_CAMERAS_CORRECTION = "overlay_cameras_correction"
+    internal const val KEY_CAMERA_CONTAINER_X_DP = "overlay_camera_container_x_dp"
+    internal const val KEY_CAMERA_CONTAINER_Y_DP = "overlay_camera_container_y_dp"
+    internal const val KEY_CAMERA_CONTAINER_WIDTH_DP = "overlay_camera_container_width_dp"
+    internal const val KEY_CAMERA_CONTAINER_HEIGHT_DP = "overlay_camera_container_height_dp"
+    // Before the camera settings dialog this was the only switch ("Камера на проекции при заднем ходе").
+    internal const val KEY_REAR_CAMERA_ENABLED = "overlay_rear_camera_enabled"
+    internal const val KEY_REAR_CAMERA_Z = "overlay_rear_camera_z"
+    internal const val KEY_REAR_CAMERA_HFOV = "overlay_rear_camera_hfov"
+    internal const val KEY_REAR_CAMERA_PAN_X = "overlay_rear_camera_pan_x"
+    internal const val KEY_REAR_CAMERA_PAN_Y = "overlay_rear_camera_pan_y"
+    internal const val KEY_REAR_CAMERA_MIRROR = "overlay_rear_camera_mirror"
+    internal const val KEY_REAR_CAMERA_MAX_SPEED = "overlay_rear_camera_max_speed_kmh"
+    // Views in car terms (heading/down/roll), see RearCameraCalibration.
+    internal const val KEY_REAR_CAMERA_HEADING = "overlay_rear_camera_heading"
+    internal const val KEY_REAR_CAMERA_DOWN = "overlay_rear_camera_down"
+    internal const val KEY_REAR_CAMERA_ROLL = "overlay_rear_camera_roll"
+    internal const val KEY_SIDE_CAMERAS_ENABLED = "overlay_side_cameras_enabled"
+    internal const val KEY_SIDE_CAMERAS_HAZARD = "overlay_side_cameras_hazard"
+    internal const val KEY_SIDE_CAMERA_MAX_SPEED = "overlay_side_camera_max_speed_kmh"
+    internal const val KEY_LEFT_CAMERA_HEADING = "overlay_left_camera_heading"
+    internal const val KEY_LEFT_CAMERA_DOWN = "overlay_left_camera_down"
+    internal const val KEY_LEFT_CAMERA_ROLL = "overlay_left_camera_roll"
+    internal const val KEY_LEFT_CAMERA_HFOV = "overlay_left_camera_hfov"
+    internal const val KEY_LEFT_CAMERA_PAN_Y = "overlay_left_camera_pan_y"
+    internal const val KEY_LEFT_CAMERA_MIRROR = "overlay_left_camera_mirror"
+    internal const val KEY_RIGHT_CAMERA_HEADING = "overlay_right_camera_heading"
+    internal const val KEY_RIGHT_CAMERA_DOWN = "overlay_right_camera_down"
+    internal const val KEY_RIGHT_CAMERA_ROLL = "overlay_right_camera_roll"
+    internal const val KEY_RIGHT_CAMERA_HFOV = "overlay_right_camera_hfov"
+    internal const val KEY_RIGHT_CAMERA_PAN_Y = "overlay_right_camera_pan_y"
+    internal const val KEY_RIGHT_CAMERA_MIRROR = "overlay_right_camera_mirror"
+    internal const val KEY_CAMERAS_VIGNETTE = "overlay_cameras_vignette"
+    // Camera-relative side placeholders (yaw/pitch were never set); replaced by the per-side car-terms keys.
+    private val LEGACY_SIDE_CAMERA_KEYS = listOf(
+        "overlay_side_camera_hfov",
+        "overlay_side_camera_yaw",
+        "overlay_side_camera_pitch",
+        "overlay_side_camera_mirror"
+    )
 
     const val ICON_SIZE_DP = 48f
     const val TURN_SIGNALS_ICON_SIZE_DP = 24f
@@ -212,6 +257,25 @@ object OverlayPrefs {
     const val MINIMAP_SCALE_STEP = 0.25f
     const val MINIMAP_SCALE_DEFAULT = 1f
     const val SPEED_LIMIT_ALERT_THRESHOLD_MAX = 20
+    const val CAMERA_CONTAINER_MIN_SIZE_DP = 48f
+    const val CAMERA_Z_MIN = 5
+    const val CAMERA_Z_MAX = 10
+    const val CAMERA_Z_DEFAULT = 8
+    const val CAMERA_HFOV_MIN = 30f
+    const val CAMERA_HFOV_MAX = 170f
+    const val CAMERA_PAN_MIN = -0.5f
+    const val CAMERA_PAN_MAX = 0.5f
+    /** "Направление": at most this far from the camera's default heading, either way. */
+    const val CAMERA_HEADING_RANGE = 90f
+    const val CAMERA_DOWN_MIN = -30f
+    const val CAMERA_DOWN_MAX = 80f
+    const val CAMERA_ROLL_MIN = -45f
+    const val CAMERA_ROLL_MAX = 45f
+    const val REAR_CAMERA_MAX_SPEED_MAX = 30
+    const val REAR_CAMERA_MAX_SPEED_DEFAULT = 15
+    const val SIDE_CAMERA_MAX_SPEED_MIN = 15
+    const val SIDE_CAMERA_MAX_SPEED_MAX = 300
+    const val SIDE_CAMERA_MAX_SPEED_STEP = 5
     const val TIMEOUT_MAX = 360
     const val HIDE_TURN_DISTANCE_DEFAULT_METERS = 1000
     const val HIDE_TURN_DYNAMIC_DISTANCE_MIN_METERS = 100
@@ -910,6 +974,338 @@ object OverlayPrefs {
             .apply()
     }
 
+    /**
+     * "Камеры на проекцию": rear camera on reverse and side cameras on turn signals, drawn by
+     * ghudbridgelited. Views are kept in car terms ([CameraViewSettings]) and turned into CAMCFG
+     * rotations with the per-car calibration; edited in CameraViewEditorActivity.
+     */
+    data class CameraSettings(
+        val enabled: Boolean,
+        val inContainer: Boolean,
+        val correction: Boolean,
+        val vignette: Boolean,
+        val containerPositionDp: PointF,
+        val containerSizeDp: PointF,
+        val z: Int,
+        val rear: RearCameraSettings,
+        val side: SideCameraSettings
+    )
+
+    /**
+     * One camera's picture in car terms: [headingDeg] from straight ahead (180 = back, more = to the
+     * left), [downDeg] below the horizon, [rollDeg] picture rotation; [hfovDeg] zoom; pan as in CAMCFG.
+     */
+    data class CameraViewSettings(
+        val headingDeg: Float,
+        val downDeg: Float,
+        val rollDeg: Float,
+        val hfovDeg: Float,
+        val panX: Float,
+        val panY: Float,
+        val mirror: Boolean
+    )
+
+    data class RearCameraSettings(
+        val enabled: Boolean,
+        val view: CameraViewSettings,
+        val maxSpeedKmh: Int
+    )
+
+    data class SideCameraSettings(
+        val enabled: Boolean,
+        val hazardBoth: Boolean,
+        val left: CameraViewSettings,
+        val right: CameraViewSettings,
+        val maxSpeedKmh: Int
+    )
+
+    enum class CameraSlot { REAR, LEFT, RIGHT }
+
+    private class CameraViewKeys(
+        val heading: String,
+        val down: String,
+        val roll: String,
+        val hfov: String,
+        val panX: String?,
+        val panY: String,
+        val mirror: String
+    )
+
+    private fun cameraViewKeys(slot: CameraSlot) = when (slot) {
+        CameraSlot.REAR -> CameraViewKeys(
+            KEY_REAR_CAMERA_HEADING, KEY_REAR_CAMERA_DOWN, KEY_REAR_CAMERA_ROLL, KEY_REAR_CAMERA_HFOV,
+            KEY_REAR_CAMERA_PAN_X, KEY_REAR_CAMERA_PAN_Y, KEY_REAR_CAMERA_MIRROR
+        )
+        CameraSlot.LEFT -> CameraViewKeys(
+            KEY_LEFT_CAMERA_HEADING, KEY_LEFT_CAMERA_DOWN, KEY_LEFT_CAMERA_ROLL, KEY_LEFT_CAMERA_HFOV,
+            null, KEY_LEFT_CAMERA_PAN_Y, KEY_LEFT_CAMERA_MIRROR
+        )
+        CameraSlot.RIGHT -> CameraViewKeys(
+            KEY_RIGHT_CAMERA_HEADING, KEY_RIGHT_CAMERA_DOWN, KEY_RIGHT_CAMERA_ROLL, KEY_RIGHT_CAMERA_HFOV,
+            null, KEY_RIGHT_CAMERA_PAN_Y, KEY_RIGHT_CAMERA_MIRROR
+        )
+    }
+
+    fun defaultCameraView(slot: CameraSlot): CameraViewSettings = when (slot) {
+        CameraSlot.REAR -> CameraViewSettings(
+            headingDeg = RearCameraCalibration.DEFAULT_HEADING_DEG,
+            downDeg = RearCameraCalibration.DEFAULT_DOWN_DEG,
+            rollDeg = RearCameraCalibration.DEFAULT_ROLL_DEG,
+            hfovDeg = RearCameraCalibration.DEFAULT_OUT_HFOV_DEG,
+            panX = RearCameraCalibration.DEFAULT_PAN_X,
+            panY = RearCameraCalibration.DEFAULT_PAN_Y,
+            mirror = RearCameraCalibration.DEFAULT_MIRROR
+        )
+        CameraSlot.LEFT, CameraSlot.RIGHT -> CameraViewSettings(
+            headingDeg = if (slot == CameraSlot.LEFT) {
+                SideCameraCalibration.DEFAULT_LEFT_HEADING_DEG
+            } else {
+                SideCameraCalibration.DEFAULT_RIGHT_HEADING_DEG
+            },
+            downDeg = SideCameraCalibration.DEFAULT_DOWN_DEG,
+            rollDeg = SideCameraCalibration.DEFAULT_ROLL_DEG,
+            hfovDeg = SideCameraCalibration.DEFAULT_OUT_HFOV_DEG,
+            panX = SideCameraCalibration.DEFAULT_PAN_X,
+            panY = SideCameraCalibration.DEFAULT_PAN_Y,
+            mirror = SideCameraCalibration.DEFAULT_MIRROR
+        )
+    }
+
+    /** Keeps a view inside the editor's ranges. */
+    fun clampCameraView(slot: CameraSlot, view: CameraViewSettings): CameraViewSettings {
+        val heading0 = defaultCameraView(slot).headingDeg
+        return view.copy(
+            headingDeg = view.headingDeg.coerceIn(heading0 - CAMERA_HEADING_RANGE, heading0 + CAMERA_HEADING_RANGE),
+            downDeg = view.downDeg.coerceIn(CAMERA_DOWN_MIN, CAMERA_DOWN_MAX),
+            rollDeg = view.rollDeg.coerceIn(CAMERA_ROLL_MIN, CAMERA_ROLL_MAX),
+            hfovDeg = view.hfovDeg.coerceIn(CAMERA_HFOV_MIN, CAMERA_HFOV_MAX),
+            panX = view.panX.coerceIn(CAMERA_PAN_MIN, CAMERA_PAN_MAX),
+            panY = view.panY.coerceIn(CAMERA_PAN_MIN, CAMERA_PAN_MAX)
+        )
+    }
+
+    fun cameraView(context: Context, slot: CameraSlot): CameraViewSettings {
+        val prefs = prefs(context)
+        val keys = cameraViewKeys(slot)
+        val d = defaultCameraView(slot)
+        return clampCameraView(
+            slot,
+            CameraViewSettings(
+                headingDeg = prefs.getFloat(keys.heading, d.headingDeg),
+                downDeg = prefs.getFloat(keys.down, d.downDeg),
+                rollDeg = prefs.getFloat(keys.roll, d.rollDeg),
+                hfovDeg = prefs.getFloat(keys.hfov, d.hfovDeg),
+                panX = keys.panX?.let { prefs.getFloat(it, d.panX) } ?: d.panX,
+                panY = prefs.getFloat(keys.panY, d.panY),
+                mirror = prefs.getBoolean(keys.mirror, d.mirror)
+            )
+        )
+    }
+
+    fun setCameraView(context: Context, slot: CameraSlot, view: CameraViewSettings) {
+        val keys = cameraViewKeys(slot)
+        val v = clampCameraView(slot, view)
+        prefs(context).edit().apply {
+            putFloat(keys.heading, v.headingDeg)
+            putFloat(keys.down, v.downDeg)
+            putFloat(keys.roll, v.rollDeg)
+            putFloat(keys.hfov, v.hfovDeg)
+            keys.panX?.let { putFloat(it, v.panX) }
+            putFloat(keys.panY, v.panY)
+            putBoolean(keys.mirror, v.mirror)
+        }.apply()
+    }
+
+    fun cameraSettings(context: Context): CameraSettings {
+        val prefs = prefs(context)
+        migrateCameraPrefs(prefs)
+        return CameraSettings(
+            enabled = camerasEnabled(context),
+            inContainer = camerasInContainer(context),
+            correction = camerasCorrection(context),
+            vignette = camerasVignette(context),
+            containerPositionDp = cameraContainerPositionDp(context),
+            containerSizeDp = cameraContainerSizeDp(context),
+            z = prefs.getInt(KEY_REAR_CAMERA_Z, CAMERA_Z_DEFAULT).coerceIn(CAMERA_Z_MIN, CAMERA_Z_MAX),
+            rear = RearCameraSettings(
+                enabled = rearCameraEnabled(context),
+                view = cameraView(context, CameraSlot.REAR),
+                maxSpeedKmh = prefs.getInt(KEY_REAR_CAMERA_MAX_SPEED, REAR_CAMERA_MAX_SPEED_DEFAULT)
+                    .coerceIn(0, REAR_CAMERA_MAX_SPEED_MAX)
+            ),
+            side = SideCameraSettings(
+                enabled = sideCamerasEnabled(context),
+                hazardBoth = sideCamerasHazard(context),
+                left = cameraView(context, CameraSlot.LEFT),
+                right = cameraView(context, CameraSlot.RIGHT),
+                maxSpeedKmh = sideCameraMaxSpeedKmh(context)
+            )
+        )
+    }
+
+    /**
+     * The old single switch "Камера на проекции при заднем ходе" becomes the master switch;
+     * the rear camera itself stays on (it was the only camera then).
+     */
+    private fun migrateCameraPrefs(prefs: SharedPreferences) {
+        // Rear hfov/pan/mirror keep their keys and meaning; the old side placeholders are dropped.
+        if (LEGACY_SIDE_CAMERA_KEYS.any(prefs::contains)) {
+            prefs.edit().apply { LEGACY_SIDE_CAMERA_KEYS.forEach(::remove) }.apply()
+        }
+        if (prefs.contains(KEY_CAMERAS_ENABLED) || !prefs.contains(KEY_REAR_CAMERA_ENABLED)) return
+        val wasEnabled = prefs.getBoolean(KEY_REAR_CAMERA_ENABLED, false)
+        prefs.edit()
+            .putBoolean(KEY_CAMERAS_ENABLED, wasEnabled)
+            .putBoolean(KEY_REAR_CAMERA_ENABLED, true)
+            .apply()
+    }
+
+    fun camerasEnabled(context: Context): Boolean {
+        val prefs = prefs(context)
+        migrateCameraPrefs(prefs)
+        return prefs.getBoolean(KEY_CAMERAS_ENABLED, false)
+    }
+
+    fun setCamerasEnabled(context: Context, enabled: Boolean) {
+        prefs(context).edit().putBoolean(KEY_CAMERAS_ENABLED, enabled).apply()
+    }
+
+    /** Comma-separated keys of [OVER_STOCK_BLOCK_KEYS] drawn over the stock HUD picture (background render). */
+    internal const val KEY_OVER_STOCK_BLOCKS = "overlay_over_stock_blocks"
+    const val OVER_STOCK_CUSTOM_BLOCKS = "custom"
+
+    /** Blocks that can go over the stock HUD picture, in the settings dialog's order. */
+    val OVER_STOCK_BLOCK_KEYS: List<String> = listOf(
+        OverlayBroadcasts.PREVIEW_TARGET_NAV,
+        OverlayBroadcasts.PREVIEW_TARGET_LANE_GUIDANCE,
+        OverlayBroadcasts.PREVIEW_TARGET_ARROW,
+        OverlayBroadcasts.PREVIEW_TARGET_SPEED,
+        OverlayBroadcasts.PREVIEW_TARGET_HUDSPEED,
+        OverlayBroadcasts.PREVIEW_TARGET_ROAD_CAMERA,
+        OverlayBroadcasts.PREVIEW_TARGET_TRAFFIC_LIGHT,
+        OverlayBroadcasts.PREVIEW_TARGET_SPEEDOMETER,
+        OverlayBroadcasts.PREVIEW_TARGET_TURN_SIGNALS,
+        OverlayBroadcasts.PREVIEW_TARGET_CLOCK,
+        OverlayBroadcasts.PREVIEW_TARGET_MAP,
+        OVER_STOCK_CUSTOM_BLOCKS
+    )
+
+    fun overStockBlocks(context: Context): Set<String> =
+        parseOverStockBlocks(prefs(context).getString(KEY_OVER_STOCK_BLOCKS, null))
+
+    fun setOverStockBlocks(context: Context, blocks: Set<String>) {
+        prefs(context).edit().putString(KEY_OVER_STOCK_BLOCKS, formatOverStockBlocks(blocks)).apply()
+    }
+
+    /** Known keys only, in [OVER_STOCK_BLOCK_KEYS] order. */
+    internal fun formatOverStockBlocks(blocks: Set<String>): String =
+        OVER_STOCK_BLOCK_KEYS.filter(blocks::contains).joinToString(",")
+
+    internal fun parseOverStockBlocks(raw: String?): Set<String> {
+        if (raw.isNullOrBlank()) return emptySet()
+        val stored = raw.split(',').map { it.trim() }.toSet()
+        return OVER_STOCK_BLOCK_KEYS.filterTo(linkedSetOf(), stored::contains)
+    }
+
+    /** Master switch on and at least one camera trigger on. */
+    fun cameraFeatureEnabled(context: Context): Boolean =
+        camerasEnabled(context) && (rearCameraEnabled(context) || sideCamerasEnabled(context))
+
+    /** true: cameras use the HUD container rect; false: their own camera container. */
+    fun camerasInContainer(context: Context): Boolean =
+        prefs(context).getBoolean(KEY_CAMERAS_IN_CONTAINER, true)
+
+    fun setCamerasInContainer(context: Context, inContainer: Boolean) {
+        prefs(context).edit().putBoolean(KEY_CAMERAS_IN_CONTAINER, inContainer).apply()
+    }
+
+    /** "Выполнять автокоррекцию картинки"; off = raw fisheye picture (NO_CORRECTION). */
+    fun camerasCorrection(context: Context): Boolean =
+        prefs(context).getBoolean(KEY_CAMERAS_CORRECTION, true)
+
+    fun setCamerasCorrection(context: Context, enabled: Boolean) {
+        prefs(context).edit().putBoolean(KEY_CAMERAS_CORRECTION, enabled).apply()
+    }
+
+    /** "Виньетирование": darkened edges of the camera pictures (CAMCFG view flag VIGNETTE), like the map's. */
+    fun camerasVignette(context: Context): Boolean =
+        prefs(context).getBoolean(KEY_CAMERAS_VIGNETTE, true)
+
+    fun setCamerasVignette(context: Context, enabled: Boolean) {
+        prefs(context).edit().putBoolean(KEY_CAMERAS_VIGNETTE, enabled).apply()
+    }
+
+    fun rearCameraEnabled(context: Context): Boolean {
+        val prefs = prefs(context)
+        migrateCameraPrefs(prefs)
+        return prefs.getBoolean(KEY_REAR_CAMERA_ENABLED, true)
+    }
+
+    fun setRearCameraEnabled(context: Context, enabled: Boolean) {
+        prefs(context).edit().putBoolean(KEY_REAR_CAMERA_ENABLED, enabled).apply()
+    }
+
+    fun sideCamerasEnabled(context: Context): Boolean =
+        prefs(context).getBoolean(KEY_SIDE_CAMERAS_ENABLED, false)
+
+    fun setSideCamerasEnabled(context: Context, enabled: Boolean) {
+        prefs(context).edit().putBoolean(KEY_SIDE_CAMERAS_ENABLED, enabled).apply()
+    }
+
+    /** "Активация при аварийке": hazard lights show both side cameras (HAZARD_BOTH). */
+    fun sideCamerasHazard(context: Context): Boolean =
+        prefs(context).getBoolean(KEY_SIDE_CAMERAS_HAZARD, false)
+
+    fun setSideCamerasHazard(context: Context, enabled: Boolean) {
+        prefs(context).edit().putBoolean(KEY_SIDE_CAMERAS_HAZARD, enabled).apply()
+    }
+
+    fun sideCameraMaxSpeedKmh(context: Context): Int =
+        prefs(context).getInt(KEY_SIDE_CAMERA_MAX_SPEED, SideCameraCalibration.DEFAULT_MAX_SPEED_KMH)
+            .coerceIn(SIDE_CAMERA_MAX_SPEED_MIN, SIDE_CAMERA_MAX_SPEED_MAX)
+
+    fun setSideCameraMaxSpeedKmh(context: Context, speedKmh: Int) {
+        prefs(context).edit()
+            .putInt(
+                KEY_SIDE_CAMERA_MAX_SPEED,
+                speedKmh.coerceIn(SIDE_CAMERA_MAX_SPEED_MIN, SIDE_CAMERA_MAX_SPEED_MAX)
+            )
+            .apply()
+    }
+
+    /** Separate camera container on the HUD display (like the HUD container), used when not in the container. */
+    fun cameraContainerPositionDp(context: Context): PointF {
+        val prefs = prefs(context)
+        val containerPos = containerPositionDp(context)
+        return PointF(
+            prefs.getFloat(KEY_CAMERA_CONTAINER_X_DP, containerPos.x),
+            prefs.getFloat(KEY_CAMERA_CONTAINER_Y_DP, containerPos.y)
+        )
+    }
+
+    fun setCameraContainerPositionDp(context: Context, xDp: Float, yDp: Float) {
+        prefs(context).edit()
+            .putFloat(KEY_CAMERA_CONTAINER_X_DP, xDp)
+            .putFloat(KEY_CAMERA_CONTAINER_Y_DP, yDp)
+            .apply()
+    }
+
+    fun cameraContainerSizeDp(context: Context): PointF {
+        val prefs = prefs(context)
+        val containerSize = containerSizeDp(context)
+        return PointF(
+            prefs.getFloat(KEY_CAMERA_CONTAINER_WIDTH_DP, containerSize.x),
+            prefs.getFloat(KEY_CAMERA_CONTAINER_HEIGHT_DP, containerSize.y)
+        )
+    }
+
+    fun setCameraContainerSizeDp(context: Context, widthDp: Float, heightDp: Float) {
+        prefs(context).edit()
+            .putFloat(KEY_CAMERA_CONTAINER_WIDTH_DP, widthDp)
+            .putFloat(KEY_CAMERA_CONTAINER_HEIGHT_DP, heightDp)
+            .apply()
+    }
+
     fun navEnabled(context: Context): Boolean {
         return prefs(context).getBoolean(KEY_NAV_ENABLED, true)
     }
@@ -1050,6 +1446,41 @@ object OverlayPrefs {
             .putBoolean(KEY_LANE_GUIDANCE_SHOW_DISTANCE, enabled)
             .apply()
     }
+
+    /** Lane hints only from this distance to the manoeuvre on (slider steps, roughly logarithmic). */
+    val LANE_GUIDANCE_DISTANCE_STEPS_M = intArrayOf(10, 20, 30, 50, 75, 100, 150, 200, 250, 300, 400, 500, 600, 750, 1000)
+    const val LANE_GUIDANCE_MAX_DISTANCE_DEFAULT_M = 300
+
+    fun laneGuidanceDistanceLimitEnabled(context: Context): Boolean {
+        return prefs(context).getBoolean(KEY_LANE_GUIDANCE_DISTANCE_LIMIT_ENABLED, false)
+    }
+
+    fun setLaneGuidanceDistanceLimitEnabled(context: Context, enabled: Boolean) {
+        prefs(context).edit()
+            .putBoolean(KEY_LANE_GUIDANCE_DISTANCE_LIMIT_ENABLED, enabled)
+            .apply()
+    }
+
+    fun laneGuidanceMaxDistanceMeters(context: Context): Int =
+        prefs(context).getInt(KEY_LANE_GUIDANCE_MAX_DISTANCE_M, LANE_GUIDANCE_MAX_DISTANCE_DEFAULT_M)
+            .coerceIn(LANE_GUIDANCE_DISTANCE_STEPS_M.first(), LANE_GUIDANCE_DISTANCE_STEPS_M.last())
+
+    fun setLaneGuidanceMaxDistanceMeters(context: Context, distanceMeters: Int) {
+        prefs(context).edit()
+            .putInt(
+                KEY_LANE_GUIDANCE_MAX_DISTANCE_M,
+                distanceMeters.coerceIn(LANE_GUIDANCE_DISTANCE_STEPS_M.first(), LANE_GUIDANCE_DISTANCE_STEPS_M.last())
+            )
+            .apply()
+    }
+
+    /** Slider index of the step closest to [distanceMeters]. */
+    fun laneGuidanceDistanceStepIndex(distanceMeters: Int): Int =
+        LANE_GUIDANCE_DISTANCE_STEPS_M.indices.minByOrNull { abs(LANE_GUIDANCE_DISTANCE_STEPS_M[it] - distanceMeters) } ?: 0
+
+    /** Unknown distance (blank or unparsable text) never hides the hint. */
+    fun laneGuidanceWithinDistance(distanceMeters: Int?, limitEnabled: Boolean, maxDistanceMeters: Int): Boolean =
+        !limitEnabled || distanceMeters == null || distanceMeters <= maxDistanceMeters
 
     fun arrowEnabled(context: Context): Boolean {
         return prefs(context).getBoolean(KEY_ARROW_ENABLED, false)

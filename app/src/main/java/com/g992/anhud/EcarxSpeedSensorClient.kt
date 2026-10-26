@@ -10,7 +10,8 @@ class EcarxSpeedSensorClient(
     context: Context,
     private val sensorId: Int,
     private val onSpeedMetersPerSecond: (Float) -> Unit,
-    private val onLog: (String) -> Unit
+    private val onLog: (String) -> Unit,
+    private val onGearEvent: (Int) -> Unit = {}
 ) {
     private val appContext = context.applicationContext
     private val handler = Handler(Looper.getMainLooper())
@@ -170,6 +171,19 @@ class EcarxSpeedSensorClient(
         } else {
             onLog("Скорость: ECarX подписка на 0x${sensorId.toString(16).uppercase()} не удалась")
         }
+        // Same listener, gear events: the cameras need them faster than their 500 ms poll.
+        if (!invokeSensorListenerMethod(method, manager, listener, listenerClass, SENSOR_TYPE_GEAR)) {
+            onLog("Передача: ECarX подписка на 0x${SENSOR_TYPE_GEAR.toString(16).uppercase()} не удалась")
+        }
+    }
+
+    /** ISensor.getSensorEvent(SENSOR_TYPE_GEAR), a binder call; null = no sensor manager or failed. */
+    fun readGearEvent(): Int? {
+        val manager = sensorManager ?: return null
+        return runCatching {
+            manager.javaClass.getMethod("getSensorEvent", Int::class.javaPrimitiveType)
+                .invoke(manager, SENSOR_TYPE_GEAR).asIntOrNull()
+        }.getOrNull()
     }
 
     private fun unregisterSensorListener() {
@@ -195,6 +209,14 @@ class EcarxSpeedSensorClient(
             listenerClass.classLoader,
             arrayOf(listenerClass)
         ) { _, method, args ->
+            if (method.name == "onSensorEventChanged") {
+                val event = args?.getOrNull(1).asIntOrNull()
+                if (args?.getOrNull(0).asIntOrNull() == SENSOR_TYPE_GEAR && event != null) {
+                    handler.post {
+                        if (started) onGearEvent(event)
+                    }
+                }
+            }
             if (method.name == "onSensorValueChanged") {
                 val callbackSensorId = args?.getOrNull(0).asIntOrNull()
                 val value = args?.getOrNull(1).asFloatOrNull()
@@ -229,12 +251,13 @@ class EcarxSpeedSensorClient(
         method: Method,
         target: Any,
         listener: Any,
-        listenerClass: Class<*>
+        listenerClass: Class<*>,
+        type: Int = sensorId
     ): Boolean {
         val args = method.parameterTypes.map { parameterType ->
             when {
                 parameterType.isAssignableFrom(listenerClass) -> listener
-                parameterType.isIntLike() -> sensorId
+                parameterType.isIntLike() -> type
                 else -> null
             }
         }.toTypedArray()
@@ -329,6 +352,8 @@ class EcarxSpeedSensorClient(
 
     companion object {
         private const val CAR_CLASS_NAME = "com.ecarx.xui.adaptapi.car.Car"
+        /** ISensor.SENSOR_TYPE_GEAR; events are ISensorEvent.GEAR_* (see RearCameraLogic). */
+        const val SENSOR_TYPE_GEAR = 0x200200
         private val CONNECTABLE_CLASS_NAMES = listOf(
             "com.ecarx.xui.adaptapi.IConnectable",
             "com.ecarx.xui.adaptapi.car.IConnectable"

@@ -25,6 +25,8 @@ object CarSensorHub {
     private var nextListenerId = 1L
     private var client: EcarxSpeedSensorClient? = null
     private var latest: CarSensorSnapshot? = null
+    private var latestGear: Int? = null
+    private val gearListeners = linkedSetOf<() -> Unit>()
 
     fun subscribe(
         context: Context,
@@ -43,7 +45,8 @@ object CarSensorHub {
                     context = context.applicationContext,
                     sensorId = CustomBlocksContract.SPEED_SENSOR_ID,
                     onSpeedMetersPerSecond = ::onSpeedMetersPerSecond,
-                    onLog = { message -> UiLogStore.append(LogCategory.SENSORS, message) }
+                    onLog = { message -> UiLogStore.append(LogCategory.SENSORS, message) },
+                    onGearEvent = ::onGearEvent
                 ).also { it.start() }
             }
         }
@@ -54,6 +57,23 @@ object CarSensorHub {
     fun snapshot(sensorId: Int): CarSensorSnapshot? {
         CustomCarSensorRegistry.requireSupported(sensorId)
         return synchronized(lock) { latest }
+    }
+
+    /**
+     * ECarX gear (ISensorEvent.GEAR_*), read now from the sensor manager, else the last event; null
+     * while nobody holds the speed subscription. Binder call: not on the main thread.
+     */
+    fun readGear(): Int? {
+        val current = synchronized(lock) { client } ?: return null
+        val gear = current.readGearEvent() ?: return synchronized(lock) { latestGear }
+        synchronized(lock) { latestGear = gear }
+        return gear
+    }
+
+    /** [listener] runs on the main thread whenever a gear event arrives. */
+    fun addGearListener(listener: () -> Unit): AutoCloseable {
+        synchronized(lock) { gearListeners += listener }
+        return AutoCloseable { synchronized(lock) { gearListeners -= listener } }
     }
 
     fun resubscribe(sensorId: Int) {
@@ -71,10 +91,18 @@ object CarSensorHub {
         callbacks.forEach { callback -> callback(snapshot) }
     }
 
+    private fun onGearEvent(event: Int) {
+        val callbacks = synchronized(lock) {
+            latestGear = event
+            gearListeners.toList()
+        }
+        callbacks.forEach { it() }
+    }
+
     private fun unsubscribe(listenerId: Long) {
         val clientToStop = synchronized(lock) {
             listeners.remove(listenerId)
-            if (listeners.isEmpty()) client.also { client = null } else null
+            if (listeners.isEmpty()) client.also { client = null; latestGear = null } else null
         }
         clientToStop?.stop()
     }

@@ -32,6 +32,7 @@ import androidx.core.content.ContextCompat
 import com.g992.anhud.hudbridge.HudBridgeFrameSink
 import com.g992.anhud.hudbridge.HudBridgeManager
 import com.g992.anhud.hudbridge.HudBridgePrefs
+import com.g992.anhud.hudbridge.RearCameraLogic
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -41,6 +42,7 @@ import kotlin.math.roundToInt
 class HudOverlayController(private val context: Context) {
     companion object {
         private const val CONTAINER_OUTLINE_PREVIEW_MIN_ALPHA = 0.35f
+        private const val CAMERA_CONTAINER_PLACEHOLDER_COLOR = 0xE0101418.toInt()
         private const val CLOCK_TICK_MS = 5_000L
         private const val MAP_HIDE_BY_MANEUVER_DELAY_MS = 5_000L
         private const val JAM_MIN_HEIGHT_FRACTION = 0.12f
@@ -163,6 +165,10 @@ class HudOverlayController(private val context: Context) {
     private var mapTripStatusView: MapTripStatusView? = null
     private var hudMapController: HudMapController? = null
     private var mapPlaceholderView: FrameLayout? = null
+    // Separate camera container placeholder: its own window, since it is placed on the display, not in the container.
+    private var cameraContainerView: View? = null
+    private var cameraSplitView: View? = null
+    private var cameraWindowParams: WindowManager.LayoutParams? = null
     private var customBlocksLayer: FrameLayout? = null
     private val customBlockViewHolders = linkedMapOf<String, CustomBlockViewFactory.ViewHolder>()
     private var customBlocksDocument: CustomBlocksDocument = CustomBlocksDocument()
@@ -182,6 +188,9 @@ class HudOverlayController(private val context: Context) {
     private var mapPositionDp: PointF = OverlayPrefs.mapPositionDp(context)
     private var mapWidthDp: Float = OverlayPrefs.mapSizeDp(context).x
     private var mapHeightDp: Float = OverlayPrefs.mapSizeDp(context).y
+    private var cameraContainerPositionDp: PointF = OverlayPrefs.cameraContainerPositionDp(context)
+    private var cameraContainerWidthDp: Float = OverlayPrefs.cameraContainerSizeDp(context).x
+    private var cameraContainerHeightDp: Float = OverlayPrefs.cameraContainerSizeDp(context).y
     private var navPositionDp: PointF = OverlayPrefs.navPositionDp(context)
     private var navWidthDp: Float = OverlayPrefs.navWidthDp(context)
     private var laneGuidancePositionDp: PointF = OverlayPrefs.laneGuidancePositionDp(context)
@@ -244,6 +253,13 @@ class HudOverlayController(private val context: Context) {
     private var mapEnabled: Boolean = OverlayPrefs.mapEnabled(context)
     private var infoMirrorStarsheep7Enabled: Boolean = OverlayPrefs.infoMirrorStarsheep7Enabled(context)
     private var infoMirrorGalaxyEnabled: Boolean = OverlayPrefs.infoMirrorGalaxyEnabled(context)
+    /** "Блоки поверх штатной отрисовки": keys of [OverlayPrefs.OVER_STOCK_BLOCK_KEYS]. */
+    private var overStockBlocks: Set<String> = OverlayPrefs.overStockBlocks(context)
+    private var lastOverStockRects: List<com.g992.anhud.hudbridge.Gcp.Rect>? = null
+    private val overStockPreDrawListener = android.view.ViewTreeObserver.OnPreDrawListener {
+        publishOverStockRects()
+        true
+    }
     private var previewMode: Boolean = false
     private var previewTarget: String? = null
     private var previewShowOthers: Boolean = false
@@ -282,6 +298,8 @@ class HudOverlayController(private val context: Context) {
 
     fun refresh() {
         handler.post {
+            overStockBlocks = OverlayPrefs.overStockBlocks(context)
+            publishOverStockRects()
             val bridgeDisplay = HudBridgeManager.renderDisplay()
             if (!OverlayPrefs.isEnabled(context) || (bridgeDisplay == null && !Settings.canDrawOverlays(context))) {
                 clearDisplayRetry()
@@ -675,6 +693,21 @@ class HudOverlayController(private val context: Context) {
         }
     }
 
+    /** Rear camera placeholder geometry; applied by the [updateLayout] call that follows. */
+    fun updateCameraContainerLayout(position: PointF?, widthDp: Float?, heightDp: Float?) {
+        handler.post {
+            if (position != null) {
+                cameraContainerPositionDp = position
+            }
+            if (widthDp != null) {
+                cameraContainerWidthDp = widthDp.coerceAtLeast(OverlayPrefs.CAMERA_CONTAINER_MIN_SIZE_DP)
+            }
+            if (heightDp != null) {
+                cameraContainerHeightDp = heightDp.coerceAtLeast(OverlayPrefs.CAMERA_CONTAINER_MIN_SIZE_DP)
+            }
+        }
+    }
+
     fun updateLayout(
         containerPosition: PointF?,
         containerWidthDp: Float?,
@@ -994,6 +1027,70 @@ class HudOverlayController(private val context: Context) {
 
     private fun isBridgeDisplay(displayId: Int): Boolean {
         return displayManager?.getDisplay(displayId)?.name == HudBridgeFrameSink.VIRTUAL_DISPLAY_NAME
+    }
+
+    /** Hands the container rectangles of the over-stock blocks to the HUD bridge when they change. */
+    private fun publishOverStockRects() {
+        val rects = computeOverStockRects()
+        if (rects == lastOverStockRects) return
+        lastOverStockRects = rects
+        HudBridgeManager.setOverStockRects(rects)
+    }
+
+    /** Null when the feature is off; otherwise the shown selected blocks' boxes in display pixels. */
+    private fun computeOverStockRects(): List<com.g992.anhud.hudbridge.Gcp.Rect>? {
+        if (overStockBlocks.isEmpty()) return null
+        val root = overlayView ?: return null
+        val params = overlayLayoutParams ?: return null
+        // Runs on every overlay draw: renderDisplay() is cached, isBridgeDisplay() may ask the system.
+        val displayId = currentDisplayId ?: return null
+        if (HudBridgeManager.renderDisplay()?.displayId != displayId) return null
+        val views = ArrayList<View>()
+        for (key in overStockBlocks) {
+            when (key) {
+                OverlayBroadcasts.PREVIEW_TARGET_NAV -> navContainer?.let(views::add)
+                OverlayBroadcasts.PREVIEW_TARGET_LANE_GUIDANCE -> laneGuidanceContainer?.let(views::add)
+                OverlayBroadcasts.PREVIEW_TARGET_ARROW -> arrowContainer?.let(views::add)
+                OverlayBroadcasts.PREVIEW_TARGET_SPEED -> speedLimitView?.let(views::add)
+                OverlayBroadcasts.PREVIEW_TARGET_HUDSPEED -> hudSpeedContainer?.let(views::add)
+                OverlayBroadcasts.PREVIEW_TARGET_ROAD_CAMERA -> roadCameraContainer?.let(views::add)
+                OverlayBroadcasts.PREVIEW_TARGET_TRAFFIC_LIGHT -> trafficLightContainer?.let(views::add)
+                OverlayBroadcasts.PREVIEW_TARGET_SPEEDOMETER -> speedometerView?.let(views::add)
+                OverlayBroadcasts.PREVIEW_TARGET_TURN_SIGNALS -> turnSignalsContainer?.let(views::add)
+                OverlayBroadcasts.PREVIEW_TARGET_CLOCK -> clockView?.let(views::add)
+                OverlayBroadcasts.PREVIEW_TARGET_MAP -> mapContainerView?.let(views::add)
+                OverlayPrefs.OVER_STOCK_CUSTOM_BLOCKS -> customBlockViewHolders.values.forEach { views.add(it.root) }
+            }
+        }
+        return views.mapNotNull { overStockRectOf(it, root, params.x, params.y) }
+    }
+
+    /**
+     * The box [view] covers on the display: its own size through every transform up to the
+     * overlay root (block scale, info-mirror flips), clipped to the overlay window.
+     */
+    private fun overStockRectOf(view: View, root: View, windowX: Int, windowY: Int): com.g992.anhud.hudbridge.Gcp.Rect? {
+        if (!view.isShown || view.alpha <= 0f || view.width <= 0 || view.height <= 0) return null
+        val box = android.graphics.RectF(0f, 0f, view.width.toFloat(), view.height.toFloat())
+        var v: View = view
+        while (true) {
+            v.matrix.mapRect(box)
+            box.offset(v.left.toFloat(), v.top.toFloat())
+            if (v === root) break
+            val parent = v.parent as? View ?: return null
+            box.offset(-parent.scrollX.toFloat(), -parent.scrollY.toFloat())
+            v = parent
+        }
+        if (!box.intersect(0f, 0f, root.width.toFloat(), root.height.toFloat())) return null
+        box.offset(windowX.toFloat(), windowY.toFloat())
+        return com.g992.anhud.hudbridge.HudLayerSplit.pixelRect(
+            box.left,
+            box.top,
+            box.right,
+            box.bottom,
+            com.g992.anhud.hudbridge.Gcp.WIDTH,
+            com.g992.anhud.hudbridge.Gcp.HEIGHT
+        )
     }
 
     private fun requestDisplayChangeRefresh() {
@@ -1598,6 +1695,9 @@ class HudOverlayController(private val context: Context) {
         mapBlock.addView(mapPlaceholder)
         mapBlock.addView(mapTripStatus)
 
+        // ghudbridgelited draws the real cameras in its own window; this is only the editor placeholder.
+        val cameraContainerBlock = createCameraContainerPlaceholder(displayContext, metrics.density)
+
         root.addView(mapBlock)
         root.addView(navBlock)
         root.addView(laneGuidanceBlock)
@@ -1642,6 +1742,7 @@ class HudOverlayController(private val context: Context) {
             wm.addView(root, layoutParams)
             windowManager = wm
             overlayView = root
+            root.viewTreeObserver.addOnPreDrawListener(overStockPreDrawListener)
             overlayLayoutParams = layoutParams
             navContainer = navBlock
             maneuverContainer = maneuverBox
@@ -1690,6 +1791,7 @@ class HudOverlayController(private val context: Context) {
             jamImageView = jamsImage
             mapTripStatusView = mapTripStatus
             mapPlaceholderView = mapPlaceholder
+            cameraContainerView = cameraContainerBlock
             customBlocksLayer = customLayer
             currentDisplayId = display.displayId
             syncCustomBlockViews()
@@ -1747,6 +1849,7 @@ class HudOverlayController(private val context: Context) {
             mapContentView = null
             mapTripStatusView = null
             mapPlaceholderView = null
+            cameraContainerView = null
             customBlocksLayer = null
             customBlockViewHolders.clear()
             currentDisplayId = null
@@ -1765,8 +1868,10 @@ class HudOverlayController(private val context: Context) {
         mapHadVisibleContent = false
         hideMapByManeuverActive = false
         mapTransparentFillPending = false
+        detachCameraWindow()
         val wm = windowManager
         val view = overlayView
+        view?.viewTreeObserver?.takeIf { it.isAlive }?.removeOnPreDrawListener(overStockPreDrawListener)
         if (wm != null && view != null) {
             try {
                 wm.removeView(view)
@@ -1776,6 +1881,7 @@ class HudOverlayController(private val context: Context) {
         }
         windowManager = null
         overlayView = null
+        publishOverStockRects()
         clearedOverlay = null
         overlayLayoutParams = null
         navContainer = null
@@ -1823,6 +1929,7 @@ class HudOverlayController(private val context: Context) {
         mapContentView = null
         mapTripStatusView = null
         mapPlaceholderView = null
+        cameraContainerView = null
         customBlocksLayer = null
         customBlockViewHolders.clear()
         currentDisplayId = null
@@ -2169,7 +2276,13 @@ class HudOverlayController(private val context: Context) {
         val laneGuidanceVisible = laneGuidanceAllowed && if (showPreview) {
             previewLaneGuidance
         } else {
-            (laneGuidanceManeuver != null || formatYandexLanes(visual.laneQueue).isNotBlank()) && !laneGuidanceHiddenByMap
+            (laneGuidanceManeuver != null || formatYandexLanes(visual.laneQueue).isNotBlank()) &&
+                !laneGuidanceHiddenByMap &&
+                OverlayPrefs.laneGuidanceWithinDistance(
+                    parseDistanceMeters(visual.laneDistance),
+                    OverlayPrefs.laneGuidanceDistanceLimitEnabled(context),
+                    OverlayPrefs.laneGuidanceMaxDistanceMeters(context)
+                )
         }
         val laneGuidanceTransparentFillVisible = !laneGuidanceHiddenByMap &&
             !laneGuidanceVisible &&
@@ -3364,6 +3477,140 @@ class HudOverlayController(private val context: Context) {
             }
         }
         updateMapView(displayContext, containerWidthPx, containerHeightPx)
+        updateCameraContainerView(metrics.density, metrics.widthPixels, metrics.heightPixels)
+    }
+
+    private fun createCameraContainerPlaceholder(displayContext: Context, density: Float): View {
+        val block = FrameLayout(displayContext).apply {
+            setBackgroundColor(CAMERA_CONTAINER_PLACEHOLDER_COLOR)
+        }
+        val iconSize = (32 * density).roundToInt().coerceAtLeast(1)
+        block.addView(LinearLayout(displayContext).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            layoutParams = FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT
+            )
+            addView(ImageView(displayContext).apply {
+                layoutParams = LinearLayout.LayoutParams(iconSize, iconSize)
+                setImageResource(R.drawable.ic_rear_camera_24)
+                scaleType = ImageView.ScaleType.FIT_CENTER
+            })
+            addView(TextView(displayContext).apply {
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                )
+                gravity = Gravity.CENTER
+                setTextColor(Color.WHITE)
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
+                text = displayContext.getString(R.string.position_camera_container_label)
+            })
+        })
+        // Side cameras: left one in the left half, right one in the right half.
+        val margin = (4 * density).roundToInt()
+        fun label(textRes: Int, gravity: Int) = TextView(displayContext).apply {
+            layoutParams = FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                gravity
+            ).apply { setMargins(margin, margin, margin, margin) }
+            setTextColor(Color.WHITE)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
+            text = displayContext.getString(textRes)
+        }
+        val split = FrameLayout(displayContext).apply {
+            layoutParams = FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT
+            )
+            addView(View(displayContext).apply {
+                layoutParams = FrameLayout.LayoutParams(
+                    (2 * density).roundToInt().coerceAtLeast(1),
+                    FrameLayout.LayoutParams.MATCH_PARENT,
+                    Gravity.CENTER_HORIZONTAL
+                )
+                setBackgroundColor(0x80FFFFFF.toInt())
+            })
+            addView(label(R.string.camera_preview_left, Gravity.START or Gravity.TOP))
+            addView(label(R.string.camera_preview_right, Gravity.END or Gravity.TOP))
+            visibility = View.GONE
+        }
+        block.addView(split)
+        cameraSplitView = split
+        return block
+    }
+
+    /** Shows the separate camera container (display coordinates) as its own window while it is previewed. */
+    private fun updateCameraContainerView(density: Float, displayWidthPx: Int, displayHeightPx: Int) {
+        val view = cameraContainerView ?: return
+        val wm = windowManager ?: return
+        val show = shouldPreviewBlock(
+            OverlayBroadcasts.PREVIEW_TARGET_CAMERA_CONTAINER,
+            OverlayPrefs.cameraFeatureEnabled(context) && !OverlayPrefs.camerasInContainer(context)
+        )
+        if (!show) {
+            detachCameraWindow()
+            return
+        }
+        val rect = RearCameraLogic.hudRect(
+            displayWidthPx = displayWidthPx,
+            displayHeightPx = displayHeightPx,
+            density = density,
+            xDp = cameraContainerPositionDp.x,
+            yDp = cameraContainerPositionDp.y,
+            widthDp = cameraContainerWidthDp,
+            heightDp = cameraContainerHeightDp,
+            minSizePx = (OverlayPrefs.CAMERA_CONTAINER_MIN_SIZE_DP * density).roundToInt()
+        )
+        cameraSplitView?.visibility = if (OverlayPrefs.sideCamerasEnabled(context)) View.VISIBLE else View.GONE
+        view.foreground = if (isPreviewTarget(OverlayBroadcasts.PREVIEW_TARGET_CAMERA_CONTAINER)) {
+            ContextCompat.getDrawable(view.context, R.drawable.bg_nav_block_outline)
+        } else {
+            null
+        }
+        // Same info-mirror flips as the HUD container content.
+        view.pivotX = rect.w / 2f
+        view.pivotY = rect.h / 2f
+        view.scaleX = if (infoMirrorGalaxyEnabled) -1f else 1f
+        view.scaleY = if (infoMirrorStarsheep7Enabled) -1f else 1f
+        val attached = cameraWindowParams != null
+        val params = cameraWindowParams ?: WindowManager.LayoutParams(
+            rect.w,
+            rect.h,
+            overlayLayoutParams?.type ?: WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE,
+            PixelFormat.TRANSLUCENT
+        ).apply {
+            gravity = Gravity.TOP or Gravity.START
+        }
+        params.x = rect.x
+        params.y = rect.y
+        params.width = rect.w
+        params.height = rect.h
+        try {
+            if (attached) {
+                wm.updateViewLayout(view, params)
+            } else {
+                wm.addView(view, params)
+                cameraWindowParams = params
+            }
+        } catch (e: Exception) {
+            UiLogStore.append(LogCategory.SYSTEM, "Оверлей: ошибка окна контейнера камер: ${e.message}")
+        }
+    }
+
+    private fun detachCameraWindow() {
+        if (cameraWindowParams == null) return
+        cameraWindowParams = null
+        val view = cameraContainerView ?: return
+        try {
+            windowManager?.removeView(view)
+        } catch (e: Exception) {
+            UiLogStore.append(LogCategory.SYSTEM, "Оверлей: ошибка удаления окна камер: ${e.message}")
+        }
     }
 
     private fun syncCustomBlockViews() {
