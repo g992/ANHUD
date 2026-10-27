@@ -90,6 +90,7 @@ internal fun MainActivity.openPositionDialog(
     val showOthersCheck = dialogView.findViewById<CheckBox>(R.id.dialogShowOthers)
     val hideWhenMapActiveCheck = dialogView.findViewById<CheckBox>(R.id.dialogHideWhenMapActive)
     val mapJamsCheck = dialogView.findViewById<CheckBox>(R.id.dialogMapJamsCheck)
+    val mapOnlyWithRouteCheck = dialogView.findViewById<CheckBox>(R.id.dialogMapOnlyWithRouteCheck)
     val minimapZoomRow = dialogView.findViewById<View>(R.id.dialogMinimapZoomRow)
     val minimapZoomSeek = dialogView.findViewById<SeekBar>(R.id.dialogMinimapZoomSeek)
     val minimapZoomValue = dialogView.findViewById<TextView>(R.id.dialogMinimapZoomValue)
@@ -513,6 +514,17 @@ internal fun MainActivity.openPositionDialog(
         mapJamsCheck.setOnCheckedChangeListener { _, isChecked ->
             if (isChecked == OverlayPrefs.mapJamsEnabled(activity)) return@setOnCheckedChangeListener
             OverlayPrefs.setMapJamsEnabled(activity, isChecked)
+            notifyOverlaySettingsChanged(
+                preview = true,
+                previewTarget = target,
+                previewShowOthers = showOthersCheck.isChecked
+            )
+        }
+        mapOnlyWithRouteCheck.visibility = View.VISIBLE
+        mapOnlyWithRouteCheck.isChecked = OverlayPrefs.mapOnlyWithRoute(activity)
+        mapOnlyWithRouteCheck.setOnCheckedChangeListener { _, isChecked ->
+            if (isChecked == OverlayPrefs.mapOnlyWithRoute(activity)) return@setOnCheckedChangeListener
+            OverlayPrefs.setMapOnlyWithRoute(activity, isChecked)
             notifyOverlaySettingsChanged(
                 preview = true,
                 previewTarget = target,

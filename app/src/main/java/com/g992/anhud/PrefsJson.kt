@@ -378,6 +378,7 @@ object PrefsJson {
         putBoolean("native_nav_enabled", OverlayPrefs.nativeNavEnabled(context))
         putBoolean("overlay_map_enabled", OverlayPrefs.mapEnabled(context))
         putBoolean("overlay_map_jams_enabled", OverlayPrefs.mapJamsEnabled(context))
+        putBoolean("overlay_map_only_with_route", OverlayPrefs.mapOnlyWithRoute(context))
         putFloat("overlay_map_minimap_zoom", OverlayPrefs.mapMinimapZoom(context))
         putInt("overlay_map_minimap_view", OverlayPrefs.mapMinimapView(context))
         putBoolean("overlay_map_minimap_roads_only", OverlayPrefs.mapMinimapRoadsOnly(context))

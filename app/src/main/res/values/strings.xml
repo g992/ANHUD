@@ -71,6 +71,7 @@
     <string name="position_container_label">Контейнер HUD</string>
     <string name="position_map_block_label">Мини-карта Яндекс</string>
     <string name="position_map_jams">Полоса пробок под картой</string>
+    <string name="position_map_only_with_route">Карта только когда есть маршрут</string>
     <string name="position_minimap_zoom">Масштаб мини-карты</string>
     <string name="position_minimap_zoom_value">%1$.1f</string>
     <string name="position_minimap_view">Вид мини-карты</string>

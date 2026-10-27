@@ -130,6 +130,7 @@ object OverlayPrefs {
     private const val KEY_NAV_ENABLED = "overlay_nav_enabled"
     private const val KEY_NAV_HIDE_WHEN_MAP_ACTIVE = "overlay_nav_hide_when_map_active"
     private const val KEY_MAP_JAMS_ENABLED = "overlay_map_jams_enabled"
+    private const val KEY_MAP_ONLY_WITH_ROUTE = "overlay_map_only_with_route"
     private const val KEY_MAP_MINIMAP_ZOOM = "overlay_map_minimap_zoom"
     private const val KEY_MAP_MINIMAP_VIEW = "overlay_map_minimap_view"
     private const val KEY_MAP_MINIMAP_ROADS_ONLY = "overlay_map_minimap_roads_only"
@@ -1323,6 +1324,17 @@ object OverlayPrefs {
     fun setMapJamsEnabled(context: Context, enabled: Boolean) {
         prefs(context).edit()
             .putBoolean(KEY_MAP_JAMS_ENABLED, enabled)
+            .apply()
+    }
+
+    /** On: the map hides as soon as the navigator reports no route. Off: it keeps the last picture it got. */
+    fun mapOnlyWithRoute(context: Context): Boolean {
+        return prefs(context).getBoolean(KEY_MAP_ONLY_WITH_ROUTE, true)
+    }
+
+    fun setMapOnlyWithRoute(context: Context, enabled: Boolean) {
+        prefs(context).edit()
+            .putBoolean(KEY_MAP_ONLY_WITH_ROUTE, enabled)
             .apply()
     }
 

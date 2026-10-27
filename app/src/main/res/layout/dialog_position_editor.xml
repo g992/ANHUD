@@ -769,6 +769,16 @@
         android:textSize="16sp"
         android:visibility="gone" />
 
+    <CheckBox
+        android:id="@+id/dialogMapOnlyWithRouteCheck"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:text="@string/position_map_only_with_route"
+        android:textColor="@color/white"
+        android:textSize="16sp"
+        android:visibility="gone" />
+
     <LinearLayout
         android:id="@+id/dialogMinimapZoomRow"
         android:layout_width="match_parent"

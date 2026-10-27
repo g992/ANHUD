@@ -26,7 +26,14 @@ object YandexVisualStore {
     private var pendingFrame: Pair<Long, ByteArray>? = null
     private var decoderRunning = false
 
+    /** The last minimap successfully decoded, kept across [endRoute] / route-end for "Карта только
+     *  когда есть маршрут" = off: only [setSourceEnabled](false) and a fresh route's first bitmap
+     *  ever replace it. */
+    private var lastMinimap: Bitmap? = null
+
     @Synchronized fun snapshot(): YandexVisualSnapshot = value
+
+    @Synchronized fun lastMinimap(): Bitmap? = lastMinimap
 
     fun setSourceEnabled(enabled: Boolean) {
         val changed = synchronized(this) {
@@ -35,6 +42,7 @@ object YandexVisualStore {
                 ++frameVersion
                 pendingFrame = null
                 value = YandexVisualSnapshot()
+                lastMinimap = null
                 true
             }
         }
@@ -88,7 +96,11 @@ object YandexVisualStore {
             val bitmap = BitmapFactory.decodeByteArray(jpeg, 0, jpeg.size) ?: continue
             val accepted = synchronized(this) {
                 if (!sourceEnabled || version != frameVersion) false
-                else { value = value.copy(minimap = bitmap, hasRoute = true); true }
+                else {
+                    value = value.copy(minimap = bitmap, hasRoute = true)
+                    lastMinimap = bitmap
+                    true
+                }
             }
             if (accepted) listeners.forEach { it() }
         }

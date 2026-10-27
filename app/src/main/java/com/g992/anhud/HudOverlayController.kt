@@ -75,6 +75,28 @@ class HudOverlayController(private val context: Context) {
         private const val CLEAR_BEFORE_REDRAW_DELAY_MS = 32L
         private const val CLEAR_FRAME_TIMEOUT_MS = 250L
         private const val HUD_OVERLAY_TAG = "HudOverlayController"
+
+        /** "Карта только когда есть маршрут" decision: the live image, or (when off) the last one
+         *  known, even past route end. Pulled out so it's testable without a real [Context]. */
+        internal fun <T : Any> resolveMapImage(live: T?, lastKnown: T?, onlyWithRoute: Boolean): T? {
+            live?.let { return it }
+            return if (onlyWithRoute) null else lastKnown
+        }
+
+        /** The jams bar's own height in px, added below the map rather than carved out of it — the
+         *  map keeps the exact size the user configured, with the bar as extra height underneath. */
+        internal fun resolveJamBarHeightPx(mapHeightPx: Int, density: Float, hasProgress: Boolean): Int {
+            if (mapHeightPx <= 0 || density <= 0f) return 0
+            val minPx = (JAM_MIN_HEIGHT_DP * density).roundToInt().coerceAtLeast(1)
+            val barHeight = max((mapHeightPx * JAM_MIN_HEIGHT_FRACTION).roundToInt(), minPx)
+                .coerceAtMost(mapHeightPx)
+            // The position arrow is taller than the plain bar.
+            return if (hasProgress) {
+                (barHeight * JAM_ARROW_SCALE).roundToInt().coerceAtMost(mapHeightPx)
+            } else {
+                barHeight
+            }
+        }
     }
     private val handler = Handler(Looper.getMainLooper())
     private val displayManager = context.getSystemService(DisplayManager::class.java)
@@ -153,6 +175,7 @@ class HudOverlayController(private val context: Context) {
     private var jamImageView: JamsBarView? = null
     private var requestedMinimapSize: Pair<Int, Int>? = null
     private var requestedMinimapStyle: OverlayPrefs.MinimapStyle? = null
+    private var requestedMinimapOnlyWithRoute: Boolean? = null
     private var lastJamLayoutKey: String? = null
     private val minimapRetry = object : Runnable {
         override fun run() {
@@ -2075,7 +2098,7 @@ class HudOverlayController(private val context: Context) {
         val laneGuidanceAllowed =
             laneGuidanceEnabled || isPreviewTarget(OverlayBroadcasts.PREVIEW_TARGET_LANE_GUIDANCE)
         val visual = YandexVisualStore.snapshot()
-        val hasMapRoute = visual.minimap != null
+        val hasMapRoute = currentMinimapBitmap(visual) != null
         val mapAllowed = mapEnabled || isPreviewTarget(OverlayBroadcasts.PREVIEW_TARGET_MAP)
         val arrowAllowed = arrowEnabled || isPreviewTarget(OverlayBroadcasts.PREVIEW_TARGET_ARROW)
         val speedAllowed = speedEnabled || isPreviewTarget(OverlayBroadcasts.PREVIEW_TARGET_SPEED)
@@ -3710,10 +3733,16 @@ class HudOverlayController(private val context: Context) {
         }
     }
 
+    /** The bitmap to show: the live one, or (when "Карта только когда есть маршрут" is off) the last
+     *  one received, kept past route end. */
+    private fun currentMinimapBitmap(visual: YandexVisualSnapshot): Bitmap? =
+        resolveMapImage(visual.minimap, YandexVisualStore.lastMinimap(), OverlayPrefs.mapOnlyWithRoute(context))
+
     private fun updateMapView(displayContext: Context, containerWidthPx: Int, containerHeightPx: Int) {
         val previewMap = shouldPreviewBlock(OverlayBroadcasts.PREVIEW_TARGET_MAP, mapEnabled)
         val visual = YandexVisualStore.snapshot()
-        val hasMapRoute = visual.minimap != null
+        val minimapBitmap = currentMinimapBitmap(visual)
+        val hasMapRoute = minimapBitmap != null
         val runtimeMapVisible = !previewMode && mapEnabled && hasMapRoute && !hideMapByManeuverActive
         logMapState(
             stage = "update",
@@ -3725,18 +3754,29 @@ class HudOverlayController(private val context: Context) {
         val mapContainer = mapContainerView ?: return
         val mapContent = mapContentView ?: return
         val placeholder = mapPlaceholderView ?: return
-        val widthPx = (mapWidthDp * displayContext.resources.displayMetrics.density)
+        val density = displayContext.resources.displayMetrics.density
+        // The map itself always gets the exact configured size; the jams bar, when shown, is added
+        // below it rather than sharing that box, so the map never ends up smaller than configured.
+        val widthPx = (mapWidthDp * density)
             .roundToInt()
             .coerceIn(1, containerWidthPx.coerceAtLeast(1))
-        val heightPx = (mapHeightDp * displayContext.resources.displayMetrics.density)
+        val heightPx = (mapHeightDp * density)
             .roundToInt()
             .coerceIn(1, containerHeightPx.coerceAtLeast(1))
+        val jams = if (!previewMap) visual.jams?.takeIf { OverlayPrefs.mapJamsEnabled(context) } else null
+        val jamHeightPx = if (jams != null) {
+            resolveJamBarHeightPx(heightPx, density, jams.progress != null)
+                .coerceAtMost((containerHeightPx - heightPx).coerceAtLeast(0))
+        } else {
+            0
+        }
+        val blockHeightPx = heightPx + jamHeightPx
         val mapContainerParams = (mapContainer.layoutParams as? FrameLayout.LayoutParams)
-            ?: FrameLayout.LayoutParams(widthPx, heightPx)
-        if (mapContainerParams.width != widthPx || mapContainerParams.height != heightPx) {
+            ?: FrameLayout.LayoutParams(widthPx, blockHeightPx)
+        if (mapContainerParams.width != widthPx || mapContainerParams.height != blockHeightPx) {
             mapContainer.layoutParams = mapContainerParams.apply {
                 width = widthPx
-                height = heightPx
+                height = blockHeightPx
             }
         }
         positionView(
@@ -3774,50 +3814,40 @@ class HudOverlayController(private val context: Context) {
         } else {
             mapContent.visibility = View.VISIBLE
             placeholder.visibility = View.GONE
-            val minimap = visual.minimap ?: return
-            val jams = visual.jams?.takeIf { OverlayPrefs.mapJamsEnabled(context) }
+            val minimap = minimapBitmap ?: return
             minimapImageView?.setImageBitmap(minimap)
             jamImageView?.apply {
                 setJams(jams)
-                visibility = if (jams != null) View.VISIBLE else View.GONE
+                visibility = if (jamHeightPx > 0) View.VISIBLE else View.GONE
             }
-            layoutMinimapAndJams(minimap, jams, widthPx, heightPx)
+            layoutMinimapAndJams(jams, widthPx, heightPx, jamHeightPx)
         }
     }
 
-    private fun layoutMinimapAndJams(minimap: Bitmap, jams: JamsBar?, maxWidth: Int, maxHeight: Int) {
-        val mapRatio = minimap.height.toFloat() / minimap.width
-        // Navigator's ProgressView is a thin strip; scaled proportionally it is barely visible on the HUD.
-        val jamBarHeight = if (jams == null) 0 else {
-            val density = minimapImageView?.resources?.displayMetrics?.density ?: 1f
-            maxOf(maxHeight * JAM_MIN_HEIGHT_FRACTION, JAM_MIN_HEIGHT_DP * density)
-                .roundToInt().coerceIn(1, (maxHeight / 4).coerceAtLeast(1))
-        }
-        // The position arrow is taller than the bar.
-        val jamHeight = if (jams?.progress == null) jamBarHeight else {
-            (jamBarHeight * JAM_ARROW_SCALE).roundToInt().coerceAtMost((maxHeight / 3).coerceAtLeast(1))
-        }
-        val contentWidth = minOf(maxWidth.toFloat(), (maxHeight - jamHeight) / mapRatio)
-            .roundToInt().coerceAtLeast(1)
-        val mapHeight = (contentWidth * mapRatio).roundToInt().coerceIn(1, maxHeight)
+    /** [mapWidth]/[mapHeight]: the map's own size, exactly as configured — never shrunk for the bar.
+     *  [jamHeightPx]: the bar's height, already resolved (0 when it's off or there's no room left). */
+    private fun layoutMinimapAndJams(jams: JamsBar?, mapWidth: Int, mapHeight: Int, jamHeightPx: Int) {
         if (jams != null) {
-            val key = "${jams.bar.width}x${jams.bar.height}->${contentWidth}x$jamBarHeight/$jamHeight"
+            val key = "${jams.bar.width}x${jams.bar.height}->${mapWidth}x$mapHeight/$jamHeightPx"
             if (key != lastJamLayoutKey) {
                 lastJamLayoutKey = key
-                Log.d(HUD_OVERLAY_TAG, "jams layout $key progress=${jams.progress} map=${contentWidth}x$mapHeight")
+                Log.d(HUD_OVERLAY_TAG, "jams layout $key progress=${jams.progress}")
             }
         }
+        val density = minimapImageView?.resources?.displayMetrics?.density ?: 1f
+        // Thickness of the bar itself within jamHeightPx (which may include extra height for the arrow).
+        val jamBarHeight = resolveJamBarHeightPx(mapHeight, density, hasProgress = false)
         jamImageView?.barHeightPx = (jamBarHeight * JAM_BAR_THICKNESS).roundToInt().coerceAtLeast(1)
         minimapFrameView?.let { image ->
             val params = image.layoutParams as LinearLayout.LayoutParams
-            if (params.width != contentWidth || params.height != mapHeight) {
-                image.layoutParams = params.apply { width = contentWidth; height = mapHeight }
+            if (params.width != mapWidth || params.height != mapHeight) {
+                image.layoutParams = params.apply { width = mapWidth; height = mapHeight }
             }
         }
         jamImageView?.let { image ->
             val params = image.layoutParams as LinearLayout.LayoutParams
-            if (params.width != contentWidth || params.height != jamHeight) {
-                image.layoutParams = params.apply { width = contentWidth; height = jamHeight }
+            if (params.width != mapWidth || params.height != jamHeightPx) {
+                image.layoutParams = params.apply { width = mapWidth; height = jamHeightPx }
             }
         }
     }
@@ -3827,9 +3857,15 @@ class HudOverlayController(private val context: Context) {
             (width.coerceIn(96, 1920) / 8 * 8) to (height.coerceIn(96, 1920) / 8 * 8)
         }
         val style = OverlayPrefs.minimapStyle(context)
-        if (rounded == requestedMinimapSize && (rounded == null || style == requestedMinimapStyle)) return
+        val onlyWithRoute = OverlayPrefs.mapOnlyWithRoute(context)
+        if (rounded == requestedMinimapSize &&
+            (rounded == null || (style == requestedMinimapStyle && onlyWithRoute == requestedMinimapOnlyWithRoute))
+        ) {
+            return
+        }
         requestedMinimapSize = rounded
         requestedMinimapStyle = style
+        requestedMinimapOnlyWithRoute = onlyWithRoute
         handler.removeCallbacks(minimapRetry)
         if (rounded == null) {
             context.sendBroadcast(Intent("com.yandex.MINIMAP_DISABLE").setPackage("ru.yandex.yandexnavi"))
@@ -3852,7 +3888,9 @@ class HudOverlayController(private val context: Context) {
             .putExtra("minimap_labels", style.labels)
             .putExtra("minimap_overlay", style.cursorScale)
             .putExtra("minimap_route", style.routeScale)
-            .putExtra("minimap_hide_on_route_end", true))
+            // "Карта только когда есть маршрут" = off: the navigator keeps capturing (current
+            // position, no route) instead of going quiet, so the picture doesn't freeze.
+            .putExtra("minimap_hide_on_route_end", OverlayPrefs.mapOnlyWithRoute(context)))
     }
 
     private fun releaseMapController() {
