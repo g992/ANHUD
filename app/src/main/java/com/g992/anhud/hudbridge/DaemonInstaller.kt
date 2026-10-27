@@ -24,6 +24,11 @@ object DaemonInstaller {
     const val SHARED_QNX = "/shared"
     private const val TELNET_LINE_MAX = 200
     private const val TELNET_BATCH_LINES = 40
+    private const val TELNET_MIN_BATCH_LINES = 5
+    private const val TELNET_MAX_RETRIES = 8
+    private const val TELNET_MAX_DROPS = 5
+    private const val TELNET_RECONNECT_TRIES = 5
+    private const val TELNET_RECONNECT_DELAY_MS = 3_000L
     private const val TELNET_BATCH_TIMEOUT_MS = 60_000L
 
     /** [reused]: the daemon was already running; [buildId]: its build (e.g. "ghbl-…") when known. */
@@ -95,21 +100,101 @@ object DaemonInstaller {
     /**
      * For head units without /data/vendor/nfs/shared: the file is typed into the shell as
      * `print -n '…' >> file` lines (octal escapes for everything but plain characters).
-     * QNX has no printf/base64, but ksh's print understands \0nnn. Size is checked at the end.
+     * QNX has no printf/base64, but ksh's print understands \0nnn. Each batch is verified.
      */
-    private fun copyViaTelnet(qnx: QnxShell, bytes: ByteArray) {
+    internal fun copyViaTelnet(qnx: QnxSession, bytes: ByteArray, reconnectDelayMs: Long = TELNET_RECONNECT_DELAY_MS) {
         val probe = "$QNX_PATH.probe"
         val probeBytes = byteArrayOf('A'.code.toByte(), 0, 0xFF.toByte(), '\\'.code.toByte(), '\''.code.toByte())
         qnx.execBatch(listOf(": > $probe") + printLines(probeBytes, probe))
-        val probeSize = qnx.exec("wc -c < $probe; rm -f $probe").output.trim().toIntOrNull()
+        val probeSize = qnx.exec("wc -c < $probe").output.trim().toIntOrNull()
+        // cksum also catches a lost octal digit, which keeps the size; not every QNX has it.
+        val probeCksum = qnx.exec("cksum < $probe; rm -f $probe").output.trim().split(Regex("\\s+"))
+        val hasCksum = probeCksum.take(2).joinToString(" ") == cksumOf(probeBytes)
         if (probeSize != probeBytes.size) {
             throw IOException("NFS-мост недоступен, а передача через telnet не работает (проба: $probeSize)")
         }
 
         must(qnx.exec(": > $QNX_PATH"), "создание $QNX_PATH")
-        printLines(bytes, QNX_PATH).chunked(TELNET_BATCH_LINES).forEach { batch ->
-            qnx.execBatch(batch, TELNET_BATCH_TIMEOUT_MS)
+        // The pty drops input when a big batch arrives at once, so every batch lands in a
+        // part file first and is appended only when its cksum (or size) matches; a bad one is
+        // resent in smaller batches.
+        val part = "$QNX_PATH.part"
+        val pieces = printPieces(bytes, part)
+        var batchLines = TELNET_BATCH_LINES
+        var retries = 0
+        var drops = 0
+        var lost = false
+        var resync = false
+        var i = 0
+        var from = 0
+        while (i < pieces.size) {
+            val batch = pieces.subList(i, minOf(i + batchLines, pieces.size))
+            val chunk = bytes.copyOfRange(from, from + batch.sumOf { it.second })
+            if (lost) {
+                if (++drops > TELNET_MAX_DROPS) {
+                    throw IOException("передача $NAME через telnet не удалась: связь с QNX рвалась $TELNET_MAX_DROPS раз подряд")
+                }
+                reconnect(qnx, reconnectDelayMs)
+                lost = false
+                resync = true
+            }
+            val check = if (hasCksum) {
+                "set -- \$(cksum < $part); [ \"\$1 \$2\" = \"${cksumOf(chunk)}\" ]"
+            } else {
+                "[ \$(wc -c < $part) -eq ${chunk.size} ]"
+            }
+            val sent = try {
+                if (resync) {
+                    // The batch may have been appended right before the drop; anything else restarts.
+                    when (qnx.exec("wc -c < $QNX_PATH").output.trim().toIntOrNull()) {
+                        from -> Unit
+                        from + chunk.size -> {
+                            i += batch.size
+                            from += chunk.size
+                        }
+                        else -> {
+                            Log.w(TAG, "partial $QNX_PATH unusable after reconnect, starting over")
+                            must(qnx.exec(": > $QNX_PATH"), "создание $QNX_PATH")
+                            i = 0
+                            from = 0
+                        }
+                    }
+                    resync = false
+                    continue
+                }
+                qnx.execBatch(listOf(": > $part") + batch.map { it.first }, TELNET_BATCH_TIMEOUT_MS)
+                qnx.exec("$check && cat $part >> $QNX_PATH").ok
+            } catch (e: QnxConnectionLostException) {
+                // Nothing is resent until the file on QNX is checked, or a batch could land twice.
+                Log.w(TAG, "telnet dropped at line $i, reconnecting", e)
+                lost = true
+                continue
+            } catch (e: IOException) {
+                // A lost quote leaves ksh waiting for more input: interrupt it and resend.
+                Log.w(TAG, "telnet batch at line $i stuck", e)
+                try {
+                    qnx.interrupt()
+                } catch (dropped: QnxConnectionLostException) {
+                    lost = true
+                    continue
+                }
+                false
+            }
+            if (sent) {
+                i += batch.size
+                from += chunk.size
+                retries = 0
+                drops = 0
+                continue
+            }
+            if (++retries > TELNET_MAX_RETRIES) {
+                qnx.exec("rm -f $part $QNX_PATH")
+                throw IOException("передача $NAME через telnet не удалась: пакет со строки $i не дошёл после $TELNET_MAX_RETRIES повторов")
+            }
+            batchLines = maxOf(TELNET_MIN_BATCH_LINES, batchLines / 2)
+            Log.w(TAG, "telnet batch at line $i came short, resending by $batchLines lines")
         }
+        qnx.exec("rm -f $part")
         val size = qnx.exec("wc -c < $QNX_PATH").output.trim().toIntOrNull()
         if (size != bytes.size) {
             qnx.exec("rm -f $QNX_PATH")
@@ -118,26 +203,74 @@ object DaemonInstaller {
         must(qnx.exec("chmod 755 $QNX_PATH"), "chmod")
     }
 
+    /** Logs in again after a dropped telnet, waiting [delayMs] between failed tries. */
+    private fun reconnect(qnx: QnxSession, delayMs: Long) {
+        var last: IOException? = null
+        repeat(TELNET_RECONNECT_TRIES) { attempt ->
+            if (attempt > 0) {
+                Thread.sleep(delayMs)
+            }
+            try {
+                qnx.reconnect()
+                return
+            } catch (e: QnxAuthException) {
+                throw e
+            } catch (e: IOException) {
+                Log.w(TAG, "telnet reconnect ${attempt + 1}/$TELNET_RECONNECT_TRIES failed", e)
+                last = e
+            }
+        }
+        throw IOException("связь с QNX оборвалась при передаче $NAME и не восстановилась: ${last?.message}", last)
+    }
+
     /** `print -n '…' >> [target]` lines that recreate [bytes], each at most [TELNET_LINE_MAX] chars. */
     internal fun printLines(bytes: ByteArray, target: String): List<String> {
+        return printPieces(bytes, target).map { it.first }
+    }
+
+    /** [printLines] with the number of bytes each line writes. */
+    private fun printPieces(bytes: ByteArray, target: String): List<Pair<String, Int>> {
         val prefix = "print -n '"
         val suffix = "' >> $target"
         val budget = TELNET_LINE_MAX - prefix.length - suffix.length
-        val lines = ArrayList<String>()
+        val lines = ArrayList<Pair<String, Int>>()
         val body = StringBuilder()
+        var count = 0
         for (b in bytes) {
             val c = b.toInt() and 0xFF
             val piece = if (isPlain(c)) c.toChar().toString() else "\\0" + Integer.toOctalString(c).padStart(3, '0')
             if (body.length + piece.length > budget) {
-                lines.add(prefix + body + suffix)
+                lines.add(prefix + body + suffix to count)
                 body.setLength(0)
+                count = 0
             }
             body.append(piece)
+            count++
         }
         if (body.isNotEmpty()) {
-            lines.add(prefix + body + suffix)
+            lines.add(prefix + body + suffix to count)
         }
         return lines
+    }
+
+    /** POSIX `cksum` of [bytes] as "crc size", the start of what QNX prints for a file. */
+    internal fun cksumOf(bytes: ByteArray): String {
+        var crc = 0
+        fun update(b: Int) {
+            crc = crc xor (b shl 24)
+            repeat(8) {
+                crc = if (crc < 0) (crc shl 1) xor 0x04C11DB7 else crc shl 1
+            }
+        }
+        for (b in bytes) {
+            update(b.toInt() and 0xFF)
+        }
+        var n = bytes.size.toLong()
+        while (n != 0L) {
+            update((n and 0xFF).toInt())
+            n = n shr 8
+        }
+        return "${crc.inv().toLong() and 0xFFFFFFFFL} ${bytes.size}"
     }
 
     private fun isPlain(c: Int): Boolean {

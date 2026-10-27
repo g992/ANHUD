@@ -137,6 +137,10 @@ android {
     kotlinOptions {
         jvmTarget = "11"
     }
+    testOptions {
+        // android.util.Log in code under JVM unit tests is a no-op instead of a crash.
+        unitTests.isReturnDefaultValues = true
+    }
 }
 
 val copyHudBridgeDaemon by tasks.registering(Sync::class) {

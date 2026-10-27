@@ -27,8 +27,8 @@ sealed class HudBridgeState {
 /**
  * "Отрисовка на заднем плане": the HUD overlay is laid out on a private VirtualDisplay and its
  * frames go to ghudbridgelited on QNX, which shows them on the HUD below hud-hmi.
- * One attempt per app process: after an error the switch stays inactive until restart,
- * while the preference is kept so the next start tries again.
+ * Automatic starts stop after an error (the preference is kept so the next app start tries
+ * again); the user retries by turning the switch on, see [clearError].
  */
 object HudBridgeManager {
     private const val TAG = "HudBridgeManager"
@@ -195,6 +195,17 @@ object HudBridgeManager {
         val gen = generation.incrementAndGet()
         publish(HudBridgeState.Starting("Подготовка…"))
         executor.execute { runStart(appContext, gen) }
+    }
+
+    /** Lets [start] run again after an error; called when the user turns the switch back on. */
+    fun clearError() {
+        if (!failedThisSession && state !is HudBridgeState.Error) {
+            return
+        }
+        failedThisSession = false
+        if (state is HudBridgeState.Error) {
+            publish(HudBridgeState.Disabled)
+        }
     }
 
     fun stop() {

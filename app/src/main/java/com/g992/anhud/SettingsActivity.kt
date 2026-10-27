@@ -452,6 +452,9 @@ class SettingsActivity : ScaledActivity() {
         backgroundRenderSwitch.setOnCheckedChangeListener { _, isChecked ->
             if (isSyncingBackgroundRender) return@setOnCheckedChangeListener
             HudBridgePrefs.setEnabled(this, isChecked)
+            if (isChecked) {
+                HudBridgeManager.clearError()
+            }
             HudBridgeManager.sync(this)
             renderBackgroundRenderState(HudBridgeManager.state)
         }
@@ -2842,13 +2845,13 @@ class SettingsActivity : ScaledActivity() {
                 }
                 is HudBridgeState.Error -> {
                     backgroundRenderSwitch.isChecked = false
-                    backgroundRenderSwitch.isEnabled = false
+                    backgroundRenderSwitch.isEnabled = true
                     statusColor = Color.parseColor("#FF5252")
                     getString(R.string.background_render_error, state.message)
                 }
                 HudBridgeState.Disabled -> {
                     val wanted = HudBridgePrefs.enabled(this)
-                    backgroundRenderSwitch.isEnabled = !HudBridgeManager.failedThisSession
+                    backgroundRenderSwitch.isEnabled = true
                     backgroundRenderSwitch.isChecked = wanted && !HudBridgeManager.failedThisSession
                     if (wanted && !OverlayPrefs.isEnabled(this)) getString(R.string.background_render_waiting_hud) else ""
                 }

@@ -172,6 +172,13 @@ class GcpTest {
     }
 
     @Test
+    fun cksumMatchesPosixCksum() {
+        assertEquals("1219131554 3", DaemonInstaller.cksumOf("abc".toByteArray()))
+        assertEquals("4294967295 0", DaemonInstaller.cksumOf(ByteArray(0)))
+        assertEquals("794916923 768", DaemonInstaller.cksumOf(ByteArray(768) { it.toByte() }))
+    }
+
+    @Test
     fun onlyTheMarkerFollowedByTheExitCodeEndsACommand() {
         val m = "__DONE_1__"
         assertEquals(-1, QnxShell.completedMarker("# sleep 5; echo $m\$?\n", m))

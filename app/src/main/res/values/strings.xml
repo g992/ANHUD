@@ -96,7 +96,7 @@
     <string name="background_render_hint">После переключения перезапустите ГУ и приборную панель (долгое удержание крутилки громкости и кнопки голосового ассистента) или заглушите машину, закройте её и отойдите на 15+ минут. Иначе на HUD может остаться старая картинка.</string>
     <string name="background_render_running">Работает (%1$s)</string>
     <string name="background_render_reconnecting">Переподключение: %1$s</string>
-    <string name="background_render_error">Ошибка: %1$s</string>
+    <string name="background_render_error">Ошибка: %1$s\nВключите переключатель, чтобы попробовать снова.</string>
     <string name="background_render_waiting_hud">Включится вместе с проекцией HUD</string>
     <string name="over_stock_blocks_button">Настройка блоков поверх штатной отрисовки</string>
     <string name="over_stock_blocks_title">Блоки поверх штатной отрисовки</string>
