@@ -9,6 +9,52 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class RearCameraProtocolTest {
+    @Test
+    fun explicitSelectionAcceptsAnySingleOrPairAndOptionalDuration() {
+        for (name in listOf("rear", "left", "right")) {
+            val request = CameraShowRequest.parse(name)
+            assertEquals(0, request.seconds)
+            assertEquals(Gcp.GEAR_REVERSE, request.gear)
+        }
+        for (names in listOf("left,right", "rear,left", "right,rear", "left+right")) {
+            val request = CameraShowRequest.parse(names, 30)
+            assertEquals(30, request.seconds)
+            assertEquals(2, request.roles.size)
+            assertEquals(Gcp.GEAR_PARK, request.gear)
+            assertEquals(15, request.flags)
+        }
+        for (names in listOf("", "front", "left,left", "rear,left,right")) {
+            assertTrue(runCatching { CameraShowRequest.parse(names) }.isFailure)
+        }
+        assertTrue(runCatching { CameraShowRequest.parse("rear", -1) }.isFailure)
+        assertEquals(Int.MAX_VALUE, CameraShowRequest.parse("rear", Int.MAX_VALUE).seconds)
+    }
+
+    @Test
+    fun explicitSelectionKeepsPhysicalInputsAndRenderingSettingsInTriggerSlots() {
+        val rear = view().copy(inputId = Gcp.CAM_INPUT_REAR, vignette = true)
+        val left = view(role = Gcp.CAM_ROLE_LEFT, rect = Gcp.Rect(100, 50, 160, 200))
+            .copy(inputId = Gcp.CAM_INPUT_LEFT)
+        val right = view(role = Gcp.CAM_ROLE_RIGHT, rect = Gcp.Rect(260, 50, 160, 200))
+            .copy(inputId = Gcp.CAM_INPUT_RIGHT)
+        val base = cfg(rear, left, right, enabled = false)
+        val single = CameraShowRequest.parse("left").config(base)
+        assertTrue(single.enabled)
+        assertFalse(single.hazardBoth)
+        assertEquals(listOf(left.copy(role = Gcp.CAM_ROLE_REAR, holdMs = 0)), single.views)
+        val pair = CameraShowRequest.parse("rear,left").config(base)
+        assertTrue(pair.hazardBoth)
+        assertEquals(listOf(
+            rear.copy(role = Gcp.CAM_ROLE_RIGHT, rect = right.rect, holdMs = 0),
+            left.copy(holdMs = 0)
+        ), pair.views)
+        val sides = CameraShowRequest.parse("left,right").config(base)
+        assertEquals(listOf(left.copy(holdMs = 0), right.copy(holdMs = 0)), sides.views)
+        // Configuration fits the existing daemon's wire format; no new flags or protocol needed.
+        assertEquals(16 + 2 * 112, Gcp.camCfg(pair).size)
+        assertEquals(Gcp.CAM_INPUT_REAR, rear.inputId)
+    }
+
     private fun view(
         role: Int = Gcp.CAM_ROLE_REAR,
         rect: Gcp.Rect = Gcp.Rect(100, 50, 320, 200),

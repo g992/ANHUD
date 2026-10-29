@@ -56,6 +56,12 @@ object RearCameraController {
     private var lastTurn = RearCameraLogic.TurnSignals.UNKNOWN
     private val debug = RearCameraLogic.DebugOverrides()
     private var preview: Preview? = null
+    private var cameraShow: CameraShowRequest? = null
+    private val cameraShowTimeout = Runnable {
+        cameraShow = null
+        configDirty = true
+        evaluate()
+    }
 
     /** "Показать на проекции" from the view editor: this view forced on, with unsaved parameters. */
     private class Preview(val role: Int, val view: OverlayPrefs.CameraViewSettings, val untilMs: Long)
@@ -137,6 +143,45 @@ object RearCameraController {
         }
     }
 
+    // Available in release builds too, while the HUD background service is running.
+    private val cameraShowReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            val request = try {
+                if (intent.extras?.isEmpty != false) null else {
+                    val cameras = intent.getStringExtra("cameras")
+                        ?: throw IllegalArgumentException("нужен cameras; для закрытия вызовите без параметров")
+                    @Suppress("DEPRECATION")
+                    val rawSeconds = intent.extras?.get("seconds")
+                    val seconds = when (rawSeconds) {
+                        null -> 0
+                        is Int -> rawSeconds
+                        is String -> rawSeconds.toIntOrNull()
+                        else -> null
+                    } ?: throw IllegalArgumentException("seconds должен быть целым числом")
+                    CameraShowRequest.parse(cameras, seconds)
+                }
+            } catch (e: RuntimeException) {
+                log("показ камер: ${e.message}")
+                return
+            }
+            handler?.post {
+                val h = handler ?: return@post
+                h.removeCallbacks(cameraShowTimeout)
+                endPreview(null)
+                cameraShow = request
+                configDirty = true
+                pacer.reset()
+                if (request != null && request.seconds > 0) {
+                    h.postDelayed(cameraShowTimeout, request.seconds.toLong() * 1000L)
+                }
+                log(if (request == null) "ручной показ камер закрыт" else
+                    "ручной показ: ${request.roles.joinToString { roleName(it) }}, " +
+                        if (request.seconds == 0) "до закрытия" else "${request.seconds} с")
+                evaluate()
+            }
+        }
+    }
+
     fun start(context: Context) {
         if (thread != null) return
         val ctx = context.applicationContext
@@ -150,6 +195,8 @@ object RearCameraController {
         HudBridgeManager.addListener(bridgeListener)
         NavigationHudStore.registerListener(storeListener)
         gearSubscription = CarSensorHub.addGearListener { post() }
+        ContextCompat.registerReceiver(ctx, cameraShowReceiver,
+            IntentFilter(CameraShowRequest.ACTION), ContextCompat.RECEIVER_EXPORTED)
         if (BuildConfig.DEBUG) {
             val filter = IntentFilter().apply {
                 addAction(ACTION_DEBUG_CAMERA)
@@ -166,6 +213,7 @@ object RearCameraController {
         NavigationHudStore.unregisterListener(storeListener)
         gearSubscription?.close()
         gearSubscription = null
+        runCatching { appContext?.unregisterReceiver(cameraShowReceiver) }
         if (BuildConfig.DEBUG) {
             runCatching { appContext?.unregisterReceiver(debugReceiver) }
         }
@@ -176,6 +224,8 @@ object RearCameraController {
         handler = null
         h?.post {
             h.removeCallbacks(evaluateRunnable)
+            h.removeCallbacks(cameraShowTimeout)
+            cameraShow = null
             reader?.stop()
             reader = null
             sentConfig = null
@@ -212,6 +262,8 @@ object RearCameraController {
         val h = handler ?: return
         previewRole = role
         h.post {
+            h.removeCallbacks(cameraShowTimeout)
+            cameraShow = null
             if (preview == null) log("показ на проекции из редактора: ${roleName(role)}")
             preview = Preview(role, view, SystemClock.elapsedRealtime() + RearCameraLogic.PREVIEW_MAX_MS)
             configDirty = true
@@ -266,7 +318,7 @@ object RearCameraController {
         h.removeCallbacks(evaluateRunnable)
         val now = SystemClock.elapsedRealtime()
         val enabled = OverlayPrefs.cameraFeatureEnabled(context)
-        syncReader(context, enabled || editorOpen || preview != null)
+        syncReader(context, enabled || editorOpen || preview != null || cameraShow != null)
         val r = reader
         r?.poll()
         if (debug.expire(now)) {
@@ -284,7 +336,7 @@ object RearCameraController {
         if (!linkUp || !HudBridgeManager.isLinkUp() || HudBridgeManager.cameraUnsupported) {
             return
         }
-        if (!enabled && shown == null) {
+        if (!enabled && shown == null && cameraShow == null) {
             // Only a session that was told to show the camera needs to be told to stop.
             val sent = sentConfig
             if (sent != null && sent.enabled) {
@@ -319,7 +371,7 @@ object RearCameraController {
         val realGear = RearCameraLogic.gearFromEcarx(CarSensorHub.readGear())
             ?: RearCameraLogic.normalizeGear(r?.gearRaw)
         // The previewed view is forced active the way the debug overrides do it.
-        val gear = when (shown?.role) {
+        val gear = cameraShow?.gear ?: when (shown?.role) {
             Gcp.CAM_ROLE_REAR -> Gcp.GEAR_REVERSE
             null -> debug.gear(realGear)
             else -> realGear
@@ -336,7 +388,7 @@ object RearCameraController {
             lastTurn = turn
             Log.d(TAG, "reverse=$reverse gear=$gear speed=$speed turn=$turn")
         }
-        val flags = turn.flags
+        val flags = cameraShow?.flags ?: turn.flags
         if (pacer.shouldSend(now, gear, speed, flags)) {
             HudBridgeManager.sendVehicleState(gear, speed, flags)
         }
@@ -409,7 +461,7 @@ object RearCameraController {
         fun view(role: Int, enabled: Boolean, view: OverlayPrefs.CameraViewSettings, maxSpeedKmh: Int) =
             RearCameraLogic.cameraView(
                 role = role,
-                enabled = enabled,
+                enabled = enabled || cameraShow?.roles?.contains(role) == true,
                 rect = rect,
                 flipX = flipX,
                 z = settings.z,
@@ -424,6 +476,7 @@ object RearCameraController {
             view(Gcp.CAM_ROLE_LEFT, settings.side.enabled, settings.side.left, settings.side.maxSpeedKmh),
             view(Gcp.CAM_ROLE_RIGHT, settings.side.enabled, settings.side.right, settings.side.maxSpeedKmh)
         )
+        cameraShow?.let { return it.config(Gcp.CameraConfig(enabled = true, views = views)) }
         if (preview != null) {
             // Only the previewed view, with the editor's parameters and no speed limit (the car stands).
             return Gcp.CameraConfig(
