@@ -388,7 +388,12 @@ object HudBridgeManager {
                     return@execute
                 } catch (e: BusyException) {
                     lastError = describe(e)
-                    break
+                    if (e.holder != appName(context)) break
+                    try {
+                        Thread.sleep(RECONNECT_STEP_MS)
+                    } catch (_: InterruptedException) {
+                        break
+                    }
                 } catch (e: QnxAuthException) {
                     lastError = describe(e)
                     break

@@ -262,8 +262,9 @@ class HudLink private constructor(
 
         /**
          * [open], retried every [stepMs] for up to [timeoutMs] while the daemon is not yet
-         * listening, fails the handshake, or reports BUSY with an unknown holder (previous
-         * session still tearing down). BUSY with a named holder and daemon rejections are thrown at once.
+         * listening, fails the handshake, or reports BUSY with an unknown holder or our own
+         * name (previous session of this same app still tearing down). BUSY with another app's
+         * name and daemon rejections are thrown at once.
          */
         @Throws(IOException::class)
         fun openWithRetry(
@@ -278,7 +279,7 @@ class HudLink private constructor(
                 val failure: IOException = try {
                     return open(host, appName, listener)
                 } catch (e: BusyException) {
-                    if (e.holder != UNKNOWN_HOLDER) throw e
+                    if (e.holder != UNKNOWN_HOLDER && e.holder != appName) throw e
                     e
                 } catch (e: DaemonRejectedException) {
                     throw e
