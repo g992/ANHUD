@@ -97,7 +97,7 @@ object HudBridgeManager {
 
     /** A root shell on QNX for one-off jobs (camera snapshots); the caller closes it. */
     @Throws(IOException::class)
-    fun openQnxShell(): QnxShell = QnxShell.open(BuildConfig.QNX_HOST, QNX_USER, BuildConfig.QNX_ROOT_PASSWORD)
+    fun openQnxShell(): QnxSession = QnxConnection.open(BuildConfig.QNX_HOST, QNX_USER, BuildConfig.QNX_ROOT_PASSWORD)
 
     /** True while a gcp session is up and frames/control messages can be sent. */
     fun isLinkUp(): Boolean = state is HudBridgeState.Running && link != null
@@ -288,7 +288,7 @@ object HudBridgeManager {
     }
 
     /** Never throws: a failed check only turns the camera correction off. */
-    private fun checkCameraCalibration(context: Context, shell: QnxShell) {
+    private fun checkCameraCalibration(context: Context, shell: QnxSession) {
         val store = CameraCalibrationStore(context)
         val checked = CameraCalibrationCheck.check(shell, store)
         val before = cameraCalibration
@@ -321,12 +321,12 @@ object HudBridgeManager {
         }
     }
 
-    private fun openQnx(gen: Int, waitMs: Long): QnxShell {
+    private fun openQnx(gen: Int, waitMs: Long): QnxSession {
         val deadline = SystemClock.elapsedRealtime() + waitMs.coerceAtLeast(0L)
         while (true) {
             step(gen, "Подключаюсь к QNX…")
             try {
-                return QnxShell.open(BuildConfig.QNX_HOST, QNX_USER, BuildConfig.QNX_ROOT_PASSWORD)
+                return QnxConnection.open(BuildConfig.QNX_HOST, QNX_USER, BuildConfig.QNX_ROOT_PASSWORD)
             } catch (e: QnxAuthException) {
                 throw e
             } catch (e: IOException) {
@@ -372,7 +372,7 @@ object HudBridgeManager {
                         throw e
                     } catch (e: IOException) {
                         // The daemon may be gone (QNX restarted, /tmp wiped): bring it back.
-                        QnxShell.open(BuildConfig.QNX_HOST, QNX_USER, BuildConfig.QNX_ROOT_PASSWORD).use { shell ->
+                        QnxConnection.open(BuildConfig.QNX_HOST, QNX_USER, BuildConfig.QNX_ROOT_PASSWORD).use { shell ->
                             DaemonInstaller.ensureRunning(context, shell) { }
                         }
                         HudLink.openWithRetry(BuildConfig.QNX_HOST, appName(context), linkListener(context))

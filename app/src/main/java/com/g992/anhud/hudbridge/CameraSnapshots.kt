@@ -54,7 +54,7 @@ object CameraSnapshots {
     }
 
     @Throws(IOException::class)
-    private fun loadLive(shell: QnxShell, role: Int, progress: (String) -> Unit): ByteArray {
+    private fun loadLive(shell: QnxSession, role: Int, progress: (String) -> Unit): ByteArray {
         if (!HudBridgeManager.isLinkUp()) {
             throw IOException("фоновая отрисовка не запущена")
         }
@@ -88,7 +88,7 @@ object CameraSnapshots {
     }
 
     @Throws(IOException::class)
-    private fun loadFactory(context: Context, shell: QnxShell, role: Int, progress: (String) -> Unit): ByteArray {
+    private fun loadFactory(context: Context, shell: QnxSession, role: Int, progress: (String) -> Unit): ByteArray {
         val name = capName(role)
         val path = capPath(role)
         val dir = File(context.cacheDir, DIR).apply { mkdirs() }

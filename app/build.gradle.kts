@@ -166,6 +166,7 @@ dependencies {
     implementation(libs.androidsvg)
     implementation(libs.maplibre.android.sdk)
     implementation(libs.quickjs.wrapper.android)
+    implementation(libs.jsch)
     testImplementation(libs.junit)
     testImplementation(libs.json)
     testImplementation(libs.rhino)

@@ -10,7 +10,7 @@ import java.io.IOException
 /**
  * Makes sure ghudbridgelited runs on QNX. A running copy may belong to another app,
  * so it is never stopped or overwritten; otherwise the binary from assets is copied to /tmp
- * (through the NFS shared folder, or typed in over telnet where there is none) and started.
+ * (over SSH, else through the NFS shared folder, else typed in over the shell) and started.
  */
 object DaemonInstaller {
     private const val TAG = "HudBridgeInstaller"
@@ -35,7 +35,7 @@ object DaemonInstaller {
     data class Result(val reused: Boolean, val buildId: String?)
 
     @Throws(IOException::class)
-    fun ensureRunning(context: Context, qnx: QnxShell, progress: (String) -> Unit): Result {
+    fun ensureRunning(context: Context, qnx: QnxSession, progress: (String) -> Unit): Result {
         progress("Проверяю, запущен ли $NAME…")
         if (isRunning(qnx.exec("pidin ar").output)) {
             progress("$NAME уже запущен — использую его")
@@ -51,13 +51,15 @@ object DaemonInstaller {
         if (!hasBundledBuild(qnx)) {
             progress("Копирую $NAME на QNX…")
             val bundled = context.assets.open(ASSET_NAME).use { it.readBytes() }
-            val sharedProblem = checkSharedDirWritable()
-            if (sharedProblem == null) {
-                copyViaShared(qnx, bundled)
-            } else {
-                Log.w(TAG, "shared folder unusable ($sharedProblem), copying over telnet")
-                progress("NFS-мост недоступен, передаю $NAME через telnet…")
-                copyViaTelnet(qnx, bundled)
+            if (!copyViaUpload(qnx, bundled)) {
+                val sharedProblem = checkSharedDirWritable()
+                if (sharedProblem == null) {
+                    copyViaShared(qnx, bundled)
+                } else {
+                    Log.w(TAG, "shared folder unusable ($sharedProblem), copying over telnet")
+                    progress("NFS-мост недоступен, передаю $NAME через telnet…")
+                    copyViaTelnet(qnx, bundled)
+                }
             }
         }
 
@@ -67,12 +69,13 @@ object DaemonInstaller {
         }
         val build = buildOf(version)
         progress("Запускаю $NAME (${build ?: "?"})…")
-        must(qnx.exec("$QNX_PATH --port $PORT > $QNX_LOG 2>&1 &"), "start")
+        // stdin too: an SSH channel must not stay tied to the daemon it started.
+        must(qnx.exec("$QNX_PATH --port $PORT > $QNX_LOG 2>&1 < /dev/null &"), "start")
         return Result(reused = false, buildId = build)
     }
 
     /** True when /tmp already holds the daemon this APK carries, so there is nothing to copy. */
-    private fun hasBundledBuild(qnx: QnxShell): Boolean {
+    private fun hasBundledBuild(qnx: QnxSession): Boolean {
         val bundledId = BuildConfig.HUD_BRIDGE_BUILD_ID
         if (bundledId.isBlank()) {
             return false
@@ -80,7 +83,34 @@ object DaemonInstaller {
         return buildOf(qnx.exec("$QNX_PATH --version 2>&1").output) == bundledId
     }
 
-    private fun copyViaShared(qnx: QnxShell, bytes: ByteArray) {
+    /**
+     * Direct upload where the session has one (SSH): lands in a part file and only a matching
+     * cksum replaces [QNX_PATH]. False means use another way; a dropped connection is thrown.
+     */
+    internal fun copyViaUpload(qnx: QnxSession, bytes: ByteArray): Boolean {
+        val part = "$QNX_PATH.part"
+        try {
+            if (!qnx.uploadFile(part, bytes)) {
+                return false
+            }
+        } catch (e: QnxConnectionLostException) {
+            throw e
+        } catch (e: IOException) {
+            Log.w(TAG, "upload failed", e)
+            return false
+        }
+        val sum = qnx.exec("cksum < $part").output.trim().split(Regex("\\s+")).take(2).joinToString(" ")
+        if (sum != cksumOf(bytes)) {
+            Log.w(TAG, "upload came out wrong: cksum $sum, expected ${cksumOf(bytes)}")
+            qnx.exec("rm -f $part")
+            return false
+        }
+        must(qnx.exec("chmod 755 $part && mv -f $part $QNX_PATH"), "установка $NAME")
+        Log.i(TAG, "$NAME uploaded directly (${bytes.size} bytes)")
+        return true
+    }
+
+    private fun copyViaShared(qnx: QnxSession, bytes: ByteArray) {
         val bridgeName = NAME + "-" + java.lang.Long.toHexString(System.nanoTime())
         val shared = File(SHARED_ANDROID, bridgeName)
         FileOutputStream(shared).use { it.write(bytes) }

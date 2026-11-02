@@ -12,6 +12,7 @@ constraintlayout = "2.2.1"
 androidsvg = "1.4"
 maplibreAndroid = "12.3.1"
 quickjsWrapper = "3.2.3"
+jsch = "0.2.21"
 json = "20250517"
 rhino = "1.8.0"
 
@@ -27,6 +28,7 @@ androidx-constraintlayout = { group = "androidx.constraintlayout", name = "const
 androidsvg = { group = "com.caverock", name = "androidsvg", version.ref = "androidsvg" }
 maplibre-android-sdk = { group = "org.maplibre.gl", name = "android-sdk", version.ref = "maplibreAndroid" }
 quickjs-wrapper-android = { group = "wang.harlon.quickjs", name = "wrapper-android", version.ref = "quickjsWrapper" }
+jsch = { group = "com.github.mwiede", name = "jsch", version.ref = "jsch" }
 json = { group = "org.json", name = "json", version.ref = "json" }
 rhino = { group = "org.mozilla", name = "rhino", version.ref = "rhino" }
 

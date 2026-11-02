@@ -16,11 +16,17 @@ class QnxAuthException(message: String) : IOException(message)
 class QnxConnectionLostException(message: String, cause: Throwable? = null) : IOException(message, cause)
 
 /** The shell calls the daemon installer needs; lets its transfer be tested without a socket. */
-interface QnxSession {
+interface QnxSession : Closeable {
     fun exec(command: String, timeoutMs: Long = QnxShell.EXEC_TIMEOUT_MS): QnxShell.Result
     fun execBatch(lines: List<String>, timeoutMs: Long = QnxShell.EXEC_TIMEOUT_MS): QnxShell.Result
     fun interrupt()
     fun reconnect()
+
+    /** Writes [bytes] to [path] byte for byte; false when this transport cannot (telnet). */
+    @Throws(IOException::class)
+    fun uploadFile(path: String, bytes: ByteArray): Boolean = false
+
+    override fun close() = Unit
 }
 
 /**
@@ -31,7 +37,7 @@ class QnxShell private constructor(
     private val host: String,
     private val user: String,
     private val password: String
-) : QnxSession, Closeable {
+) : QnxSession {
 
     data class Result(val output: String, val exitCode: Int) {
         val ok: Boolean

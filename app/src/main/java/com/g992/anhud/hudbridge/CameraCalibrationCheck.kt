@@ -126,7 +126,7 @@ object CameraCalibrationCheck {
      * The whole check over [shell]: ls, cached result or fetch + fit. Never throws (except
      * InterruptedException), never takes longer than the two shell timeouts.
      */
-    fun check(shell: QnxShell, cache: Cache?): Result {
+    fun check(shell: QnxSession, cache: Cache?): Result {
         return try {
             val file = pickTable(parseLs(shell.exec(lsCommand(), LS_TIMEOUT_MS).output))
                 ?: return Result(State.MISSING, notes = CAMERAS.keys.associateWith { "нет таблицы калибровки" })
