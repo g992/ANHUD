@@ -17,7 +17,9 @@ import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicInteger
 
 sealed class HudBridgeState {
-    object Disabled : HudBridgeState()
+    object Disabled : HudBridgeState() {
+        override fun toString() = "Disabled"
+    }
     data class Starting(val step: String) : HudBridgeState()
     data class Running(val buildId: String?) : HudBridgeState()
     data class Reconnecting(val reason: String) : HudBridgeState()
@@ -233,11 +235,22 @@ object HudBridgeManager {
                 context = context,
                 dpi = resolveDpi(context),
                 sender = { parts, dropOver ->
-                    val current = link ?: throw IOException("нет связи с демоном")
-                    if (parts.isNotEmpty()) current.sendFrames(parts)
-                    if (dropOver) current.sendOverLayerOff()
+                    val current = link ?: throw NoLinkException()
+                    try {
+                        if (parts.isNotEmpty()) current.sendFrames(parts)
+                        if (dropOver) current.sendOverLayerOff()
+                    } catch (e: IOException) {
+                        throw LinkSendException(current, e)
+                    }
                 },
-                onSendFailed = { onLinkLost(context, "ошибка отправки: ${it.message}") },
+                onSendFailed = { e ->
+                    when (e) {
+                        // Between sessions: the reconnect that is under way resumes the sink.
+                        is NoLinkException -> Log.d(TAG, "frame dropped: no session")
+                        is LinkSendException -> onLinkLost(context, e.link, "ошибка отправки: ${e.cause?.message}")
+                        else -> onLinkLost(context, null, "ошибка отправки: ${e.message}")
+                    }
+                },
                 overLayerAvailable = { link?.supportsOverLayer == true }
             )
             newSink.setOverRects(overStockRects)
@@ -290,8 +303,17 @@ object HudBridgeManager {
     /** Never throws: a failed check only turns the camera correction off. */
     private fun checkCameraCalibration(context: Context, shell: QnxSession) {
         val store = CameraCalibrationStore(context)
-        val checked = CameraCalibrationCheck.check(shell, store)
         val before = cameraCalibration
+        var checked = CameraCalibrationCheck.check(shell, store)
+        if (checked.state == CameraCalibrationCheck.State.CHECK_FAILED) {
+            // A shell hiccup must not turn the correction off (fish-eye picture) for the whole session.
+            val known = before.takeIf { it.state == CameraCalibrationCheck.State.AVAILABLE }
+                ?: store.last()?.takeIf { it.state == CameraCalibrationCheck.State.AVAILABLE }
+            if (known != null) {
+                log("данные коррекции камер: проверка не удалась (${describeCalibration(checked)}), беру сохранённые")
+                checked = known
+            }
+        }
         if (checked.state != before.state || checked.fits.keys != before.fits.keys) {
             log("данные коррекции камер: " + describeCalibration(checked))
         }
@@ -339,11 +361,26 @@ object HudBridgeManager {
         }
     }
 
-    private fun linkListener(context: Context) = HudLink.Listener { reason -> onLinkLost(context, reason) }
+    private fun linkListener(context: Context) = HudLink.Listener { lost, reason -> onLinkLost(context, lost, reason) }
 
-    private fun onLinkLost(context: Context, reason: String) {
+    /** No session right now (reconnecting); not a reason to reconnect again. */
+    private class NoLinkException : IOException("нет связи с демоном")
+
+    /** A write on [link] failed. */
+    private class LinkSendException(val link: HudLink, cause: IOException) : IOException(cause.message, cause)
+
+    /**
+     * [lost] (null: whatever session is current) went away. Events about a session that is no
+     * longer current are dropped: a frame write that raced the close of the old session used to
+     * arrive after the reconnect and kill the fresh session, over and over.
+     */
+    private fun onLinkLost(context: Context, lost: HudLink?, reason: String) {
         executor.execute {
             if (state !is HudBridgeState.Running) {
+                return@execute
+            }
+            if (lost != null && lost !== link) {
+                Log.d(TAG, "stale link loss ignored: $reason")
                 return@execute
             }
             val gen = generation.get()

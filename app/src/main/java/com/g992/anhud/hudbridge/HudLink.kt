@@ -33,8 +33,8 @@ class HudLink private constructor(
 ) : AutoCloseable {
 
     fun interface Listener {
-        /** The session ended on the daemon's side; not called after [close]. */
-        fun onLinkLost(reason: String)
+        /** [link]'s session ended on the daemon's side; not called after [close]. */
+        fun onLinkLost(link: HudLink, reason: String)
     }
 
     private val output: OutputStream = socket.getOutputStream()
@@ -217,7 +217,7 @@ class HudLink private constructor(
         failSnapWaiters(why)
         if (!closing) {
             Log.w(TAG, "link lost: $why")
-            listener.onLinkLost(why)
+            listener.onLinkLost(this, why)
         }
     }
 
