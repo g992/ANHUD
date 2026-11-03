@@ -4,6 +4,11 @@
     <string name="logs_button">Логи</string>
     <string name="logs_button_content_desc">Открыть логи</string>
     <string name="logs_back_button">Назад</string>
+    <string name="logs_export_button">Выгрузить логи</string>
+    <string name="logs_export_in_progress">Собираю логи…</string>
+    <string name="logs_export_hint">Сохраняет архив в Downloads: логи приложения (в том числе до вылета), logcat, причины завершения и лог демона HUD с QNX. Отправьте этот файл разработчику.</string>
+    <string name="logs_export_success">Логи сохранены в Downloads/%1$s</string>
+    <string name="logs_export_failed">Не удалось выгрузить логи: %1$s</string>
     <string name="donate_button_content_desc">Поддержать проект</string>
     <string name="settings_button_content_desc">Открыть настройки</string>
     <string name="donate_thanks_text">Отдельное спасибо dizz74 (GeeOption) за помощь в исследовании функционала штатной навигации</string>

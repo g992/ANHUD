@@ -38,6 +38,7 @@ object UiLogStore {
             }
             snapshot = list.toList()
         }
+        DiagnosticsLog.record("[${category.title}] $message")
         notifyListeners(category, snapshot)
     }
 
@@ -59,6 +60,15 @@ object UiLogStore {
     fun totalCount(): Int {
         synchronized(lock) {
             return logs.values.sumOf { it.size }
+        }
+    }
+
+    /** Every category as it is in memory now, for the log export. */
+    fun dump(): String = buildString {
+        for (category in LogCategory.values()) {
+            append("== ").append(category.title).append(" ==\n")
+            snapshot(category).forEach { append(it).append('\n') }
+            append('\n')
         }
     }
 

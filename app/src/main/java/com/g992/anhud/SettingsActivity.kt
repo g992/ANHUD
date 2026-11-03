@@ -175,12 +175,17 @@ class SettingsActivity : ScaledActivity() {
     private val storagePermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { isGranted ->
+        val action = pendingStorageAction ?: ::exportSettingsToDownloads
+        pendingStorageAction = null
         if (isGranted) {
-            exportSettingsToDownloads()
+            action()
         } else {
             showToast(R.string.settings_export_failed)
         }
     }
+
+    /** What to run once WRITE_EXTERNAL_STORAGE is granted (Android 9); null = settings export. */
+    private var pendingStorageAction: (() -> Unit)? = null
 
     private val exportSettingsLauncher = registerForActivityResult(
         ActivityResultContracts.CreateDocument("application/json")
@@ -2209,6 +2214,24 @@ class SettingsActivity : ScaledActivity() {
         }
     }
 
+    private fun exportLogs(button: Button) {
+        button.isEnabled = false
+        button.setText(R.string.logs_export_in_progress)
+        val appContext = applicationContext
+        Thread({
+            val message = try {
+                getString(R.string.logs_export_success, DiagnosticsExport.exportToDownloads(appContext))
+            } catch (e: Exception) {
+                getString(R.string.logs_export_failed, e.message ?: e.javaClass.simpleName)
+            }
+            runOnUiThread {
+                button.isEnabled = true
+                button.setText(R.string.logs_export_button)
+                Toast.makeText(appContext, message, Toast.LENGTH_LONG).show()
+            }
+        }, "logs-export").start()
+    }
+
     private fun generateExportFileName(): String {
         val dateFormat = SimpleDateFormat("yyyyMMdd_HHmm", Locale.getDefault())
         val timestamp = dateFormat.format(Date())
@@ -2486,6 +2509,15 @@ class SettingsActivity : ScaledActivity() {
     }
 
     private fun setupDebugTab() {
+        val exportLogsButton = findViewById<Button>(R.id.exportLogsButton)
+        exportLogsButton.setOnClickListener {
+            if (needsStoragePermission()) {
+                pendingStorageAction = { exportLogs(exportLogsButton) }
+                requestStoragePermission()
+            } else {
+                exportLogs(exportLogsButton)
+            }
+        }
 
         logSections[LogCategory.NAVIGATION] = LogSection(
             findViewById(R.id.navScroll),

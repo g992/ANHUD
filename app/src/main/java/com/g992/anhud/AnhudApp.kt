@@ -9,6 +9,7 @@ class AnhudApp : Application() {
         if (isCustomScriptSandboxProcess(getProcessName())) {
             return
         }
+        DiagnosticsLog.init(applicationContext)
         MapRenderSettingsStore.initialize(applicationContext)
     }
 }

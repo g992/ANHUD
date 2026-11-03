@@ -537,6 +537,22 @@
                     android:textSize="18sp"
                     android:textStyle="bold" />
 
+                <Button
+                    android:id="@+id/exportLogsButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:text="@string/logs_export_button" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:text="@string/logs_export_hint"
+                    android:textColor="@color/white"
+                    android:alpha="0.7"
+                    android:textSize="12sp" />
+
                 <LinearLayout
                     android:id="@+id/sectionNavigation"
                     android:layout_width="match_parent"
